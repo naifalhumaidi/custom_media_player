@@ -1,0 +1,247 @@
+/* Vidstack component parts. Based on the official "CSS" example, adapted to
+   the vds-* class names and our minimal dark look. */
+
+media-player {
+  --media-brand: #e8e8e8;
+  --media-focus-ring-color: #9a9a9a;
+  --media-focus-ring: 0 0 0 2px var(--media-focus-ring-color);
+  --media-cue-color: #fff;
+  --media-cue-bg: rgba(0, 0, 0, .75);
+  --media-tooltip-y-offset: 30px;
+  --media-menu-y-offset: 30px;
+  color: #eee;
+  background-color: #000;
+  overflow: hidden;
+}
+
+media-player,
+media-player[data-focus],
+media-provider,
+media-provider > video {
+  outline: none;
+  box-shadow: none;
+}
+
+/* ---------- buttons (Vidstack + ours share the look) ---------- */
+
+.vds-btn,
+.media-button,
+.btn {
+  display: inline-flex;
+  position: relative;
+  justify-content: center;
+  align-items: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 6px;
+  margin: 0;
+  /* no borders anywhere: a bordered control reads as a stray box */
+  border: 0;
+  border-radius: 6px;
+  background: #1a1a1a;
+  color: #d8d8d8;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  appearance: none;
+  touch-action: manipulation;
+}
+
+.vds-btn:hover,
+.btn:hover { background: #262626; }
+.vds-btn:active,
+.btn:active { background: #303030; }
+
+.vds-btn[data-focus] { outline: 1px solid #7a7a7a; outline-offset: 1px; }
+.btn:focus-visible { outline: 1px solid #9a9a9a; outline-offset: 1px; }
+.btn.on,
+.vds-btn[data-active] { background: #2a2a2a; border-color: #3a3a3a; color: #fff; }
+.btn.primary { background: #2a2a2a; border-color: #3a3a3a; color: #fff; }
+.btn.on { background: #2a2a2a; border-color: #4a4a4a; color: #fff; }
+
+/* hide Vidstack buttons the environment cannot support (e.g. fullscreen) */
+.vds-btn[aria-hidden="true"],
+.media-button[aria-hidden="true"] { display: none; }
+
+/* the library hides a button automatically while media is not seekable */
+.vds-btn[data-unsupported] { opacity: .35; pointer-events: none; }
+
+/* our play glyph, swapped by state attributes the library maintains */
+.vds-play .g-pause,
+.vds-play .g-replay { display: none; }
+.vds-play[data-paused] .g-play,
+.vds-play[data-ended] .g-play { display: none; }
+.vds-play[data-paused] .g-pause,
+.vds-play[data-ended] .g-pause { display: inline; }
+.vds-play[data-ended] .g-replay { display: inline; }
+.vds-play[data-ended] .g-pause { display: none; }
+
+/* mute glyph states: data-state is low|medium|high, data-muted when muted */
+#mute .g-unmute { display: none; }
+#mute[data-muted] .g-volume { display: none; }
+#mute[data-muted] .g-unmute { display: inline; }
+#mute[data-state="low"] .g-volume-high { display: none; }
+#mute[data-state="low"] .g-volume-low { display: inline; }
+#mute:not([data-state="low"]):not([data-muted]) .g-volume-low { display: none; }
+#mute:not([data-state="low"]):not([data-muted]) .g-volume-high { display: inline; }
+
+/* fullscreen glyph states */
+#fs .g-fs-exit { display: none; }
+#fs[data-active] .g-fs-enter { display: none; }
+#fs[data-active] .g-fs-exit { display: inline; }
+
+/* ---------- sliders ---------- */
+
+.vds-slider {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  width: 100%;
+  height: 22px;
+  margin: 0 calc(9px / 2);
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+  outline: none;
+  contain: layout style;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.vds-track,
+.vds-track-fill,
+.vds-track-progress {
+  /* the bar is a hairline: no outlines, no dashed decoration */
+  position: absolute;
+  top: 50%;
+  left: 0;
+  z-index: 0;
+  width: 100%;
+  height: 5px;
+  border-radius: 3px;
+  transform: translateY(-50%);
+  background-color: rgb(255 255 255 / .16);
+  contain: strict;
+}
+
+.vds-track-fill {
+  z-index: 2;
+  /* --mt-fill is written by app.js: the library's own --slider-fill stays at
+     0% in v1.15.6 even while the slider state and ARIA values are correct. */
+  width: var(--mt-fill, var(--slider-fill, 0%));
+  background-color: var(--media-brand);
+  will-change: width;
+}
+
+/* buffered range, only present on the time slider */
+.vds-track-progress {
+  z-index: 1;
+  width: var(--slider-progress, 0%);
+  background-color: rgb(255 255 255 / .26);
+  will-change: width;
+}
+
+.vds-thumb {
+  position: absolute;
+  top: 50%;
+  left: var(--mt-fill, var(--slider-fill, 0%));
+  z-index: 3;
+  width: 13px;
+  height: 13px;
+  border-radius: 9999px;
+  background-color: #fff;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  transition: opacity .15s ease-in;
+  pointer-events: none;
+  will-change: left;
+}
+
+.vds-slider[data-active] .vds-thumb,
+.vds-slider[data-pointing] .vds-thumb { opacity: 1; }
+.vds-slider[data-focus] .vds-track { box-shadow: 0 0 0 2px #3a3a3a; }
+.vds-slider[data-dragging] .vds-thumb { box-shadow: 0 0 0 4px rgb(255 255 255 / .18); }
+
+.vds-volume { max-width: 76px; }
+
+/* ---------- gestures ---------- */
+
+media-gesture {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+}
+
+/* keep the control bar above the click-to-pause layer, or every press
+   on a button would toggle playback instead */
+.bar { z-index: 10; }
+
+@media (pointer: coarse) {
+  media-gesture[action="toggle:paused"] { display: none; }
+}
+
+/* ---------- captions ---------- */
+
+media-captions {
+  --cue-color: var(--media-cue-color, #fff);
+  --cue-bg-color: var(--media-cue-bg, rgba(0, 0, 0, .75));
+  --cue-font-size: calc(var(--overlay-height) / 100 * 4.5);
+  --cue-line-height: calc(var(--cue-font-size) * 1.2);
+  --cue-padding-x: calc(var(--cue-font-size) * 0.6);
+  --cue-padding-y: calc(var(--cue-font-size) * 0.4);
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  contain: layout style;
+  font-size: var(--cue-font-size);
+  pointer-events: none;
+  text-align: center;
+  bottom: 60px;
+  transition: bottom .15s linear;
+}
+
+media-captions[aria-hidden="true"] { display: none; }
+
+media-captions [data-part="cue-display"] {
+  position: absolute;
+  direction: ltr;
+  overflow: visible;
+  contain: content;
+  top: var(--cue-top);
+  left: var(--cue-left);
+  right: var(--cue-right);
+  bottom: var(--cue-bottom);
+  width: var(--cue-width, auto);
+  height: var(--cue-height, auto);
+  transform: var(--cue-transform);
+  text-align: var(--cue-text-align);
+  writing-mode: var(--cue-text-mode, unset);
+  white-space: pre-line;
+  unicode-bidi: plaintext;
+  min-width: min-content;
+  min-height: min-content;
+}
+
+media-captions [data-part="cue"] {
+  display: inline-block;
+  contain: content;
+  border-radius: 2px;
+  backdrop-filter: blur(8px);
+  padding: var(--cue-padding-y) var(--cue-padding-x);
+  line-height: var(--cue-line-height);
+  background-color: var(--cue-bg-color);
+  color: var(--cue-color);
+  white-space: pre-wrap;
+  outline: var(--cue-outline);
+  text-shadow: var(--cue-text-shadow);
+}
+
+media-captions[data-dir="rtl"] [data-part="cue-display"] { direction: rtl; }
+
+media-player[data-preview] media-captions { opacity: 0; visibility: hidden; }

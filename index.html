@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Media Tools</title>
+<link rel="stylesheet" href="vendor/vidstack-base.css">
+<link rel="stylesheet" href="styles-vidstack.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- icon sprite: every control uses one of these, no text labels -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <g id="i-prev"><path d="M18.5 5 8.5 12l10 7z" fill="currentColor"/><rect x="5" y="5" width="2.4" height="14" fill="currentColor"/></g>
+      <g id="i-next"><path d="M5.5 5l10 7-10 7z" fill="currentColor"/><rect x="16.6" y="5" width="2.4" height="14" fill="currentColor"/></g>
+      <g id="i-back"><path d="M4 12a8 8 0 1 0 2.6-5.9" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M4 4v5h5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><text x="13" y="15.5" font-size="7.5" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none">10</text></g>
+      <g id="i-fwd"><path d="M20 12a8 8 0 1 1-2.6-5.9" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><text x="11" y="15.5" font-size="7.5" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none">10</text></g>
+      <g id="i-play"><path d="M7 4.6 19.2 12 7 19.4z" fill="currentColor"/></g>
+      <g id="i-pause"><rect x="6.6" y="4.8" width="3.6" height="14.4" fill="currentColor"/><rect x="13.8" y="4.8" width="3.6" height="14.4" fill="currentColor"/></g>
+      <g id="i-loop"><path d="M4 9.5h11.5a4 4 0 0 1 4 4v1.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="m7.4 6.2-3.4 3.3 3.4 3.3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 14.5H8.5a4 4 0 0 1-4-4V9.3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="m16.6 17.8 3.4-3.3-3.4-3.3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></g>
+      <g id="i-auto"><path d="M4.5 3.5 20 12 4.5 20.5z" fill="currentColor"/><path d="M2.5 2.5 21.5 21.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="slash"/></g>
+      <g id="i-sound"><path d="M4 9.5h3l4.2-3.4v11.8L7 14.5H4z" fill="currentColor"/><path d="M14.4 9.2a4 4 0 0 1 0 5.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M17 6.6a7.6 7.6 0 0 1 0 10.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></g>
+      <g id="i-mute"><path d="M4 9.5h3l4.2-3.4v11.8L7 14.5H4z" fill="currentColor"/><path d="M14.5 9.5 20 15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M20 9.5 14.5 15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></g>
+      <g id="i-fit"><rect x="3" y="5" width="18" height="14" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 15.5 10 12l2.4 2.4L15 11.5l2.5 4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></g>
+      <g id="i-crop"><path d="M6.5 2.5v15h15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 6.5h15v15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></g>
+      <g id="i-stretch"><path d="M4 9.5V4h5.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 9.5V4h-5.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 14.5V20h5.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 14.5V20h-5.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></g>
+      <g id="i-fs"><path d="M4 9.5V4h5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 9.5V4h-5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 14.5V20h5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 14.5V20h-5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>
+      <g id="i-fs-exit"><path d="M9.5 4v5.5H4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14.5 4v5.5H20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.5 20v-5.5H4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14.5 20v-5.5H20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>
+      <g id="i-close"><path d="M6 6 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></g>
+      <g id="i-plus"><path d="M12 5v14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></g>
+    </defs>
+  </svg>
+
+  <main id="stage" data-fit="contain" data-kind="">
+    <media-player id="media" playsinline crossorigin>
+      <media-provider></media-provider>
+      <media-gesture event="pointerup" action="toggle:paused"></media-gesture>
+      <media-captions></media-captions>
+
+      <div id="bar" class="bar">
+        <div class="bar-track">
+          <media-time-slider class="vds-slider" aria-label="Seek">
+            <div class="vds-track"></div>
+            <div class="vds-track-fill"></div>
+            <div class="vds-track-progress"></div>
+            <div class="vds-thumb"></div>
+          </media-time-slider>
+        </div>
+
+        <div class="row">
+          <div class="grp">
+            <button id="prev" class="btn ic" type="button" title="Previous (,)" aria-label="Previous"><svg viewBox="0 0 24 24"><use href="#i-prev"/></svg></button>
+            <media-seek-button id="back" class="btn ic" seconds="-10" title="Back 10s (←)" aria-label="Back 10 seconds"><svg viewBox="0 0 24 24"><use href="#i-back"/></svg></media-seek-button>
+            <media-play-button id="play" class="btn ic play" title="Play / pause (Space)" aria-label="Play"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></media-play-button>
+            <media-seek-button id="fwd" class="btn ic" seconds="10" title="Forward 10s (→)" aria-label="Forward 10 seconds"><svg viewBox="0 0 24 24"><use href="#i-fwd"/></svg></media-seek-button>
+            <button id="next" class="btn ic" type="button" title="Next (.)" aria-label="Next"><svg viewBox="0 0 24 24"><use href="#i-next"/></svg></button>
+          </div>
+
+          <div class="meta">
+            <span class="time"><media-time type="current">0:00</media-time><i>/</i><media-time type="duration">0:00</media-time></span>
+            <span id="title" class="title"></span>
+            <span id="counter" class="counter"></span>
+          </div>
+
+          <div class="grp">
+            <media-mute-button id="mute" class="btn ic" title="Mute (m)" aria-label="Mute"><svg viewBox="0 0 24 24"><use href="#i-sound"/></svg></media-mute-button>
+            <media-volume-slider class="vds-slider vds-volume" aria-label="Volume">
+              <div class="vds-track"></div>
+              <div class="vds-track-fill"></div>
+              <div class="vds-thumb"></div>
+            </media-volume-slider>
+            <button id="autoplay" class="btn ic on" type="button" title="Auto-start on track change (a)" aria-label="Auto-start"><svg viewBox="0 0 24 24"><use href="#i-auto"/></svg></button>
+            <button id="loop" class="btn ic" type="button" title="Loop playlist (l)" aria-label="Loop"><svg viewBox="0 0 24 24"><use href="#i-loop"/></svg></button>
+            <div class="grp">
+              <button id="fit-d" class="btn ic" type="button" title="Default / fit (d)" aria-label="Default view"><svg viewBox="0 0 24 24"><use href="#i-fit"/></svg></button>
+              <button id="fit-c" class="btn ic" type="button" title="Crop (c)" aria-label="Crop"><svg viewBox="0 0 24 24"><use href="#i-crop"/></svg></button>
+              <button id="fit-s" class="btn ic" type="button" title="Stretch (s)" aria-label="Stretch"><svg viewBox="0 0 24 24"><use href="#i-stretch"/></svg></button>
+            </div>
+            <button id="fs" class="btn ic" type="button" title="Fullscreen (f)" aria-label="Fullscreen"><svg viewBox="0 0 24 24"><use href="#i-fs"/></svg></button>
+            <button id="eject" class="btn ic" type="button" title="Clear playlist" aria-label="Clear playlist"><svg viewBox="0 0 24 24"><use href="#i-close"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </media-player>
+
+    <img id="still" alt="" draggable="false">
+
+    <aside id="side">
+      <div class="side-head">
+        <span class="side-title">Playlist</span>
+        <span id="total" class="total"></span>
+        <button id="add" class="btn ic sm" type="button" title="Add files to the end" aria-label="Add files"><svg viewBox="0 0 24 24"><use href="#i-plus"/></svg></button>
+        <button id="close-side" class="btn ic sm" type="button" title="Close the playlist (p)" aria-label="Close playlist"><svg viewBox="0 0 24 24"><use href="#i-close"/></svg></button>
+      </div>
+      <ol id="list" class="side-list"></ol>
+      <p class="side-hint">drop here to add — playback keeps going</p>
+    </aside>
+
+    <div id="drop" class="drop">
+      <h1>Media Tools</h1>
+      <p>Drop images, video or audio files to play them</p>
+      <button id="open" class="btn primary" type="button">Open files</button>
+      <ul class="hint">
+        <li><kbd>h</kbd> show / hide controls</li>
+        <li><kbd>p</kbd> playlist</li>
+        <li><kbd>,</kbd> <kbd>.</kbd> prev / next</li>
+        <li><kbd>Space</kbd> play / pause</li>
+        <li><kbd>←</kbd> <kbd>→</kbd> seek 10s</li>
+        <li><kbd>d</kbd> <kbd>c</kbd> <kbd>s</kbd> default / crop / stretch</li>
+        <li><kbd>l</kbd> loop · <kbd>a</kbd> auto-start</li>
+        <li><kbd>m</kbd> mute · <kbd>f</kbd> fullscreen</li>
+        <li><kbd>↑</kbd> <kbd>↓</kbd> volume</li>
+        <li>drop on the playlist: add only</li>
+      </ul>
+      <p id="mode" class="mode"></p>
+    </div>
+  </main>
+
+  <script src="vendor/vidstack.js"></script>
+  <script src="js/source-web.js"></script>
+  <script src="js/source.js"></script>
+  <script src="js/media.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
