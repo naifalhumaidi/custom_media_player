@@ -5,7 +5,12 @@
   "type": "module",
   "description": "Minimal full-screen player for local images, video and audio",
   "scripts": {
-    "start": "node serve.js"
+    "start": "node serve.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "./tests/e2e/run.sh",
+    "test:media": "./tests/e2e/make-media.sh",
+    "test:all": "npm test && npm run test:e2e"
   },
   "devDependencies": {
     "jsdom": "^30.1.1",

@@ -128,7 +128,6 @@
       'lang.ar': 'العربية',
 
       /* --- shared --- */
-      'common.on': 'on',
       'common.close': 'Close',
     },
 
@@ -258,7 +257,6 @@
       'lang.ar': 'العربية',
 
       /* --- مشترك --- */
-      'common.on': 'مُفعّل',
       'common.close': 'إغلاق',
     },
   };

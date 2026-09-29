@@ -242,6 +242,10 @@ function seekBy(delta) {
 function syncToggleTitles() {
   $('loop').title = loop ? t('bar.loopOn') : t('bar.loopKey');
   $('autoplay').title = autoStart ? t('bar.autoplayKey') : t('bar.autoplayOff');
+  /* the on/off state is a flat tint on screen, which conveys nothing to a
+     screen reader, so it has to be stated as well */
+  $('loop').setAttribute('aria-pressed', String(loop));
+  $('autoplay').setAttribute('aria-pressed', String(autoStart));
 }
 
 function toggleLoop() {
@@ -396,7 +400,15 @@ function render() {
   $('title').textContent = it ? it.name : '';
   $('counter').textContent = items.length > 1 && it ? num(index + 1) + ' / ' + num(items.length) : '';
   renderList();
-  list.children[index]?.scrollIntoView({ block: 'nearest' });
+  const row = list.children[index];
+  /* scrollIntoView is missing from some embedded webviews. A missing method
+     must not abort the caller - render() runs inside load(), and throwing here
+     used to kill the probe queue and leave every row showing "...". */
+  if (row && typeof row.scrollIntoView === 'function') {
+    try {
+      row.scrollIntoView({ block: 'nearest' });
+    } catch {}
+  }
 }
 
 /* ---------------- persistence ---------------- */
@@ -511,7 +523,9 @@ media.on('error', () => {
 
 $('media').addEventListener('volume-change', () => {
   paint(volumeSlider, media.volume);
-  $('mute').classList.toggle('muted', media.muted || media.volume === 0);
+  /* syncIcons owns the mute class and the control's name, so muting used to
+     leave the button still labelled "Mute" while it was already muted */
+  syncIcons();
 });
 paint(volumeSlider, media.volume);
 
@@ -690,9 +704,13 @@ list.addEventListener('keydown', (e) => {
     e.preventDefault();
     load(Number(li.dataset.i), autoStart);
   } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-    /* move focus along the list, the way a listbox behaves */
+    /* Move focus along the list, the way a listbox behaves. The step is taken
+       from the row's position in the current DOM rather than from the model,
+       because a render can renumber the rows between the keypress and here. */
     e.preventDefault();
-    const next = rows()[Number(li.dataset.i) + (e.key === 'ArrowDown' ? 1 : -1)];
+    const stepBy = e.key === 'ArrowDown' ? 1 : -1;
+    const here = [...list.children].indexOf(li);
+    const next = here < 0 ? null : list.children[here + stepBy];
     if (next) next.focus();
   }
 });
@@ -791,6 +809,11 @@ document.addEventListener('keydown', (e) => {
   /* let the library's own sliders handle their arrow keys */
   if (e.target.closest?.('media-time-slider, media-volume-slider') && k.startsWith('arrow')) return;
 
+  /* A focused playlist row handles its own Enter, Space and arrows. This
+     listener is in the capture phase, so without this it consumed them first
+     and the row was unreachable by keyboard - the row handler never ran. */
+  if (e.target.closest?.('#list li') && (k === 'enter' || k === ' ' || k.startsWith('arrow'))) return;
+
   if (k === 'h') return setUi(!stage.classList.contains('ui'));
   if (k === 'p') return setList(!stage.classList.contains('list'));
   if (k === 'escape' && stage.classList.contains('list')) return setList(false);
@@ -847,7 +870,11 @@ async function restore() {
   if (state?.fit) stage.dataset.fit = state.fit;
 
   setFit(stage.dataset.fit);
-  setUi(!!state?.ui);
+  /* The bar is shown unless it was explicitly hidden: `!!state.ui` left a
+     first-time user with no controls at all, because a first run has no state
+     and `!!undefined` is false. The same reasoning does not apply to the
+     panel, which is closed by default. */
+  setUi(state?.ui !== false);
   setList(!!state?.list);
 
   if (typeof state?.volume === 'number') media.setVolume(state.volume);

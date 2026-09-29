@@ -10,3 +10,6 @@ package-lock.json
 
 # the app itself has no build output, but keep stray captures out
 *.log
+
+# e2e fixtures are generated, and screenshots are scratch
+tests/e2e/media/

@@ -17,8 +17,20 @@
      caller then writes nothing at all - previously an invalid value reached
      `--gold` while its derivatives silently fell back to the default, which
      split the palette in two. */
-  function parse(hex) {
-    let h = String(hex).trim().replace('#', '');
+  /* Accepts #rgb, #rrggbb, and the rgb()/rgba() forms a computed style comes
+     back as. Handling all three matters because the value is read back out of
+     the style, where it is always functional notation. */
+  function parse(value) {
+    const text = String(value == null ? '' : value).trim();
+    const rgb = text.match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i);
+    if (rgb) {
+      return {
+        r: Math.round(Number(rgb[1])),
+        g: Math.round(Number(rgb[2])),
+        b: Math.round(Number(rgb[3])),
+      };
+    }
+    let h = text.replace('#', '');
     if (h.length === 3) h = h.split('').map((c) => c + c).join('');
     if (!/^[0-9a-f]{6}$/i.test(h)) return null;
     const n = parseInt(h, 16);
@@ -155,12 +167,12 @@
       color.value = toHex(getComputedStyle(document.documentElement).getPropertyValue('--gold').trim());
     }
     if (reset) reset.textContent = t('settings.colorReset');
-    /* One button, two jobs: with a logo chosen it removes, without one it puts
-       the shipped mark back, so "removed" is never a dead end. */
+    /* One button, two jobs: it hides the mark, and when the mark is hidden it
+       puts the shipped one back, so "removed" is never a dead end. */
     if (logoClear) {
-      const hasNone = prefs.logo === undefined || prefs.logo === null;
-      logoClear.textContent = hasNone ? t('settings.logoUseDefault') : t('settings.logoClear');
-      logoClear.disabled = hasNone && !defaultLogo;
+      const removed = prefs.logo === null;
+      logoClear.textContent = removed ? t('settings.logoUseDefault') : t('settings.logoClear');
+      logoClear.disabled = !removed && !defaultLogo;
     }
 
     if (preview) {
@@ -219,6 +231,9 @@
     showSaveError(t('settings.saveFailed'));
     console.warn('[settings] the settings could not be persisted:', e.detail);
   });
+  /* A write that got through retires the warning: the user has done something
+     about it, and leaving the red box up would misreport the current state. */
+  document.addEventListener('mediatools:saved', clearSaveError);
 
   function wire() {
     const shipped = document.querySelector('.logo');
@@ -294,8 +309,11 @@
     });
 
     logoClear.addEventListener('click', () => {
-      const hasNone = prefs.logo === undefined || prefs.logo === null;
-      prefs.logo = hasNone ? defaultLogo : null;
+      /* Removed -> put the shipped mark back. Anything else -> hide it. The
+         "shipped default" state is not the same as "no logo": treating them as
+         one left the button offering to restore what was already showing, so
+         the mark could never be removed. */
+      prefs.logo = prefs.logo === null ? undefined : null;
       setLogo(prefs.logo);
       syncInputs();
       notifySave();
