@@ -1,0 +1,46 @@
+# Maintainer: Almenber Tools
+pkgname=custom-media-player
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="A local media player for images, video and audio"
+arch=('x86_64')
+url="https://github.com/almenber"
+license=('MIT')
+
+# Built and packaged from the repository rather than declared as dependencies,
+# so `makepkg` works without a network fetch of anything.
+depends=('gtk3' 'webkit2gtk-4.1' 'libsoup3' 'gstreamer' 'gst-plugins-base' 'gst-plugins-good')
+# The MP4 demuxer. Without gst-plugins-good the app launches and silently plays
+# nothing, which is the single most confusing failure on Linux - so it is a hard
+# dependency rather than an optional one.
+optdepends=('gst-plugins-bad: additional codecs'
+            'gst-plugins-ugly: additional codecs'
+            'gst-libav: broad codec support, an alternative to the gstreamer plugins')
+
+# The web assets and the compiled binary are produced by the repository itself
+# (npm run build:web && tauri build), so this PKGBUILD packages what is already
+# on disk rather than downloading or rebuilding anything.
+_binary="$startdir/../src-tauri/target/release/custom-media-player"
+_assets="$startdir/../dist"
+source=()
+sha256sums=()
+
+depends=('gtk3' 'webkit2gtk-4.1' 'libsoup3')
+# The MP4 demuxer lives in gst-plugins-good. Without it the app launches and
+# silently plays nothing, so it is a hard dependency rather than an optional
+# one - that failure is the single most confusing thing on this platform.
+depends+=('gstreamer' 'gst-plugins-base' 'gst-plugins-good')
+
+package() {
+  local dest="$pkgdir/usr"
+  local here="$startdir/desktop-entry"
+
+  # the binary carries the web assets inside it, so nothing else is installed
+  install -Dm755 "$_binary" "$dest/bin/custom-media-player"
+  install -Dm644 "$here/desktop-file" \
+    "$dest/share/applications/custom-media-player.desktop"
+  install -Dm644 "$here/metainfo.xml" \
+    "$dest/share/metainfo/custom-media-player.metainfo.xml"
+  install -Dm644 "$here/icon-512.png" \
+    "$dest/share/icons/hicolor/512x512/apps/custom-media-player.png"
+}

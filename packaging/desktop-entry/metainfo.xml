@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.almenber.custommediaplayer</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Custom Media Player</name>
+  <summary>Play images, video and audio from your own disk</summary>
+  <description>
+    <p>
+      A minimal full-screen media player. Drop images, video or audio onto the
+      window and play them through as a playlist.
+    </p>
+    <p>
+      Nothing is uploaded and nothing leaves the machine. Files stay where they
+      are, and the playlist, your position in it and your settings are
+      remembered between sessions.
+    </p>
+    <p>Available in English and Arabic, with a right-to-left interface.</p>
+  </description>
+  <launchable type="desktop-id">custom-media-player.desktop</launchable>
+  <categories>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+    <category>Video</category>
+    <category>Player</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="1.0.0" date="2026-09-29">
+      <description>
+        <p>First release.</p>
+      </description>
+    </release>
+  </releases>
+</component>

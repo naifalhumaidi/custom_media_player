@@ -39,14 +39,35 @@ rather than shipping an app with a missing script.
 
 ### Output
 
-| Target | Platform |
-|---|---|
-| `.deb` | Linux |
-| `.appimage` | Linux |
-| `.msi` | Windows |
-| `setup.exe` (NSIS) | Windows |
+| Target | Platform | Built by |
+|---|---|---|
+| `.pkg.tar.zst` | Arch / CachyOS | `packaging/PKGBUILD` |
+| `.AppImage` | any Linux x86-64 | `tauri build` |
+| `.deb` | Debian, Ubuntu | `tauri build` (needs `dpkg-deb`) |
+| `.msi` | Windows | `tauri build` |
+| `setup.exe` (NSIS) | Windows | `tauri build` |
 
-All four are in `tauri.conf.json` under `bundle.targets`.
+**Building for Arch**
+
+```bash
+npm run build:web
+npx tauri build --no-bundle      # the binary, with the web assets inside it
+cd packaging && makepkg -f       # -> custom-media-player-1.0.0-1-x86_64.pkg.tar.zst
+sudo pacman -U ../packaging/custom-media-player-1.0.0-1-x86_64.pkg.tar.zst
+```
+
+`gst-plugins-good` is a **hard dependency** of the package, not an optional one.
+Without the MP4 demuxer the app launches and silently plays nothing, and that is
+the most confusing failure on this platform — so the package refuses to install
+into a system that would have it.
+
+**Building for Windows**
+
+The Windows targets are configured and the code is platform-neutral, but a
+Windows installer cannot be produced from Linux: it needs the MSVC toolchain and
+the WebView2 SDK. Run `npm install && npm run desktop:build` on a Windows
+machine, or on a Windows CI runner. §8 is the verification checklist for when you
+do.
 
 ## 3. What is verified, and what is not
 
