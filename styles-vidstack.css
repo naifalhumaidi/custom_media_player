@@ -1,9 +1,22 @@
 /* Vidstack component parts. Based on the official "CSS" example, adapted to
    the vds-* class names and our minimal dark look. */
 
+/* brand colour, sampled from assets/logo.png */
+:root {
+  --gold: #aa7827;
+  --gold-soft: rgba(170, 120, 39, .26);
+  /* "enabled" and "hover" are deliberately the same colour family: a control
+     that is on and a control under the pointer must read identically.
+     js/settings.js rewrites these when the user picks a brand colour. */
+  --enabled-bg: rgba(170, 120, 39, .26);
+  --enabled-fg: #f0d9ac;
+  --hover-bg: rgba(170, 120, 39, .2);
+  --hover-fg: #e8d3ae;
+}
+
 media-player {
-  --media-brand: #e8e8e8;
-  --media-focus-ring-color: #9a9a9a;
+  --media-brand: var(--gold);
+  --media-focus-ring-color: var(--gold);
   --media-focus-ring: 0 0 0 2px var(--media-focus-ring-color);
   --media-cue-color: #fff;
   --media-cue-bg: rgba(0, 0, 0, .75);
@@ -51,16 +64,15 @@ media-provider > video {
 }
 
 .vds-btn:hover,
-.btn:hover { background: #262626; }
+.btn:hover { background: var(--hover-bg); color: var(--hover-fg); }
 .vds-btn:active,
 .btn:active { background: #303030; }
 
-.vds-btn[data-focus] { outline: 1px solid #7a7a7a; outline-offset: 1px; }
-.btn:focus-visible { outline: 1px solid #9a9a9a; outline-offset: 1px; }
-.btn.on,
-.vds-btn[data-active] { background: #2a2a2a; border-color: #3a3a3a; color: #fff; }
-.btn.primary { background: #2a2a2a; border-color: #3a3a3a; color: #fff; }
-.btn.on { background: #2a2a2a; border-color: #4a4a4a; color: #fff; }
+.vds-btn[data-focus] { outline: 1px solid var(--gold); outline-offset: 1px; }
+.btn:focus-visible { outline: 1px solid var(--gold); outline-offset: 1px; }
+.vds-btn[data-active],
+.btn.on { background: var(--enabled-bg); color: var(--enabled-fg); }
+.btn.primary { background: var(--enabled-bg); color: var(--enabled-fg); }
 
 /* hide Vidstack buttons the environment cannot support (e.g. fullscreen) */
 .vds-btn[aria-hidden="true"],
@@ -69,7 +81,6 @@ media-provider > video {
 /* the library hides a button automatically while media is not seekable */
 .vds-btn[data-unsupported] { opacity: .35; pointer-events: none; }
 
-/* our play glyph, swapped by state attributes the library maintains */
 .vds-play .g-pause,
 .vds-play .g-replay { display: none; }
 .vds-play[data-paused] .g-play,
@@ -101,7 +112,7 @@ media-provider > video {
   position: relative;
   width: 100%;
   height: 22px;
-  margin: 0 calc(9px / 2);
+  margin: 0 calc(15px / 2);
   cursor: pointer;
   user-select: none;
   touch-action: none;
@@ -119,8 +130,8 @@ media-provider > video {
   left: 0;
   z-index: 0;
   width: 100%;
-  height: 5px;
-  border-radius: 3px;
+  height: 7px;
+  border-radius: 4px;
   transform: translateY(-50%);
   background-color: rgb(255 255 255 / .16);
   contain: strict;
@@ -148,8 +159,8 @@ media-provider > video {
   top: 50%;
   left: var(--mt-fill, var(--slider-fill, 0%));
   z-index: 3;
-  width: 13px;
-  height: 13px;
+  width: 15px;
+  height: 15px;
   border-radius: 9999px;
   background-color: #fff;
   opacity: 0;
@@ -164,7 +175,6 @@ media-provider > video {
 .vds-slider[data-focus] .vds-track { box-shadow: 0 0 0 2px #3a3a3a; }
 .vds-slider[data-dragging] .vds-thumb { box-shadow: 0 0 0 4px rgb(255 255 255 / .18); }
 
-.vds-volume { max-width: 76px; }
 
 /* ---------- gestures ---------- */
 
@@ -245,3 +255,17 @@ media-captions [data-part="cue"] {
 media-captions[data-dir="rtl"] [data-part="cue-display"] { direction: rtl; }
 
 media-player[data-preview] media-captions { opacity: 0; visibility: hidden; }
+
+/* ---- exactly one glyph per stateful control ----------------------------
+   CSS cannot reach inside a <use> shadow tree, so each control carries one
+   <use> per state and app.js picks which by toggling a class. */
+
+#play use, #mute use, #autoplay use, #fs use { display: none; }
+#play:not(.playing) use[href="#i-play"],
+#mute:not(.muted) use[href="#i-sound"],
+#autoplay:not(.off) use[href="#i-auto"],
+#fs:not(.on) use[href="#i-fs"] { display: block; }
+#play.playing use[href="#i-pause"],
+#mute.muted use[href="#i-mute"],
+#autoplay.off use[href="#i-auto-off"],
+#fs.on use[href="#i-fs-exit"] { display: block; }

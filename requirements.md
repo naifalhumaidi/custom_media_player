@@ -78,6 +78,12 @@ Prototype that grows into a real local media player. Desktop shell comes last.
 | `M` | mute |
 | `F` | fullscreen |
 | `↑` / `↓` | volume |
+| `⇧X` | clear the playlist (replaced the removed clear button) |
+| `?` / `I` | open / close the instructions dialog |
+
+`Space` always means play / pause, even while a control still holds focus: the
+handler runs in the capture phase, calls `preventDefault()` and drops focus, so
+the browser never re-activates the focused button instead.
 
 ## 7. Persistence (desktop phase)
 - 7.1 Playlist, order, current item, playback position, fit, loop, volume and
@@ -110,6 +116,91 @@ Prototype that grows into a real local media player. Desktop shell comes last.
 - 8.7 The library's sliders keep correct state and ARIA values but their
       `--slider-fill` custom property stays `0%` in 1.15.6, so the app paints
       the fill itself from `time-update` / `volume-change`.
+- 8.8 **`autoPlay` only works on the first source.** On a track change the
+      library is still tearing down the previous provider and swallows it, so
+      the next track loads paused. The bridge remembers the request and replays
+      `play()` on `loaded-metadata` / `can-play`.
+- 8.9 The library's components call `stopPropagation()` on `keydown`, so a
+      bubbling document listener never sees a key once a control has focus.
+      The app's key handler is registered in the **capture** phase and yields
+      arrow keys to whichever slider is focused.
+- 8.10 CSS cannot reach inside a `<use>` shadow tree. A glyph cannot be hidden
+      by styling a path inside the referenced group, so every stateful control
+      carries one `<use>` per state and app.js picks which one by toggling a
+      class.
+- 8.11 The library sizes `<media-volume-slider>` with a **percentage**, which
+      contributes nothing to a flex group's intrinsic width. The group's last
+      button was therefore pushed outside the window at every size. Fixed with
+      an explicit `width` on the slider.
+- 8.12 A control that needs an argument must not be passed straight to
+      `addEventListener`: the listener hands it its `Event`, which is truthy,
+      so every state read back as "on". Wrapped in an arrow function instead.
+- 8.13 **The library has its own keyboard layer and it collides with the app's
+      shortcuts.** Its defaults are:
+      `seekForward: "l L ArrowRight"`, `seekBackward: "j J ArrowLeft"`,
+      `toggleMuted: "m"`, `toggleFullscreen: "f"`, `toggleCaptions: "c"`,
+      `togglePaused: "k Space"`.
+      It reads `e.key` off the same event the app handles, so `l` toggled loop
+      *and* seeked forward, `c` also toggled captions, and `f`'s second toggle
+      cancelled the app's fullscreen. `preventDefault()` cannot fix this: the
+      library is not cancelling anything, it is acting on the key. The map is
+      cleared with `keyShortcuts = {}`; the sliders keep their own arrow-key
+      handling, which is a separate code path.
+- 8.14 A control that is `flex: 0 0 max-content` cannot shrink, so on a narrow
+      window its last buttons sit outside the viewport. It needs
+      `flex: 0 1 max-content` **and** `flex-wrap: wrap` so it reflows instead.
+
+## 9. Layout rules
+- The playlist panel occupies the **full height** of the stage. The control bar
+  is laid **on top of** the panel's lower edge (`z-index` 25 over 15) rather than
+  the panel being shortened, so the bar keeps the full window width and the
+  playlist gets the whole window.
+- Clicking anywhere outside the panel and the bar closes the panel.
+- Reordering reflows the list **live** during the drag: crossing a row's midpoint
+  moves the dragged node for real, so what is shown mid-drag is the result. A
+  cancelled drag (Esc, or released outside) restores the original order.
+
+## 10. Instructions
+- All instructions live in the dialog opened by the `?` button in the bar or the
+  `?` / `I` keys. The start window is only the brand mark, held back to 22%
+  opacity.
+
+## 11. Settings
+- The gear button in the bar opens Settings; `Esc` closes it, and it and the
+  instructions dialog can never be open at the same time.
+- Options: **language** (English / العربية), **logo** (a chosen image, or the one
+  shipped in the markup, or none) and **brand colour** (any colour, or the colour
+  sampled from the logo, `#aa7827`).
+- The brand colour is published as CSS custom properties (`--gold`, `--gold-soft`,
+  `--enabled-bg/fg`, `--hover-bg/fg`), so a change is a single style write and
+  both stylesheets follow.
+- Hover and "enabled" deliberately share one colour family: a control that is on
+  and a control under the pointer must look the same. The same tokens drive the
+  playlist rows.
+- `PLAYLIST` and the file name in the bar are drawn in the brand colour.
+
+## 12. Languages
+- English and Arabic, switchable at runtime. `html[lang]` and `html[dir]` follow
+  the choice, so the whole interface mirrors in Arabic.
+- Numbers use the active language's digits, so counts and durations read
+  naturally. Arabic uses `ar-u-nu-arab`: with a bare `ar` the browser resolves
+  the locale to the **Latin** numbering system, which would leave Western digits
+  inside Arabic text.
+- The markup declares its own strings with `data-i18n`, `data-i18n-title` and
+  `data-i18n-aria`, so switching never needs the strings duplicated in JS.
+  Anything the app builds later (tooltips, counts, durations) goes through
+  `I18n.t()` / `I18n.num()`.
+- Both dialogs must be parsed **before** the scripts run, otherwise the module
+  wires nothing and every control is dead without a visible error.
+
+## 13. Layout
+- The playlist panel sits **above** the start overlay, so `P` opens it even with
+  an empty playlist; the panel then shows its own empty message.
+- The bar is ordered: open files · transport · time / name / position · mute +
+  volume · loop · auto-start · fit · fullscreen · instructions · settings.
+- `.btn.ic.sm` is the icon **size** modifier. A text button must not reuse the
+  name: its padding overrides `.btn.ic`'s `padding: 0` and the flexed icon
+  shrinks to a few pixels.
 
 ## Out of scope (for now)
 - Streaming formats (HLS/DASH), captions, speed control, PiP

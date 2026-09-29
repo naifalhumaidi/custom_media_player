@@ -11,6 +11,13 @@
   let player = null;
   let still = null;
   let pendingSeek = 0;
+  let wantPlay = false;
+
+  const startIfWanted = () => {
+    if (!wantPlay) return;
+    wantPlay = false;
+    play();
+  };
 
   /* resolved lazily so the bridge is safe to touch before init() */
   const el = () => player || (player = document.getElementById('media'));
@@ -35,6 +42,19 @@
     el();
     img();
 
+    /* The library ships its own keyboard layer with these defaults:
+         seekForward: "l L ArrowRight"   seekBackward: "j J ArrowLeft"
+         toggleMuted: "m"  toggleFullscreen: "f"  toggleCaptions: "c"
+         togglePaused: "k Space"
+       It reads e.key off the same event the app handles, so every letter the
+       app owns fired TWICE: `l` toggled loop and also seeked forward, `c` also
+       toggled captions, `f`'s second toggle cancelled the app's fullscreen.
+       preventDefault() cannot help - the library is not cancelling anything.
+       The app owns the keyboard and documents every shortcut, so the map is
+       cleared. The sliders keep their own arrow-key handling, which is a
+       separate code path and is unaffected. */
+    el().keyShortcuts = {};
+
     /* the real event names of the library, verified against its type defs */
     el().addEventListener('time-update', (e) =>
       emit('time', { currentTime: e.detail?.currentTime ?? el().currentTime }),
@@ -50,7 +70,14 @@
         el().currentTime = pendingSeek;
         pendingSeek = 0;
       }
+      startIfWanted();
     });
+
+    /* Setting autoPlay before the first source works, but on a track change the
+       library is still tearing down the previous provider and swallows it, so
+       the new track loads paused. The request is remembered and replayed the
+       moment the new source is actually playable. */
+    el().addEventListener('can-play', startIfWanted);
   }
 
   window.MediaBridge = {
@@ -66,6 +93,7 @@
            yet, and nothing is ever created. */
     load(item, kind, autoplay) {
       pendingSeek = item.position || 0;
+      wantPlay = !!autoplay && kind !== 'image';
       pause();
 
       /* a still image has no timeline, so the player is released and the
@@ -93,6 +121,7 @@
 
     clear() {
       pause();
+      wantPlay = false;
       el().src = [];
       el().autoPlay = false;
       img().src = '';
@@ -144,8 +173,18 @@
         const p = document.fullscreenElement
           ? document.exitFullscreen()
           : target?.requestFullscreen?.();
-        if (p && p.catch) p.catch(() => {});
-      } catch {}
+        /* The request is user-gesture bound and the browser refuses it in
+           several situations (no activation yet, a transition already in
+           flight). The failure is logged rather than swallowed so a dead
+           button is diagnosable instead of silent. */
+        if (p && p.catch) {
+          p.catch((err) => {
+            console.warn('[media] fullscreen request failed:', err && err.name, err && err.message);
+          });
+        }
+      } catch (err) {
+        console.warn('[media] fullscreen threw:', err && err.message);
+      }
     },
   };
 })();

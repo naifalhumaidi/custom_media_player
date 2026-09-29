@@ -4,5 +4,5 @@
 (() => {
   const tauri = window.__TAURI_INTERNALS__ && window.MediaSourceTauri;
   window.MediaSource = tauri || window.MediaSourceWeb;
-  if (!window.MediaSource) throw new Error('media-tools: no file source loaded');
+  if (!window.MediaSource) throw new Error('custom-media-player: no file source loaded');
 })();

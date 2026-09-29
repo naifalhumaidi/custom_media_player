@@ -3,7 +3,10 @@
 
 (() => {
   const PREFS = 'mediatools.prefs';
-  const PERSISTED = ['index', 'position', 'fit', 'loop', 'volume', 'muted', 'ui', 'list'];
+  /* What survives a reload. `items` is deliberately absent: the playlist holds
+     blob: URLs that cannot outlive the document. Everything else is a plain
+     value, and `settings` (language / colour / logo) is a nested object. */
+  const PERSISTED = ['index', 'position', 'fit', 'loop', 'volume', 'muted', 'ui', 'list', 'autoplay', 'settings'];
 
   let picker = null;
 

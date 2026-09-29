@@ -25,7 +25,9 @@ html, body {
   display: block;
   width: 100%;
   height: 100%;
-  background: #000;
+  /* deliberately no background: a painted backdrop behind letterboxed media
+     reads as a hard frame around the picture */
+  background: transparent;
 }
 
 /* the <img> needs a declared fit (the browser's initial value is `fill`,
@@ -72,12 +74,12 @@ media-provider > video {
   position: absolute;
   inset: 6px;
   z-index: 20;
-  border: 1px solid rgb(255 255 255 / .28);
+  border: 1px solid rgba(170, 120, 39, .55);
   border-radius: 4px;
   pointer-events: none;
 }
 
-#side.over { box-shadow: inset 0 0 0 2px rgb(255 255 255 / .35); }
+#side.over { box-shadow: inset 0 0 0 2px rgba(170, 120, 39, .55); }
 
 /* ---------- playlist sidebar ---------- */
 
@@ -86,7 +88,9 @@ media-provider > video {
   top: 0;
   left: 0;
   bottom: 0;
-  z-index: 15;
+  /* above the start overlay (18) so the panel can be opened on an empty
+     playlist, and above the still image (1) for the same reason */
+  z-index: 20;
   display: none;
   flex-direction: column;
   width: 300px;
@@ -105,7 +109,7 @@ media-provider > video {
 }
 
 .side-title {
-  color: #999;
+  color: var(--gold);
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: .6px;
@@ -118,6 +122,28 @@ media-provider > video {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* One shared scrollbar treatment: the native one is a light grey slab that
+   stands out badly against the dark chrome. */
+.side-list,
+.modal-body {
+  scrollbar-width: thin;
+  scrollbar-color: #2e2e2e transparent;
+}
+
+.side-list::-webkit-scrollbar,
+.modal-body::-webkit-scrollbar { width: 10px; }
+.side-list::-webkit-scrollbar-track,
+.modal-body::-webkit-scrollbar-track { background: transparent; }
+.side-list::-webkit-scrollbar-thumb,
+.modal-body::-webkit-scrollbar-thumb {
+  background: #2e2e2e;
+  border: 3px solid transparent;
+  border-radius: 9999px;
+  background-clip: content-box;
+}
+.side-list::-webkit-scrollbar-thumb:hover,
+.modal-body::-webkit-scrollbar-thumb:hover { background: #3d3d3d; background-clip: content-box; }
 
 .side-list {
   flex: 1;
@@ -139,18 +165,25 @@ media-provider > video {
   box-shadow: inset 2px 0 0 transparent;
 }
 
-.side-list li:hover { background: #1a1a1a; }
+/* hover reads exactly like an "on" control, as requested */
+.side-list li:hover { background: var(--hover-bg); color: var(--hover-fg); }
 .side-list li.on {
-  background: #1c1c1c;
-  color: #fff;
-  box-shadow: inset 2px 0 0 #dcdcdc;
+  background: var(--enabled-bg);
+  color: var(--enabled-fg);
+  box-shadow: inset 2px 0 0 var(--gold);
 }
 
-.side-list li.dragging { opacity: .4; }
-.side-list li.before { box-shadow: inset 0 2px 0 #dcdcdc; }
-.side-list li.after { box-shadow: inset 0 -2px 0 #dcdcdc; }
-.side-list li.on.before { box-shadow: inset 0 2px 0 #dcdcdc, inset 2px 0 0 #dcdcdc; }
-.side-list li.on.after { box-shadow: inset 0 -2px 0 #dcdcdc, inset 2px 0 0 #dcdcdc; }
+/* Reorder: the dragged row is lifted out visually and the others close the gap
+   live, so what you see mid-drag is the result you get on drop. No insertion
+   line - a line implied a position without showing the reflow. */
+.side-list li.dragging {
+  opacity: .35;
+  background: #161616;
+}
+.side-list li.placeholder {
+  background: #101010;
+  box-shadow: inset 2px 0 0 var(--gold);
+}
 
 .thumb {
   position: relative;
@@ -231,7 +264,9 @@ media-provider > video {
 .drop {
   position: absolute;
   inset: 0;
-  z-index: 18;
+  /* below the panel (20): the playlist must be openable on an empty library,
+     and the bar (25) stays on top of both */
+  z-index: 15;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -243,34 +278,136 @@ media-provider > video {
 }
 
 .drop[hidden] { display: none; }
-.drop h1 { margin: 0; font-size: 28px; letter-spacing: .5px; }
-.drop p { margin: 0 0 8px; color: #999; }
 
-.hint {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  justify-content: center;
-  list-style: none;
-  margin: 22px 0 0;
-  padding: 0;
-  max-width: 600px;
-  color: #777;
-  font-size: 12px;
+/* With the playlist open there is no room for a big centred mark, so the start
+   window's logo slides to the right of the panel instead of sitting under it. */
+#stage.list .drop { align-items: flex-end; padding-right: 6vw; }
+
+/* The start window is just the brand mark, held back in opacity so it reads as
+   a watermark behind the control bar rather than as content. */
+.logo {
+  display: block;
+  width: min(420px, 58vw);
+  height: auto;
+  opacity: .22;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
-.hint li { white-space: nowrap; }
+.modal-card {
+  display: flex;
+  flex-direction: column;
+  width: min(600px, 100%);
+  max-height: min(80vh, 660px);
+  background: #0d0d0d;
+  /* a single flat edge marker instead of a full border, to match the rest of
+     the chrome: a box outline here would be the one stray border in the app */
+  box-shadow: 0 0 0 1px #1c1c1c, 0 24px 60px rgb(0 0 0 / .6);
+}
 
-.mode { margin: 20px 0 0; color: #4d4d4d; font-size: 11px; }
-.mode:empty { display: none; }
+/* the settings form is narrow and single column, so it must not inherit the
+   two-column instructions layout */
+.modal-card.narrow { width: min(460px, 100%); }
+.modal-body.single { columns: 1; }
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgb(0 0 0 / .72);
+}
+
+.modal[hidden] { display: none; }
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 12px 14px 18px;
+  background: #111;
+}
+
+.modal-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #f0d9ac;
+}
+
+.modal-body {
+  overflow-y: auto;
+  padding: 4px 18px 20px;
+}
+
+.modal-body section { margin-top: 18px; }
+
+/* The body is two columns on a wide dialog so the shortcut table is not buried
+   under a long scroll; below that it stacks into one. */
+.modal-body {
+  columns: 2;
+  column-gap: 34px;
+}
+
+.modal-body section {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+@media (max-width: 720px) {
+  .modal-body { columns: 1; }
+}
+
+.modal-body h3 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.notes {
+  margin: 0;
+  padding-left: 18px;
+  color: #b3b3b3;
+  font-size: 13px;
+}
+
+.notes li { margin: 4px 0; }
+.notes b { color: #e6e6e6; font-weight: 600; }
+
+.keys {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.keys th {
+  padding: 10px 0 5px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: #6f6f6f;
+}
+
+.keys td { padding: 3px 0; vertical-align: baseline; color: #b3b3b3; }
+.keys td:first-child { width: 42%; white-space: nowrap; }
+.keys kbd { margin-right: 2px; }
 
 kbd {
   display: inline-block;
   padding: 1px 6px;
-  border: 1px solid #3a3a3a;
-  border-bottom-width: 2px;
+  border: 0;
   border-radius: 4px;
-  background: #161616;
+  background: #1c1710;
+  box-shadow: inset 0 0 0 1px rgba(170, 120, 39, .45);
   font: inherit;
   font-size: 11px;
   color: #ccc;
@@ -283,6 +420,9 @@ kbd {
   left: 0;
   right: 0;
   bottom: 0;
+  /* above the playlist panel, so the panel can use the full window height and
+     the bar simply covers its lower edge */
+  z-index: 25;
   display: none;
   flex-direction: column;
   gap: 6px;
@@ -292,16 +432,20 @@ kbd {
 
 #stage.ui .bar { display: flex; }
 
-/* when the playlist is open the bar shifts right so no control is covered */
-#stage.list.ui .bar { padding-left: 310px; }
-#stage.list.ui .side-hint,
-#stage.list.ui ~ .bar { display: none; }
+/* The panel keeps the FULL height of the stage and the control bar is laid on
+   top of its lower edge, instead of the panel being shortened to make room for
+   the bar. The bar stays full width and the playlist gets the whole window. */
+#stage.list #side { bottom: 0; padding-bottom: var(--bar-h, 0px); }
 
 .bar-track { display: flex; }
 
 .row {
   display: flex;
   align-items: center;
+  /* the controls must never collide: when the window is too narrow for one
+     line the groups wrap instead of overlapping */
+  flex-wrap: wrap;
+  row-gap: 6px;
   flex-wrap: wrap;
   gap: 6px 10px;
   min-width: 0;
@@ -311,11 +455,22 @@ kbd {
   display: flex;
   align-items: center;
   gap: 4px;
-  flex-shrink: 0;
+  /* max-content, but allowed to shrink when the window is narrower than the
+     group. Shrinking alone used to push the last button out of the viewport;
+     combined with the wrap below it now reflows onto a second line instead. */
+  flex: 0 1 max-content;
+  /* A group wider than the window cannot shrink, so it has to be allowed to
+     break onto more than one line. Without this the last buttons sit outside
+     the viewport on a narrow window. */
+  flex-wrap: wrap;
+  row-gap: 4px;
 }
 
-/* never let the volume slider collapse to nothing */
-.vds-volume { flex: 0 0 auto; }
+/* Never let the volume slider collapse to nothing. The width must be explicit:
+   the library sizes this element with a percentage, and a percentage contributes
+   nothing to a flex group's intrinsic width, which pushed the last button in the
+   group out of the window. */
+.vds-volume { flex: 0 0 auto; width: 64px; max-width: 64px; }
 
 /* time + name + counter share one shrinking, clipping block so nothing
    can overlap, whatever the window width */
@@ -323,7 +478,9 @@ kbd {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  flex: 1 1 auto;
+  /* the only elastic part of the row: it absorbs all the slack and gives it
+     back first when the window narrows */
+  flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
   padding: 0 4px;
@@ -334,7 +491,7 @@ kbd {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #bbb;
+  color: var(--gold);
 }
 
 .counter, .time {
@@ -372,23 +529,142 @@ media-time { color: inherit; font: inherit; }
 .btn.ic.sm { min-width: 26px; width: 26px; height: 26px; }
 .btn.ic.sm svg { width: 14px; height: 14px; }
 
-/* state icons: exactly one is ever shown, chosen by a class on the button */
-#play use, #mute use, #autoplay use, #fs use { display: none; }
-#play.playing use, #mute.muted use, #autoplay.off use, #fs.on use { display: block; }
-#play:not(.playing) use[href="#i-play"],
-#mute:not(.muted) use[href="#i-sound"],
-#autoplay:not(.off) use[href="#i-auto"],
-#fs:not(.on) use[href="#i-fs"] { display: block; }
-#fs.on use[href="#i-fs-exit"] { display: block; }
-#autoplay.off .slash { display: block; }
-#autoplay:not(.off) .slash { display: none; }
-
-@media (max-width: 980px) {
-  .vds-volume { display: none; }
-}
-
 @media (max-width: 620px) {
   .title { display: none; }
   .counter { display: none; }
   .meta { padding: 0; }
 }
+
+/* ---------- settings form ---------- */
+
+.field { margin-bottom: 20px; }
+.field:last-child { margin-bottom: 4px; }
+
+.field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: #cfcfcf;
+}
+
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.field-hint {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: #6f6f6f;
+}
+
+.field select,
+.field input[type="color"],
+.field input[type="file"] {
+  background: #161616;
+  color: #ddd;
+  border: 0;
+  box-shadow: inset 0 0 0 1px #262626;
+  border-radius: 5px;
+  padding: 6px 9px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.field select { min-width: 180px; cursor: pointer; }
+.field select option { background: #161616; color: #ddd; }
+
+.field input[type="color"] {
+  width: 62px;
+  height: 32px;
+  padding: 3px;
+  cursor: pointer;
+}
+
+.field input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.field input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 3px; }
+
+.field input[type="file"] { padding: 4px; font-size: 12px; }
+.field input[type="file"]::file-selector-button {
+  background: #242424;
+  color: #ddd;
+  border: 0;
+  border-radius: 4px;
+  padding: 5px 10px;
+  margin-inline-end: 9px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* NOT .sm: that is the icon size modifier (.btn.ic.sm). Reusing the name here
+   overrode .btn.ic's `padding: 0`, and the flexed 14px icon then shrank to the
+   4px content box - every panel icon rendered as a dot. */
+.btn.txt {
+  padding: 6px 11px;
+  font-size: 12px;
+  color: #cfcfcf;
+}
+
+.btn.txt:hover { background: var(--hover-bg); color: var(--hover-fg); }
+.btn.txt:disabled { opacity: .4; cursor: default; }
+.btn.txt:disabled:hover { background: #1a1a1a; color: #cfcfcf; }
+
+.field-preview {
+  display: block;
+  max-width: 190px;
+  max-height: 64px;
+  margin-top: 10px;
+  object-fit: contain;
+  background: #141414;
+  padding: 6px;
+  border-radius: 5px;
+}
+
+.field-preview[hidden] { display: none; }
+
+.about { margin: 0; font-size: 12.5px; color: #8a8a8a; }
+
+/* ---------- right-to-left (Arabic) ---------- */
+
+/* The bar's groups are ordered left-to-right in the markup for the reading
+   order of the interface; in RTL the whole row mirrors naturally, so only the
+   genuinely directional pieces need help. */
+[dir="rtl"] .side-list li,
+[dir="rtl"] .field-row,
+[dir="rtl"] .modal-head,
+[dir="rtl"] .row { direction: rtl; }
+
+[dir="rtl"] .side-title { letter-spacing: 0; }
+[dir="rtl"] .modal-head h2 { text-align: right; }
+
+/* numbers inside Arabic text stay left-to-right so a time reads correctly */
+[dir="rtl"] .time,
+[dir="rtl"] .counter,
+[dir="rtl"] .total,
+[dir="rtl"] .keys kbd,
+[dir="rtl"] .dur { direction: ltr; unicode-bidi: isolate; }
+
+[dir="rtl"] .keys td:first-child { text-align: right; }
+
+/* ---------- empty playlist ---------- */
+
+.side-empty {
+  margin: 0;
+  padding: 22px 18px;
+  color: #6f6f6f;
+  font-size: 12.5px;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.side-empty[hidden] { display: none; }
+.side-list[hidden] { display: none; }
+
+/* Chromium does not mirror the inside of a file input, so the button and the
+   file name end up in reading order. Pinning it left-to-right keeps them
+   paired correctly in both languages. */
+.field input[type="file"] { direction: ltr; }
+[dir="rtl"] .field input[type="file"] { text-align: right; }
