@@ -1,5 +1,32 @@
 const $ = (id) => document.getElementById(id);
-const source = window.MediaSource;
+const noticeEl = $('notice');
+let noticeTimer = 0;
+
+/* A message the user actually sees. Every failure used to be silent, which is
+   indistinguishable from the app having hung.
+
+   Two lifetimes, because the messages mean different things:
+     - "press play to start" / "cannot play this file" describe the CURRENT
+       state, so they are cleared the moment the media actually starts;
+     - "3 files cannot be played here" describes something that has already
+       happened and cannot be undone, so playback does not retire it. It simply
+       times out. Clearing it when the video started was hiding the refusal the
+       instant the video loaded. */
+function notice(text, { sticky = false, ms = 4000 } = {}) {
+  if (!noticeEl || !text) return;
+  noticeEl.textContent = text;
+  noticeEl.hidden = false;
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => { noticeEl.hidden = true; }, ms);
+  noticeSticky = sticky;
+}
+let noticeSticky = false;
+const clearNotice = () => {
+  if (noticeSticky) return;
+  clearTimeout(noticeTimer);
+  if (noticeEl) noticeEl.hidden = true;
+};
+const source = window.MediaFileSource;
 const media = window.MediaBridge;
 const settings = window.MediaSettings;
 const { t, num } = window.I18n;
@@ -30,6 +57,13 @@ let dragNode = null;
 /* One failure is allowed per track, so a playlist of unplayable files skips
    forward instead of bouncing between two broken items forever. */
 let erroredIndex = -1;
+/* False until the saved state has been applied. A desktop source reads it over
+   IPC, so anything added in that window would be silently overwritten by the
+   restore that lands afterwards. Input is not refused - it is queued, because
+   dropping a file the user just dragged is worse than playing it a moment
+   late. */
+let ready = false;
+let queued = null;
 
 const mod = (n, m) => ((n % m) + m) % m;
 
@@ -140,6 +174,13 @@ async function probeAll(batch) {
 /* ---------------- playlist ---------------- */
 
 function addItems(incoming, play) {
+  if (!incoming || !incoming.length) return;
+  /* Hold until the restore has landed, then apply in arrival order. Anything
+     added now would otherwise be wiped by the restore that follows. */
+  if (!ready) {
+    queued = (queued || []).concat([{ items: incoming, play }]);
+    return;
+  }
   const fresh = incoming.map((it) => ({ ...it, duration: null, thumb: null, position: 0 }));
   if (!fresh.length) return;
   const wasEmpty = items.length === 0;
@@ -168,10 +209,13 @@ function removeItem(i) {
      The old test compared `items[i]` AFTER the splice, which is the item that
      shifted down into that slot - so deleting any row ABOVE the current one
      reloaded the current track (and passed play=true, overriding auto-start),
-     while deleting the current row itself left the index at 0. */
+     while deleting the current row itself left the index at 0.
+
+     The swap happens before the release, so the player is never left pointing
+     at a URL that has already been revoked. */
   if (wasCurrent) {
-    source.release(removed);
     load(Math.min(nextIndex, items.length - 1), autoStart);
+    source.release(removed);
     return;
   }
 
@@ -182,21 +226,15 @@ function removeItem(i) {
   scheduleSave();
 }
 
-function moveItem(from, to) {
-  if (from === to || from < 0 || from >= items.length) return;
-  const current = items[index];
-  const [moved] = items.splice(from, 1);
-  items.splice(to, 0, moved);
-  index = Math.max(0, items.indexOf(current));
-  render();
-  scheduleSave();
-}
-
 function clearAll() {
+  /* Let go of the media FIRST, then revoke. Revoking an object URL the player
+     is still pointed at is a use-after-free of the resource by construction -
+     it appears to work only because the next assignment happens to abort the
+     in-flight fetch, which is an implementation detail, not a guarantee. */
+  media.clear();
   for (const it of items) source.release(it);
   items = [];
   index = 0;
-  media.clear();
   stage.dataset.kind = '';
   drop.hidden = false;
   renderEmptyState();
@@ -437,8 +475,17 @@ function save() {
 /* ---------------- input ---------------- */
 
 async function pick(play) {
-  const picked = (await source.openFiles()).filter((it) => it.kind);
+  const all = await source.openFiles();
+  reportUnusable(all);
+  const picked = all.filter((it) => it.kind);
   if (picked.length) addItems(picked, play);
+}
+
+/* A drop or a picker that quietly discards files reads as the app ignoring
+   you. Say how many were refused so the mismatch is explainable. */
+function reportUnusable(all) {
+  const skipped = (all || []).filter((it) => !it.kind).length;
+  if (skipped) notice(t('notice.dropped', { n: num(skipped) }), { sticky: true });
 }
 
 /* Transport UI is Vidstack's: <media-play-button>, <media-seek-button>,
@@ -493,6 +540,9 @@ media.on('time', ({ currentTime }) => {
    Space/Enter, the next button, or "." to move on. */
 
 media.on('pause', scheduleSave);
+/* A notice describes a state the user is in; it is retired when the media
+   actually starts, not merely because something was loaded. */
+media.on('play', clearNotice);
 media.on('play', scheduleSave);
 
 /* The end of the playlist is where the loop toggle actually does its work:
@@ -511,15 +561,26 @@ media.on('ended', () => {
    hammered while the playlist skipped itself to the start. Advance at most
    once per track, and only when playback is actually under way. */
 media.on('error', () => {
-  if (items.length < 2) return;
+  if (items.length < 2) {
+    /* Nothing to fall forward to, so stop here and say why. Silently freezing
+       on a broken frame looks like a hang, not a failure. */
+    notice(t('notice.cannotPlay'));
+    media.pause();
+    return;
+  }
   if (erroredIndex === index) return;
   erroredIndex = index;
   const next = index + 1;
   if (next < items.length) return load(next, autoStart);
   if (loop) return load(0, autoStart);
+  notice(t('notice.cannotPlay'));
   media.pause();
   scheduleSave();
 });
+
+/* Autoplay was refused - no user gesture yet, or the load was swapped out from
+   under it. The player sits there claiming to be playing otherwise. */
+media.on('blocked', () => notice(t('notice.blocked')));
 
 $('media').addEventListener('volume-change', () => {
   paint(volumeSlider, media.volume);
@@ -670,7 +731,9 @@ side.addEventListener('drop', async (e) => {
 async function pickedFrom(e) {
   try {
     const res = await source.dropItems(e);
-    return (Array.isArray(res) ? res : []).filter((it) => it && it.kind);
+    const all = Array.isArray(res) ? res : [];
+    reportUnusable(all);
+    return all.filter((it) => it && it.kind);
   } catch (err) {
     console.warn('[app] could not read the dropped items:', err);
     return [];
@@ -882,6 +945,20 @@ async function restore() {
   if (state?.autoplay === false) toggleAutoStart();
   if (state?.muted) media.toggleMute();
 
+  /* The saved state has landed; deliver anything the user added while it was
+     still arriving, in the order they added it. */
+  ready = true;
+  const pending = queued;
+  queued = null;
+  if (pending) for (const batch of pending) addItems(batch.items, batch.play);
+
+  /* Only rebuild a playlist the source can actually resolve. Restoring rows
+     that carry no file would put the app on screen with a full list that can
+     never play, every duration stuck at "…", and an unhandled rejection from
+     the probe queue behind it. */
+  if (state?.items?.length && !source.canPersist()) {
+    state.items = [];
+  }
   if (!state?.items?.length) return;
 
   items = state.items.map((it) => ({ ...it, duration: null, thumb: null, position: 0 }));
@@ -917,4 +994,12 @@ window.I18n.onChange(() => {
   render();
 });
 
-restore();
+restore().catch((err) => {
+  /* A failed restore must not leave the app deaf to every drop. */
+  console.warn('[app] could not restore the saved state:', err);
+  ready = true;
+  const pending = queued;
+  queued = null;
+  if (pending) for (const batch of pending) addItems(batch.items, batch.play);
+  render();
+});

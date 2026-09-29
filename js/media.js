@@ -1,44 +1,76 @@
 /* Vidstack boundary — the only file that knows a media library exists.
-   app.js talks only to this interface, so the library can be swapped or
-   removed without touching playlist / sidebar / drop-zone code.
 
-   State changes go through the library's request events (its documented
-   request/response model) rather than assigning properties, so the
-   library stays the single source of truth and its own UI components
-   stay in sync with the keyboard shortcuts. */
+   The real boundary is narrower than "nothing outside this file mentions the
+   library": the markup in index.html is built from <media-*> custom elements,
+   and that is unavoidable given the design. What is hidden here is all
+   *runtime* knowledge — the property names, the event names, the load
+   lifecycle, and the quirks below. Swapping the library means rewriting this
+   file and the markup, not app.js.
+
+   State changes go through the element's own props and methods rather than
+   hand-dispatched `media-*-request` events, which the library ignores unless it
+   dispatches them itself through its remote. */
 
 (() => {
   let player = null;
   let still = null;
+  let inited = false;
+
+  /* ---- load sequencing -------------------------------------------------
+     Every load takes a ticket. Media events arrive asynchronously, so a
+     `loaded-metadata` from a provider that has already been replaced would
+     otherwise apply its seek and its autoplay to whatever is on screen now -
+     which is how a resume position ends up on the wrong file. Handlers compare
+     the ticket they were registered with against the current one and bail. */
+  let loadSeq = 0;
   let pendingSeek = 0;
   let wantPlay = false;
-
-  const startIfWanted = () => {
-    if (!wantPlay) return;
-    wantPlay = false;
-    play();
-  };
+  let currentLoad = 0;
 
   /* resolved lazily so the bridge is safe to touch before init() */
   const el = () => player || (player = document.getElementById('media'));
   const img = () => still || (still = document.getElementById('still'));
 
-  /* The element's own props/methods are the supported control surface
-     (play, pause, currentTime, volume, muted, loop). Hand-rolled
-     `media-*-request` events are ignored unless the library itself
-     dispatches them through its remote, so we do not use them. */
-  const play = () => el().play().catch(() => {});
-  const pause = () => el().pause();
-
-  const listeners = { time: [], play: [], pause: [], ended: [], error: [] };
-  const emit = (key, payload) => listeners[key].forEach((fn) => fn(payload));
+  const listeners = { time: [], play: [], pause: [], ended: [], error: [], blocked: [] };
+  const emit = (key, payload) => listeners[key].slice().forEach((fn) => fn(payload));
   const on = (key, fn) => {
     const list = listeners[key] || (listeners[key] = []);
     list.push(fn);
     return () => (listeners[key] = list.filter((f) => f !== fn));
   };
 
+  /* An AbortError just means the load was superseded, which the next load()
+     already handles. Anything else is a real failure - most often autoplay
+     being refused because there is no user gesture yet - and the user has to
+     hear about it, or the interface sits there claiming to be playing. */
+  const play = () => {
+    try {
+      const p = el().play();
+      if (p && p.catch) {
+        p.catch((err) => {
+          if (err && err.name === 'AbortError') return;
+          emit('blocked', { error: err });
+        });
+      }
+    } catch (err) {
+      emit('blocked', { error: err });
+    }
+  };
+  const pause = () => el().pause();
+
+  const startIfWanted = (seq) => {
+    if (seq !== undefined && seq !== currentLoad) return;
+    if (!wantPlay) return;
+    wantPlay = false;
+    play();
+  };
+
   function init() {
+    /* A second init() would double every listener, and every emission with it,
+       so a double save and a double icon sync per event. */
+    if (inited) return;
+    inited = true;
+
     el();
     img();
 
@@ -64,20 +96,26 @@
     el().addEventListener('ended', () => emit('ended'));
     el().addEventListener('error', () => emit('error'));
 
+    /* A still image that cannot be decoded has no error handler at all
+       otherwise: it shows the browser's broken-image glyph forever and the
+       playlist never moves on, because the app only advances on `error`. */
+    img().addEventListener('error', () => emit('error', { kind: 'image' }));
+
     /* resume where we left off once the media reports its metadata */
     el().addEventListener('loaded-metadata', () => {
+      const seq = currentLoad;
       if (pendingSeek > 0) {
         el().currentTime = pendingSeek;
         pendingSeek = 0;
       }
-      startIfWanted();
+      startIfWanted(seq);
     });
 
     /* Setting autoPlay before the first source works, but on a track change the
        library is still tearing down the previous provider and swallows it, so
        the new track loads paused. The request is remembered and replayed the
        moment the new source is actually playable. */
-    el().addEventListener('can-play', startIfWanted);
+    el().addEventListener('can-play', () => startIfWanted(currentLoad));
   }
 
   window.MediaBridge = {
@@ -92,20 +130,26 @@
            waits for an IntersectionObserver on a provider that does not exist
            yet, and nothing is ever created. */
     load(item, kind, autoplay) {
+      currentLoad = ++loadSeq;
       pendingSeek = item.position || 0;
       wantPlay = !!autoplay && kind !== 'image';
       pause();
 
+      /* Drop the previous source *first*. Releasing the item's object URL while
+         the element still points at it is a use-after-free of the resource by
+         construction; it only appears to work because the next assignment
+         happens to abort the in-flight fetch. */
+      el().src = [];
+      img().src = '';
+
       /* a still image has no timeline, so the player is released and the
          <img> takes over; clicking it advances (see app.js) */
       if (kind === 'image') {
-        el().src = [];
         el().autoPlay = false;
         img().hidden = false;
         img().src = item.url;
         return;
       }
-      img().src = '';
       img().hidden = true;
 
       el().load = 'eager';
@@ -120,13 +164,14 @@
     },
 
     clear() {
+      currentLoad = ++loadSeq;
       pause();
       wantPlay = false;
+      pendingSeek = 0;
       el().src = [];
       el().autoPlay = false;
       img().src = '';
       img().hidden = false;
-      pendingSeek = 0;
     },
 
     get playing() { return !el().paused; },

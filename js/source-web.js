@@ -1,5 +1,9 @@
 /* Browser file source: no persistence, object URLs for playback.
-   Classic script on purpose so the app also runs from file:// */
+
+   The contract this implements (see js/source.js) is deliberately free of the
+   DOM, so that a desktop adapter which receives plain paths over IPC can
+   satisfy it without faking anything. Everything DOM-shaped - the file picker
+   input, the DragEvent - lives here, in the adapter that actually has a DOM. */
 
 (() => {
   const PREFS = 'mediatools.prefs';
@@ -68,7 +72,11 @@
     };
   }
 
-  window.MediaSourceWeb = {
+  window.MediaFileSourceWeb = {
+    /* A browser tab has no durable handle on a dropped file: the blob: URL dies
+       with the document, and the File itself is not something we may store. So
+       the playlist cannot be restored, and saying so is what stops the app
+       from rebuilding a list of rows that can never play. */
     canPersist: () => false,
 
     async openFiles() {
@@ -85,19 +93,31 @@
       });
     },
 
+    /* The one method that needs a DOM event. It is here, not in the contract,
+       so the interface the app depends on stays implementable elsewhere. */
     dropItems(event) {
       return Array.from(event?.dataTransfer?.files || []).map(toItem);
     },
 
     urlFor(item) {
+      /* A released item has no File any more. Failing with a clear message
+         beats createObjectURL(undefined) throwing from inside the URL API. */
+      if (!item.file && !item.url) {
+        throw new Error('this item has been released and can no longer be played');
+      }
       if (!item.url) item.url = URL.createObjectURL(item.file);
       return item.url;
     },
 
+    /* Idempotent, and it keeps the File. The File belongs to the app, not to
+       the adapter, and clearing it made a released item permanently unusable -
+       a trap for the next caller. Only the URL is the adapter's to give back. */
     release(item) {
-      if (item.url) URL.revokeObjectURL(item.url);
-      item.url = null;
-      item.file = null;
+      if (!item) return;
+      if (item.url) {
+        URL.revokeObjectURL(item.url);
+        item.url = null;
+      }
     },
 
     async loadState() {

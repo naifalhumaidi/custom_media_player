@@ -695,3 +695,27 @@ media-time { color: inherit; font: inherit; }
 }
 
 .field-error[hidden] { display: none; }
+
+/* ---------- telling the user something went wrong ---------- */
+
+.notice {
+  position: absolute;
+  bottom: 22%;
+  left: 50%;
+  /* the notice is centred text, so it is positioned physically on purpose:
+     translateX mirrors nothing and would push it off-centre in RTL */
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 9px 16px;
+  border-radius: 6px;
+  background: rgba(20, 12, 10, .92);
+  box-shadow: inset 0 0 0 1px rgba(255, 140, 120, .35);
+  color: #ffb4a4;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.notice[hidden] { display: none; }

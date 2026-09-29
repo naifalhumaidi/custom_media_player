@@ -68,6 +68,9 @@
       'panel.removeAria': 'Remove from the playlist',
       'panel.items': { one: '{n} item', other: '{n} items' },
       'panel.itemsTotal': { one: '{n} item · {time}', other: '{n} items · {time}' },
+      'notice.cannotPlay': 'Cannot play this file',
+      'notice.blocked': 'Press play to start',
+      'notice.dropped': '{n} file(s) cannot be played here',
       'panel.empty': 'The playlist is empty. Drop files here to add them.',
 
       /* --- instructions dialog --- */
@@ -197,6 +200,12 @@
         zero: 'لا عناصر · {time}', one: 'عنصر واحد · {time}', two: 'عنصران · {time}',
         few: '{n} عناصر · {time}', many: '{n} عنصرًا · {time}', other: '{n} عنصر · {time}',
       },
+      'notice.cannotPlay': 'Cannot play this file',
+      'notice.blocked': 'Press play to start',
+      'notice.dropped': '{n} file(s) cannot be played here',
+      'notice.cannotPlay': 'تعذّر تشغيل هذا الملف',
+      'notice.blocked': 'اضغط تشغيل للبدء',
+      'notice.dropped': '{n} ملف لا يمكن تشغيله هنا',
       'panel.empty': 'قائمة التشغيل فارغة. أفلت الملفات هنا لإضافتها.',
 
       /* --- نافذة التعليمات --- */
