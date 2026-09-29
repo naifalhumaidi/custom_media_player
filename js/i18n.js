@@ -51,6 +51,7 @@
       'bar.fullscreenExit': 'Leave fullscreen',
       'bar.fullscreenExitKey': 'Leave fullscreen (F)',
       'bar.seek': 'Seek',
+      'bar.unmuteKey': 'Unmute (m)',
       'bar.volume': 'Volume',
       'bar.help': 'Instructions',
       'bar.helpKey': 'Instructions (?)',
@@ -65,8 +66,8 @@
       'panel.hint': 'Drop here to add — playback keeps going',
       'panel.remove': 'Remove',
       'panel.removeAria': 'Remove from the playlist',
-      'panel.items': '{n} items',
-      'panel.itemsTotal': '{n} items · {time}',
+      'panel.items': { one: '{n} item', other: '{n} items' },
+      'panel.itemsTotal': { one: '{n} item · {time}', other: '{n} items · {time}' },
       'panel.empty': 'The playlist is empty. Drop files here to add them.',
 
       /* --- instructions dialog --- */
@@ -114,11 +115,13 @@
       'settings.language': 'Language',
       'settings.languageHint': 'Applies immediately, everywhere in the app.',
       'settings.logo': 'Logo',
-      'settings.logoHint': 'Shown on the start window. Leave empty to hide it.',
+      'settings.logoHint': 'Shown on the start window. Remove it to hide the mark.',
       'settings.logoClear': 'Remove',
       'settings.color': 'Brand colour',
       'settings.colorHint': 'Used for highlights, the timeline fill and the active row.',
       'settings.colorReset': 'Use the logo colour',
+      'settings.logoUseDefault': 'Use the default',
+      'settings.saveFailed': 'Settings could not be saved: the browser storage is full. The logo may be too large.',
       'settings.about': 'About',
       'settings.aboutBody': 'A local media player for images, video and audio. Playlists live in memory only.',
       'lang.en': 'English',
@@ -142,7 +145,7 @@
       /* --- شريط التحكم --- */
       'bar.open': 'فتح ملفات',
       'bar.previous': 'السابق',
-      'bar.previousKey': 'السابق (،)',
+      'bar.previousKey': 'السابق (,)',
       'bar.back': 'رجوع ١٠ ثوانٍ',
       'bar.backKey': 'رجوع ١٠ ثوانٍ (←)',
       'bar.play': 'تشغيل',
@@ -153,7 +156,7 @@
       'bar.next': 'التالي',
       'bar.nextKey': 'التالي (.)',
       'bar.mute': 'كتم الصوت',
-      'bar.muteKey': 'كتم الصوت (M)',
+      'bar.muteKey': 'كتم الصوت (m)',
       'bar.unmute': 'إلغاء الكتم',
       'bar.loop': 'تكرار قائمة التشغيل',
       'bar.loopOn': 'تكرار قائمة التشغيل (L) — مُفعّل',
@@ -171,10 +174,11 @@
       'bar.fullscreenKey': 'ملء الشاشة (F)',
       'bar.fullscreenExit': 'الخروج من ملء الشاشة',
       'bar.fullscreenExitKey': 'الخروج من ملء الشاشة (F)',
-      'bar.seek': 'التقديم',
+      'bar.seek': 'موضع التشغيل',
+      'bar.unmuteKey': 'إلغاء الكتم (m)',
       'bar.volume': 'مستوى الصوت',
       'bar.help': 'التعليمات',
-      'bar.helpKey': 'التعليمات (؟)',
+      'bar.helpKey': 'التعليمات (?)',
       'bar.settings': 'الإعدادات',
       'bar.settingsKey': 'الإعدادات',
 
@@ -186,8 +190,14 @@
       'panel.hint': 'أفلت هنا للإضافة — يستمر التشغيل',
       'panel.remove': 'إزالة',
       'panel.removeAria': 'إزالة من قائمة التشغيل',
-      'panel.items': '{n} عنصر',
-      'panel.itemsTotal': '{n} عنصر · {time}',
+      'panel.items': {
+        zero: 'لا عناصر', one: 'عنصر واحد', two: 'عنصران',
+        few: '{n} عناصر', many: '{n} عنصرًا', other: '{n} عنصر',
+      },
+      'panel.itemsTotal': {
+        zero: 'لا عناصر · {time}', one: 'عنصر واحد · {time}', two: 'عنصران · {time}',
+        few: '{n} عناصر · {time}', many: '{n} عنصرًا · {time}', other: '{n} عنصر · {time}',
+      },
       'panel.empty': 'قائمة التشغيل فارغة. أفلت الملفات هنا لإضافتها.',
 
       /* --- نافذة التعليمات --- */
@@ -222,7 +232,7 @@
       'help.k.esc': 'إغلاق هذه النافذة أو قائمة التشغيل',
       'help.k.clear': 'مسح قائمة التشغيل',
       'help.k.help': 'فتح / إغلاق هذه التعليمات',
-      'help.notes.1a': 'عند عرض صورة، تعمل',
+      'help.notes.1a': 'عند عرض صورة, تعمل',
       'help.notes.1b': 'و',
       'help.notes.1c': 'للانتقال إلى العنصر التالي.',
       'help.notes.2': 'الضغط خارج قائمة التشغيل يغلقها.',
@@ -235,12 +245,14 @@
       'settings.language': 'اللغة',
       'settings.languageHint': 'تُطبَّق فورًا في كل أنحاء التطبيق.',
       'settings.logo': 'الشعار',
-      'settings.logoHint': 'يظهر في نافذة البداية. اتركه فارغًا لإخفائه.',
+      'settings.logoHint': 'يظهر في نافذة البداية. أزله لإخفاء العلامة.',
       'settings.logoClear': 'إزالة',
       'settings.color': 'لون الهوية',
       'settings.colorHint': 'يُستخدم في التمييز وتعبئة شريط التقدّم والصف النشط.',
       'settings.colorReset': 'استخدام لون الشعار',
-      'settings.about': 'حول',
+      'settings.logoUseDefault': 'استخدام الافتراضي',
+      'settings.saveFailed': 'تعذّر حفظ الإعدادات: مساحة التخزين ممتلئة. قد يكون الشعار كبيرًا.',
+      'settings.about': 'حول التطبيق',
       'settings.aboutBody': 'مشغّل وسائط محلي للصور والفيديو والصوت. قوائم التشغيل محفوظة في الذاكرة فقط.',
       'lang.en': 'English',
       'lang.ar': 'العربية',
@@ -272,7 +284,14 @@
   /* {placeholders} are filled from a plain object */
   function t(key, vars) {
     const table = STRINGS[lang] || STRINGS.en;
-    let out = table[key] ?? STRINGS.en[key] ?? key;
+    const raw = table[key] ?? STRINGS.en[key] ?? key;
+    /* a table value may be a set of plural forms keyed by category */
+    let out = raw;
+    if (raw && typeof raw === 'object' && vars && vars.n !== undefined) {
+      const category = pluralCategory(Number(vars.n));
+      const fallback = table === STRINGS.en ? STRINGS.en[key] : null;
+      out = raw[category] ?? raw.other ?? (fallback && typeof fallback === 'object' ? fallback.other : null) ?? key;
+    }
     if (vars) {
       for (const name of Object.keys(vars)) {
         out = out.split('{' + name + '}').join(String(vars[name]));
@@ -281,11 +300,20 @@
     return out;
   }
 
+  function pluralCategory(count) {
+    try {
+      return new Intl.PluralRules(STRINGS[lang].locale.split('-')[0]).select(count);
+    } catch {
+      return 'other';
+    }
+  }
+
   /* Digits follow the language, so counts and times read naturally in Arabic. */
   function num(value) {
     try {
       return new Intl.NumberFormat(STRINGS[lang].locale).format(value);
-    } catch {
+    } catch (err) {
+      console.warn('[i18n] num() could not format', value, err);
       return String(value);
     }
   }
@@ -303,6 +331,9 @@
     scope.querySelectorAll('[data-i18n-aria]').forEach((el) => {
       el.setAttribute('aria-label', t(el.dataset.i18nAria));
     });
+    scope.querySelectorAll('[data-i18n-alt]').forEach((el) => {
+      el.alt = t(el.dataset.i18nAlt);
+    });
 
     const html = document.documentElement;
     html.lang = lang;
@@ -311,12 +342,18 @@
   }
 
   function setLang(next, opts) {
-    if (!STRINGS[next] || next === lang) return lang;
+    if (!STRINGS[next]) return lang;
+    const changed = next !== lang;
     lang = next;
+    /* apply() and the listeners are both idempotent, so a no-op switch is
+       harmless - and it is what keeps the JS-built strings in step at boot,
+       where the stored language is often already the active one. */
     apply((opts && opts.root) || null);
-    listeners.slice().forEach((fn) => {
-      try { fn(lang); } catch (err) { console.warn('[i18n] listener failed:', err); }
-    });
+    if (changed) {
+      listeners.slice().forEach((fn) => {
+        try { fn(lang); } catch (err) { console.warn('[i18n] listener failed:', err); }
+      });
+    }
     return lang;
   }
 

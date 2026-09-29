@@ -44,7 +44,7 @@
 
       <div id="bar" class="bar">
         <div class="bar-track">
-          <media-time-slider class="vds-slider" aria-label="Seek">
+          <media-time-slider class="vds-slider" aria-label="Seek" data-i18n-aria="bar.seek">
             <div class="vds-track"></div>
             <div class="vds-track-fill"></div>
             <div class="vds-track-progress"></div>
@@ -67,7 +67,7 @@
           </div>
 
           <div class="meta">
-            <span class="time"><media-time type="current">0:00</media-time><i>/</i><media-time type="duration">0:00</media-time></span>
+            <span class="time"><media-time id="time-now" type="current">0:00</media-time><i>/</i><media-time id="time-total" type="duration">0:00</media-time></span>
             <span id="title" class="title"></span>
             <span id="counter" class="counter"></span>
           </div>
@@ -108,7 +108,7 @@
 
     <div id="drop" class="drop">
       <!-- the small copy; assets/logo.png is the full-size original -->
-      <img class="logo" src="assets/logo-small.png" width="1200" height="675" alt="Media Tools">
+      <img class="logo" src="assets/logo-small.png" width="1200" height="675" alt="Media Tools" data-i18n-alt="app.logoAlt">
     </div>
   </main>
 
@@ -189,13 +189,13 @@
           </div>
 
           <div class="field">
-            <label data-i18n="settings.logo">Logo</label>
+            <label for="set-logo" data-i18n="settings.logo">Logo</label>
             <div class="field-row">
-              <input id="set-logo" type="file" accept="image/*">
+              <input id="set-logo" type="file" accept="image/*" data-i18n-aria="settings.logo" aria-describedby="set-logo-hint">
               <button id="set-logo-clear" class="btn txt" type="button" data-i18n="settings.logoClear">Remove</button>
             </div>
             <img id="set-logo-preview" class="field-preview" alt="" hidden>
-            <p class="field-hint" data-i18n="settings.logoHint">Shown on the start window. Leave empty to hide it.</p>
+            <p class="field-hint" id="set-logo-hint" data-i18n="settings.logoHint">Shown on the start window. Remove it to hide the mark.</p>
           </div>
 
           <div class="field">
@@ -207,6 +207,8 @@
             <p class="field-hint" data-i18n="settings.colorHint">Used for highlights, the timeline fill and the active row.</p>
           </div>
         </section>
+
+        <p id="set-save-error" class="field-error" role="alert" hidden data-i18n="settings.saveFailed"></p>
 
         <section>
           <h3 data-i18n="settings.about">About</h3>

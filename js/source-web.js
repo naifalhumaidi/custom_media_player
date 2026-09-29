@@ -21,21 +21,32 @@
     return picker;
   }
 
+  /* The extension wins over the OS-reported type, which is often empty on
+     Linux and occasionally wrong (a .ogg is usually Vorbis audio, not Theora
+     video). `mkv` is deliberately absent: Matroska is not WebM and no
+     mainstream browser decodes it, so claiming it only produces a broken row. */
   const EXT_TYPES = {
-    mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', ogv: 'video/ogg', ogg: 'video/ogg',
-    mov: 'video/mp4', mkv: 'video/webm', avi: 'video/x-msvideo',
+    mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', ogv: 'video/ogg',
+    mov: 'video/mp4',
     png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
     webp: 'image/webp', avif: 'image/avif', bmp: 'image/bmp', svg: 'image/svg+xml',
-    mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/mp4', wav: 'audio/wav',
-    oga: 'audio/ogg', opus: 'audio/ogg', flac: 'audio/flac', aiff: 'audio/aiff',
+    mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav',
+    ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg', flac: 'audio/flac',
+    aiff: 'audio/aiff', aif: 'audio/aiff',
   };
 
   /* The MIME type is not optional: the player picks its provider from it, and
      some browsers report an empty type for local files. */
   function mimeOf(file) {
-    if (file.type) return file.type;
     const ext = (file.name.split('.').pop() || '').toLowerCase();
-    return EXT_TYPES[ext] || 'video/mp4';
+    /* the table first: the OS type is frequently empty on Linux and is
+       sometimes wrong, and a mis-declared type demotes a real track */
+    if (EXT_TYPES[ext]) return EXT_TYPES[ext];
+    if (file.type) return file.type;
+    /* An unknown extension used to become video/mp4, so dropping a .txt or a
+       .heic added a row that could never play. Returning a non-media type
+       makes kindOf null and the app drops it. */
+    return 'application/octet-stream';
   }
 
   function kindOf(mime) {
@@ -102,7 +113,13 @@
       for (const key of PERSISTED) prefs[key] = state[key];
       try {
         localStorage.setItem(PREFS, JSON.stringify(prefs));
-      } catch {}
+        document.dispatchEvent(new CustomEvent('mediatools:saved'));
+      } catch (err) {
+        /* A swallowed write here loses the language, the colour, the volume and
+           the position with no visible sign, so it is reported upward. */
+        console.warn('[prefs] could not be saved:', err);
+        document.dispatchEvent(new CustomEvent('mediatools:save-error', { detail: err }));
+      }
     },
   };
 })();

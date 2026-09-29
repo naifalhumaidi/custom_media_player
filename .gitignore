@@ -1,0 +1,12 @@
+# the test tooling is installed, not vendored
+node_modules/
+package-lock.json
+
+# editor and OS noise
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# the app itself has no build output, but keep stray captures out
+*.log

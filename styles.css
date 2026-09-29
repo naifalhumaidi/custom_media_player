@@ -74,8 +74,9 @@ media-provider > video {
   position: absolute;
   inset: 6px;
   z-index: 20;
-  border: 1px solid rgba(170, 120, 39, .55);
+  border: 0;
   border-radius: 4px;
+  box-shadow: inset 0 0 0 2px rgba(170, 120, 39, .55);
   pointer-events: none;
 }
 
@@ -86,8 +87,9 @@ media-provider > video {
 #side {
   position: absolute;
   top: 0;
-  left: 0;
   bottom: 0;
+  /* logical, so the panel sits on the leading edge in both languages */
+  inset-inline-start: 0;
   /* above the start overlay (18) so the panel can be opened on an empty
      playlist, and above the still image (1) for the same reason */
   z-index: 20;
@@ -117,9 +119,9 @@ media-provider > video {
 
 .total {
   flex: 1;
-  color: #5f5f5f;
+  color: #8f8f8f;
   font-size: 11px;
-  text-align: right;
+  text-align: end;
   font-variant-numeric: tabular-nums;
 }
 
@@ -167,6 +169,12 @@ media-provider > video {
 
 /* hover reads exactly like an "on" control, as requested */
 .side-list li:hover { background: var(--hover-bg); color: var(--hover-fg); }
+.side-list li:focus-visible {
+  background: var(--enabled-bg);
+  color: var(--enabled-fg);
+  box-shadow: inset 2px 0 0 var(--gold);
+  outline: none;
+}
 .side-list li.on {
   background: var(--enabled-bg);
   color: var(--enabled-fg);
@@ -193,8 +201,10 @@ media-provider > video {
   width: 56px;
   height: 32px;
   background: #141414;
-  border: 1px solid #232323;
+  border: 0;
   border-radius: 3px;
+  /* an inset edge, like every other marker in the chrome */
+  box-shadow: inset 0 0 0 1px #232323;
   overflow: hidden;
 }
 
@@ -224,7 +234,7 @@ media-provider > video {
 
 .dur {
   flex-shrink: 0;
-  color: #6a6a6a;
+  color: #8f8f8f;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -233,13 +243,13 @@ media-provider > video {
 
 .x {
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: #666;
+  color: #8f8f8f;
   font-size: 11px;
   line-height: 1;
   cursor: pointer;
@@ -247,14 +257,16 @@ media-provider > video {
 }
 
 .side-list li:hover .x,
-.side-list li.on .x { opacity: 1; }
+.side-list li.on .x,
+.side-list li:focus-within .x,
+.x:focus-visible { opacity: 1; }
 .x:hover { background: #3a1414; color: #ff8f8f; }
 
 .side-hint {
   margin: 0;
   padding: 8px 10px;
   background: #0d0d0d;
-  color: #555;
+  color: #8f8f8f;
   font-size: 11px;
   text-align: center;
 }
@@ -281,7 +293,7 @@ media-provider > video {
 
 /* With the playlist open there is no room for a big centred mark, so the start
    window's logo slides to the right of the panel instead of sitting under it. */
-#stage.list .drop { align-items: flex-end; padding-right: 6vw; }
+#stage.list .drop { align-items: flex-end; padding-inline-end: 6vw; }
 
 /* The start window is just the brand mark, held back in opacity so it reads as
    a watermark behind the control bar rather than as content. */
@@ -328,7 +340,8 @@ media-provider > video {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 12px 14px 18px;
+  padding-block: 14px;
+  padding-inline: 18px 12px;
   background: #111;
 }
 
@@ -336,7 +349,8 @@ media-provider > video {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: #f0d9ac;
+  text-align: start;
+  color: var(--enabled-fg);
 }
 
 .modal-body {
@@ -373,7 +387,7 @@ media-provider > video {
 
 .notes {
   margin: 0;
-  padding-left: 18px;
+  padding-inline-start: 18px;
   color: #b3b3b3;
   font-size: 13px;
 }
@@ -389,16 +403,16 @@ media-provider > video {
 
 .keys th {
   padding: 10px 0 5px;
-  text-align: left;
+  text-align: start;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: .09em;
   text-transform: uppercase;
-  color: #6f6f6f;
+  color: #8f8f8f;
 }
 
 .keys td { padding: 3px 0; vertical-align: baseline; color: #b3b3b3; }
-.keys td:first-child { width: 42%; white-space: nowrap; }
+.keys td:first-child { width: 42%; white-space: nowrap; text-align: start; }
 .keys kbd { margin-right: 2px; }
 
 kbd {
@@ -557,7 +571,7 @@ media-time { color: inherit; font: inherit; }
 .field-hint {
   margin: 6px 0 0;
   font-size: 11.5px;
-  color: #6f6f6f;
+  color: #8f8f8f;
 }
 
 .field select,
@@ -638,7 +652,6 @@ media-time { color: inherit; font: inherit; }
 [dir="rtl"] .row { direction: rtl; }
 
 [dir="rtl"] .side-title { letter-spacing: 0; }
-[dir="rtl"] .modal-head h2 { text-align: right; }
 
 /* numbers inside Arabic text stay left-to-right so a time reads correctly */
 [dir="rtl"] .time,
@@ -647,14 +660,14 @@ media-time { color: inherit; font: inherit; }
 [dir="rtl"] .keys kbd,
 [dir="rtl"] .dur { direction: ltr; unicode-bidi: isolate; }
 
-[dir="rtl"] .keys td:first-child { text-align: right; }
+
 
 /* ---------- empty playlist ---------- */
 
 .side-empty {
   margin: 0;
   padding: 22px 18px;
-  color: #6f6f6f;
+  color: #8f8f8f;
   font-size: 12.5px;
   text-align: center;
   line-height: 1.6;
@@ -668,3 +681,17 @@ media-time { color: inherit; font: inherit; }
    paired correctly in both languages. */
 .field input[type="file"] { direction: ltr; }
 [dir="rtl"] .field input[type="file"] { text-align: right; }
+
+/* ---------- failures the user must see ---------- */
+
+.field-error {
+  margin: 4px 0 16px;
+  padding: 9px 11px;
+  border-radius: 5px;
+  background: #2a1512;
+  color: #ffb4a4;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.field-error[hidden] { display: none; }

@@ -35,9 +35,8 @@ media-provider > video {
   box-shadow: none;
 }
 
-/* ---------- buttons (Vidstack + ours share the look) ---------- */
+/* ---------- buttons (the library's own, and ours, share the look) ---------- */
 
-.vds-btn,
 .media-button,
 .btn {
   display: inline-flex;
@@ -63,23 +62,27 @@ media-provider > video {
   touch-action: manipulation;
 }
 
-.vds-btn:hover,
 .btn:hover { background: var(--hover-bg); color: var(--hover-fg); }
-.vds-btn:active,
-.btn:active { background: #303030; }
+.btn:active { background: var(--enabled-bg); }
 
-.vds-btn[data-focus] { outline: 1px solid var(--gold); outline-offset: 1px; }
-.btn:focus-visible { outline: 1px solid var(--gold); outline-offset: 1px; }
-.vds-btn[data-active],
 .btn.on { background: var(--enabled-bg); color: var(--enabled-fg); }
+
+/* Focus follows the brief: a flat background plus a 2px INSET edge, never a
+   detached 1px outline (which reads as a stray border) and never a ring too
+   dark to see. `outline: none` appears only so the UA ring cannot double up
+   with the replacement. */
+.btn:focus-visible,
+.side-list li:focus-visible,
+.x:focus-visible {
+  background: var(--enabled-bg);
+  color: var(--enabled-fg);
+  box-shadow: inset 0 0 0 2px var(--gold);
+  outline: none;
+}
 .btn.primary { background: var(--enabled-bg); color: var(--enabled-fg); }
 
 /* hide Vidstack buttons the environment cannot support (e.g. fullscreen) */
-.vds-btn[aria-hidden="true"],
 .media-button[aria-hidden="true"] { display: none; }
-
-/* the library hides a button automatically while media is not seekable */
-.vds-btn[data-unsupported] { opacity: .35; pointer-events: none; }
 
 .vds-play .g-pause,
 .vds-play .g-replay { display: none; }
@@ -171,8 +174,9 @@ media-provider > video {
 }
 
 .vds-slider[data-active] .vds-thumb,
-.vds-slider[data-pointing] .vds-thumb { opacity: 1; }
-.vds-slider[data-focus] .vds-track { box-shadow: 0 0 0 2px #3a3a3a; }
+.vds-slider[data-pointing] .vds-thumb,
+.vds-slider[data-focus] .vds-thumb { opacity: 1; }
+.vds-slider[data-focus] .vds-track { box-shadow: inset 0 0 0 2px var(--gold); }
 .vds-slider[data-dragging] .vds-thumb { box-shadow: 0 0 0 4px rgb(255 255 255 / .18); }
 
 
@@ -269,3 +273,25 @@ media-player[data-preview] media-captions { opacity: 0; visibility: hidden; }
 #mute.muted use[href="#i-mute"],
 #autoplay.off use[href="#i-auto-off"],
 #fs.on use[href="#i-fs-exit"] { display: block; }
+
+/* ---------- right-to-left ---------- */
+
+/* The seek bar is anchored with a physical `left` plus a percentage, and a
+   percentage is not affected by `dir`, so in Arabic the fill and the thumb have
+   to be flipped or playback position reads backwards. */
+[dir="rtl"] .vds-track-fill,
+[dir="rtl"] .vds-track-progress { left: auto; right: 0; }
+[dir="rtl"] .vds-thumb {
+  left: auto;
+  right: var(--mt-fill, var(--slider-fill, 0%));
+  transform: translate(50%, -50%);
+}
+
+/* ---------- reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .vds-thumb,
+  media-captions,
+  .modal { transition: none !important; }
+  * { scroll-behavior: auto !important; }
+}
