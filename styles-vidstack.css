@@ -216,7 +216,9 @@ media-captions {
   font-size: var(--cue-font-size);
   pointer-events: none;
   text-align: center;
-  bottom: 60px;
+  /* the bar's real height, published by app.js - a fixed offset put the
+     captions underneath the bar whenever it wrapped */
+  bottom: calc(var(--bar-h, 60px) + 8px);
   transition: bottom .15s linear;
 }
 

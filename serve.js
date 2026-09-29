@@ -70,19 +70,49 @@ const server = http.createServer((req, res) => {
 
     const headers = {
       'content-type': type,
-      'content-length': stat.size,
       etag,
       /* revalidate rather than re-download: the app is served from disk and
          changes during development, but a reload should not refetch 280 KB */
       'cache-control': 'no-cache',
+      'accept-ranges': 'bytes',
       ...SECURITY,
     };
 
-    if (req.method === 'HEAD') return res.writeHead(200, headers).end();
+    /* Byte ranges. Nothing the app plays comes through here today - user media
+       is always a blob: URL - but Safari refuses to seek a progressive file
+       served without 206, so the first thing routed through this server breaks
+       seeking rather than failing visibly. */
+    const range = req.headers.range;
+    const match = range && /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+    if (match && (match[1] || match[2])) {
+      const size = stat.size;
+      /* `bytes=N-` starts at N, `bytes=-N` is the final N bytes. A start at or
+         past the end is unsatisfiable and must be refused, NOT clamped down to
+         the last byte: clamping answers 206 for a range that does not exist. */
+      const start = match[1] === '' ? size - Number(match[2]) : Number(match[1]);
+      const end = match[1] === '' || match[2] === '' ? size - 1 : Math.min(Number(match[2]), size - 1);
+
+      if (Number.isNaN(start) || Number.isNaN(end) || start < 0 || start >= size || end < start) {
+        return res.writeHead(416, { 'content-range': `bytes */${size}`, ...SECURITY }).end();
+      }
+      const chunk = { start, end };
+      res.writeHead(206, {
+        ...headers,
+        'content-range': `bytes ${start}-${end}/${size}`,
+        'content-length': end - start + 1,
+      });
+      if (req.method === 'HEAD') return res.end();
+      const ranged = fs.createReadStream(file, chunk);
+      ranged.on('error', () => res.destroy());
+      return ranged.pipe(res);
+    }
+
+    const full = { ...headers, 'content-length': stat.size };
+    if (req.method === 'HEAD') return res.writeHead(200, full).end();
 
     /* streamed rather than read whole: bounded memory even if a large asset is
-       ever added, and the precondition for range support later */
-    res.writeHead(200, headers);
+       ever added */
+    res.writeHead(200, full);
     const stream = fs.createReadStream(file);
     stream.on('error', () => res.destroy());
     stream.pipe(res);

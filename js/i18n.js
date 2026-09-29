@@ -71,6 +71,7 @@
       'notice.cannotPlay': 'Cannot play this file',
       'notice.blocked': 'Press play to start',
       'notice.dropped': '{n} file(s) cannot be played here',
+      'notice.restored': 'Restored {n} items — Shift+Z puts them back within 30s',
       'panel.empty': 'The playlist is empty. Drop files here to add them.',
 
       /* --- instructions dialog --- */
@@ -203,9 +204,11 @@
       'notice.cannotPlay': 'Cannot play this file',
       'notice.blocked': 'Press play to start',
       'notice.dropped': '{n} file(s) cannot be played here',
+      'notice.restored': 'Restored {n} items — Shift+Z puts them back within 30s',
       'notice.cannotPlay': 'تعذّر تشغيل هذا الملف',
       'notice.blocked': 'اضغط تشغيل للبدء',
       'notice.dropped': '{n} ملف لا يمكن تشغيله هنا',
+      'notice.restored': 'تمت استعادة {n} عنصر — Shift+Z يعيدها خلال ٣٠ ثانية',
       'panel.empty': 'قائمة التشغيل فارغة. أفلت الملفات هنا لإضافتها.',
 
       /* --- نافذة التعليمات --- */
@@ -289,6 +292,8 @@
   const dir = () => STRINGS[lang].dir;
 
   /* {placeholders} are filled from a plain object */
+  /* Ctrl+Z is a chord, not a glyph, so it is the same in both languages -
+     localising it would name a shortcut that does not exist. */
   function t(key, vars) {
     const table = STRINGS[lang] || STRINGS.en;
     const raw = table[key] ?? STRINGS.en[key] ?? key;

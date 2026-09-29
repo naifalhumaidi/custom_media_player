@@ -64,6 +64,11 @@ let erroredIndex = -1;
    late. */
 let ready = false;
 let queued = null;
+/* Shift+X destroys an hours-long ordering with no way back, and the browser
+   source cannot re-resolve files, so recovery has to happen before the release.
+   The File handles are kept until the next change replaces them. */
+let undo = null;
+let undoTimer = 0;
 
 const mod = (n, m) => ((n % m) + m) % m;
 
@@ -145,11 +150,15 @@ async function probe(item) {
   el.src = source.urlFor(item);
 
   try {
-    await once(el, 'loadedmetadata', 5000);
+    /* Short on purpose: a file that never reports metadata would otherwise
+       hold a worker for the full timeout. At three workers, a few hundred
+       unreadable files put the queue minutes behind and the panel looks
+       frozen with no indication anything is happening. */
+    await once(el, 'loadedmetadata', 2500);
     if (Number.isFinite(el.duration)) item.duration = el.duration;
     if (el.videoWidth) {
       el.currentTime = Math.min(0.1, el.duration / 2);
-      await once(el, 'seeked', 3000);
+      await once(el, 'seeked', 2000);
       item.thumb = drawThumb(el);
     }
   } catch {}
@@ -193,6 +202,18 @@ function addItems(incoming, play) {
   scheduleSave();
 }
 
+/* Put back a list cleared a moment ago. The window is short on purpose: an
+   undo that never expires is just a second copy of the playlist. */
+function restoreCleared() {
+  if (!undo) return;
+  const saved = undo;
+  undo = null;
+  clearTimeout(undoTimer);
+  addItems(saved.items, false);
+  if (saved.items.length) load(saved.index, false);
+  notice(t('notice.restored', { n: num(saved.items.length) }));
+}
+
 function removeItem(i) {
   if (i < 0 || i >= items.length) return;
   const wasCurrent = i === index;
@@ -202,7 +223,9 @@ function removeItem(i) {
 
   if (!items.length) {
     source.release(removed);
-    return clearAll();
+    /* removing the last row is an explicit, single-item action; it needs no
+       undo window */
+    return clearAll(false);
   }
 
   /* Only reload when the row that was playing is the row that went away.
@@ -226,12 +249,21 @@ function removeItem(i) {
   scheduleSave();
 }
 
-function clearAll() {
+function clearAll(keepUndo) {
   /* Let go of the media FIRST, then revoke. Revoking an object URL the player
      is still pointed at is a use-after-free of the resource by construction -
      it appears to work only because the next assignment happens to abort the
      in-flight fetch, which is an implementation detail, not a guarantee. */
   media.clear();
+  /* release() is reversible: it hands back the URL and keeps the File, so the
+     list can be put back exactly as it was. Shift+X destroys an hours-long
+     ordering with no other way back, because the browser source cannot
+     re-resolve a file that was never stored. */
+  if (keepUndo && items.length) {
+    undo = { items: items.slice(), index };
+    clearTimeout(undoTimer);
+    undoTimer = setTimeout(() => { undo = null; }, 30000);
+  }
   for (const it of items) source.release(it);
   items = [];
   index = 0;
@@ -502,15 +534,6 @@ $('fs').onclick = () => media.toggleFullscreen();
 $('open').onclick = () => pick(true);
 $('add').onclick = () => pick(false);
 
-/* The library's sliders keep correct state and ARIA values, but their
-   `--slider-fill` custom property stays at 0% in v1.15.6, so we paint the
-   fill ourselves from the same events. The library still owns dragging,
-   keyboard control and accessibility. */
-const timeSlider = document.querySelector('media-time-slider');
-const volumeSlider = document.querySelector('media-volume-slider');
-
-const paint = (el, ratio) => el && el.style.setProperty('--mt-fill', (ratio * 100).toFixed(2) + '%');
-
 window.addEventListener('resize', () => {
   publishBarHeight();
   scheduleSave();
@@ -524,7 +547,7 @@ media.on('time', ({ currentTime }) => {
   if (stage.dataset.kind === 'image') return;
   if (items[index]) items[index].position = currentTime;
   const d = media.duration;
-  paint(timeSlider, Number.isFinite(d) && d > 0 ? currentTime / d : 0);
+  media.paintTime(Number.isFinite(d) && d > 0 ? currentTime / d : 0);
   /* The library formats <media-time> with Latin digits and has no number
      formatting of its own, so the readout has to be written here to follow the
      language. The library will overwrite it on its next update, which is fine:
@@ -582,13 +605,13 @@ media.on('error', () => {
    under it. The player sits there claiming to be playing otherwise. */
 media.on('blocked', () => notice(t('notice.blocked')));
 
-$('media').addEventListener('volume-change', () => {
-  paint(volumeSlider, media.volume);
+media.on('volume', () => {
+  media.paintVolume(media.volume);
   /* syncIcons owns the mute class and the control's name, so muting used to
      leave the button still labelled "Mute" while it was already muted */
   syncIcons();
 });
-paint(volumeSlider, media.volume);
+media.paintVolume(media.volume);
 
 /* The class is the single source of truth the CSS keys off: "playing" present
    means the pause glyph shows. An argument lets the caller state the intent
@@ -599,7 +622,7 @@ function syncIcons(playing) {
   const muted = media.muted || media.volume === 0;
   $('play').classList.toggle('playing', isPlaying);
   $('mute').classList.toggle('muted', muted);
-  const inFs = !!document.fullscreenElement;
+  const inFs = media.fullscreen;
   $('fs').classList.toggle('on', inFs);
   $('fs').title = inFs ? t('bar.fullscreenExitKey') : t('bar.fullscreenKey');
   $('fs').setAttribute('aria-label', inFs ? t('bar.fullscreenExit') : t('bar.fullscreen'));
@@ -636,6 +659,32 @@ function setHelp(on) {
 $('help').onclick = () => setHelp(true);
 $('help-close').onclick = () => setHelp(false);
 
+/* Both dialogs claim to be modal, so Tab has to stay inside them. Without
+   this, Tab walked straight out into the control bar behind, while
+   aria-modal="true" said otherwise. */
+function trapFocus(dialog, e) {
+  if (e.key !== 'Tab') return;
+  const focusable = [...dialog.querySelectorAll(
+    'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])',
+  )].filter((node) => !node.closest('[hidden]') && !node.disabled);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  const here = dialog.ownerDocument.activeElement;
+  if (e.shiftKey && (here === first || !dialog.contains(here))) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && here === last) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  const open = settings.isOpen() ? $('settings-modal') : (helpModal.hidden ? null : helpModal);
+  if (open) trapFocus(open, e);
+}, true);
+
 /* One modal at a time: opening settings closes the instructions dialog and vice
    versa, so the two can never stack. The button itself is wired in settings.js
    because that module owns the dialog. */
@@ -661,9 +710,9 @@ stage.addEventListener('pointerdown', (e) => {
 /* Wrapped, not passed by reference: an event listener hands its Event to the
    first parameter, which syncIcons would read as "the video is playing". */
 const syncIconsFromEvent = () => syncIcons();
-$('media').addEventListener('play', syncIconsFromEvent);
-$('media').addEventListener('pause', syncIconsFromEvent);
-document.addEventListener('fullscreenchange', syncIconsFromEvent);
+media.on('play', syncIconsFromEvent);
+media.on('pause', syncIconsFromEvent);
+media.onFullscreenChange(syncIconsFromEvent);
 syncIcons();
 
 /* drop: window = add + play, sidebar = add only */
@@ -870,7 +919,7 @@ document.addEventListener('keydown', (e) => {
   if (dialogOpen || typing) return;
 
   /* let the library's own sliders handle their arrow keys */
-  if (e.target.closest?.('media-time-slider, media-volume-slider') && k.startsWith('arrow')) return;
+  if (media.ownsArrowKey(e.target) && k.startsWith('arrow')) return;
 
   /* A focused playlist row handles its own Enter, Space and arrows. This
      listener is in the capture phase, so without this it consumed them first
@@ -885,7 +934,8 @@ document.addEventListener('keydown', (e) => {
   if (FITS[k]) return setFit(FITS[k]);
   if (k === 'l') return toggleLoop();
   if (k === 'a') return toggleAutoStart();
-  if (k === 'x' && e.shiftKey) return clearAll();
+  if (k === 'x' && e.shiftKey) return clearAll(true);
+  if (k === 'z' && e.shiftKey) return restoreCleared();
   if (k === 'm') return media.toggleMute();
   if (k === 'f') return media.toggleFullscreen();
 

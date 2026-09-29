@@ -3,7 +3,7 @@
    drops and key presses - so a test cannot pass by calling an internal
    function the user has no access to. */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createApp } from '../helpers/app-harness.js';
 
 let app;
@@ -597,5 +597,102 @@ describe('surviving a large playlist', () => {
     /* every probe finished, and each row carries its own duration */
     expect(new Set(app.durations()).size).toBe(1);
     expect(app.durations()[0]).toBe('0:11');
+  });
+});
+
+describe('undoing a mistake', () => {
+  it('Shift+X keeps the list recoverable for a moment', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO(), VIDEO2(), app.file('c.mp4', 'video/mp4')]);
+    app.key('x', { shiftKey: true });
+    await app.settle(1);
+    expect(app.rows()).toHaveLength(0);
+
+    app.key('z', { shiftKey: true });
+    await app.settleAll();
+    /* the whole list comes back, in the order it was in */
+    expect(app.names()).toEqual(['a.mp4', 'b.mp4', 'c.mp4']);
+  });
+
+  it('the restore is announced, so it is obvious what happened', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO(), VIDEO2()]);
+    app.key('x', { shiftKey: true });
+    await app.settle(1);
+    app.key('z', { shiftKey: true });
+    await app.settle(1);
+    expect(app.$('notice').hidden).toBe(false);
+    expect(app.$('notice').textContent).toContain('2');
+  });
+
+  it('the undo expires rather than becoming a second copy of the playlist', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO(), VIDEO2()]);
+
+    /* The clock is driven rather than waited out: sleeping for the full window
+       costs half a minute of suite time to prove one timer fired. The fakes go
+       in BEFORE the clear, because the expiry timer is created by it. */
+    vi.useFakeTimers();
+    app.key('x', { shiftKey: true });
+    vi.advanceTimersByTime(31000);
+    vi.useRealTimers();
+
+    app.key('z', { shiftKey: true });
+    await app.settle(1);
+    expect(app.rows()).toHaveLength(0);
+  });
+
+  it('a second clear replaces the undo rather than stacking', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO(), VIDEO2()]);
+    app.key('x', { shiftKey: true });
+    await app.settle(1);
+    await dropOnStage([app.file('z.mp4', 'video/mp4')]);
+    app.key('x', { shiftKey: true });
+    await app.settle(1);
+    app.key('z', { shiftKey: true });
+    await app.settleAll();
+    expect(app.names()).toEqual(['z.mp4']);
+  });
+
+  it('removing the last row leaves nothing to undo', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO()]);
+    app.rows()[0].querySelector('.x').dispatchEvent(new app.window.MouseEvent('click', { bubbles: true }));
+    await app.settle(1);
+    app.key('z', { shiftKey: true });
+    await app.settle(1);
+    expect(app.rows()).toHaveLength(0);
+  });
+});
+
+describe('the dialogs', () => {
+  it('keep Tab inside, because they claim to be modal', async () => {
+    app = await createApp();
+    app.key('?');
+    await app.settle(1);
+    expect(app.$('help-modal').hidden).toBe(false);
+    const focusable = [...app.$('help-modal').querySelectorAll('button, a[href], input, select')]
+      .filter((n) => !n.closest('[hidden]') && !n.disabled);
+    expect(focusable.length).toBeGreaterThan(0);
+    const last = focusable[focusable.length - 1];
+    last.focus();
+    /* Tab must not walk out into the control bar behind the dialog */
+    app.key('Tab');
+    expect(app.$('help-modal').contains(app.document.activeElement)).toBe(true);
+    app.key('Tab', { shiftKey: true });
+    expect(app.$('help-modal').contains(app.document.activeElement)).toBe(true);
+  });
+
+  it('the settings dialog does the same', async () => {
+    app = await createApp();
+    app.$('settings').click();
+    await app.settle(1);
+    const focusable = [...app.$('settings-modal').querySelectorAll('button, input, select')]
+      .filter((n) => !n.closest('[hidden]') && !n.disabled);
+    expect(focusable.length).toBeGreaterThan(1);
+    focusable[focusable.length - 1].focus();
+    app.key('Tab');
+    expect(app.$('settings-modal').contains(app.document.activeElement)).toBe(true);
   });
 });

@@ -514,11 +514,15 @@ kbd {
   white-space: nowrap;
 }
 
+/* A fixed-size readout, deliberately OUTSIDE .meta. Inside it, .meta absorbs
+   the entire deficit with a hard overflow: hidden and .time is flex-shrink: 0,
+   so the clock was cut through the middle of a glyph instead of ellipsised. */
 .time {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  padding: 0 4px;
   font-variant-numeric: tabular-nums;
 }
 

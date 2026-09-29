@@ -31,7 +31,7 @@
   const el = () => player || (player = document.getElementById('media'));
   const img = () => still || (still = document.getElementById('still'));
 
-  const listeners = { time: [], play: [], pause: [], ended: [], error: [], blocked: [] };
+  const listeners = { time: [], play: [], pause: [], ended: [], error: [], blocked: [], volume: [] };
   const emit = (key, payload) => listeners[key].slice().forEach((fn) => fn(payload));
   const on = (key, fn) => {
     const list = listeners[key] || (listeners[key] = []);
@@ -58,11 +58,32 @@
   };
   const pause = () => el().pause();
 
-  const startIfWanted = (seq) => {
-    if (seq !== undefined && seq !== currentLoad) return;
+  const startIfWanted = () => {
     if (!wantPlay) return;
     wantPlay = false;
     play();
+  };
+
+  /* A superseded load must not apply its seek or its autoplay to whatever is
+     on screen by the time its events arrive. The handlers are installed per
+     load and close over their own ticket; a listener registered once in
+     init() could not tell which load an event belonged to, because the events
+     carry no identity of their own. */
+  function onSuperseded(events, handler) {
+    const seq = currentLoad;
+    const wrapped = (e) => {
+      if (seq !== currentLoad) return;
+      for (const name of events) el().removeEventListener(name, wrapped);
+      handler(e);
+    };
+    for (const name of events) el().addEventListener(name, wrapped);
+  }
+
+  const paintBar = (which, ratio) => {
+    const node = document.querySelector(
+      which === 'time' ? 'media-time-slider' : 'media-volume-slider',
+    );
+    if (node) node.style.setProperty('--mt-fill', (ratio * 100).toFixed(2) + '%');
   };
 
   function init() {
@@ -93,29 +114,26 @@
     );
     el().addEventListener('play', () => emit('play'));
     el().addEventListener('pause', () => emit('pause'));
+    el().addEventListener('volume-change', (e) =>
+      emit('volume', { volume: e.detail?.volume ?? el().volume }),
+    );
     el().addEventListener('ended', () => emit('ended'));
     el().addEventListener('error', () => emit('error'));
 
     /* A still image that cannot be decoded has no error handler at all
        otherwise: it shows the browser's broken-image glyph forever and the
        playlist never moves on, because the app only advances on `error`. */
-    img().addEventListener('error', () => emit('error', { kind: 'image' }));
-
-    /* resume where we left off once the media reports its metadata */
-    el().addEventListener('loaded-metadata', () => {
-      const seq = currentLoad;
-      if (pendingSeek > 0) {
-        el().currentTime = pendingSeek;
-        pendingSeek = 0;
-      }
-      startIfWanted(seq);
+    img().addEventListener('error', () => {
+      /* only meaningful when a picture is actually on screen */
+      if (img().hidden) return;
+      emit('error', { kind: 'image' });
     });
-
-    /* Setting autoPlay before the first source works, but on a track change the
-       library is still tearing down the previous provider and swallows it, so
-       the new track loads paused. The request is remembered and replayed the
-       moment the new source is actually playable. */
-    el().addEventListener('can-play', () => startIfWanted(currentLoad));
+    /* The resume-seek and the autoplay replay are NOT wired here. They have to
+       be installed per load, so that an event belonging to a replaced provider
+       can be recognised and ignored - see onSuperseded(). Setting autoPlay
+       before the first source works, but on a track change the library is
+       still tearing down the previous provider and swallows it, which is why
+       the request is remembered and replayed. */
   }
 
   window.MediaBridge = {
@@ -140,7 +158,11 @@
          construction; it only appears to work because the next assignment
          happens to abort the in-flight fetch. */
       el().src = [];
-      img().src = '';
+      img().hidden = true;
+      /* cleared only while hidden: emptying the src of a VISIBLE image raises
+         an error event, and the app reads that as "this item will not play",
+         so it would skip the track it had just loaded */
+      img().removeAttribute('src');
 
       /* a still image has no timeline, so the player is released and the
          <img> takes over; clicking it advances (see app.js) */
@@ -150,7 +172,16 @@
         img().src = item.url;
         return;
       }
-      img().hidden = true;
+
+      /* installed BEFORE the source is attached, so the very first metadata
+         event is caught rather than the next one */
+      onSuperseded(['loaded-metadata', 'can-play'], () => {
+        if (pendingSeek > 0) {
+          el().currentTime = pendingSeek;
+          pendingSeek = 0;
+        }
+        startIfWanted();
+      });
 
       el().load = 'eager';
       el().src = [{ src: item.url, type: item.mime || 'video/mp4' }];
@@ -170,9 +201,27 @@
       pendingSeek = 0;
       el().src = [];
       el().autoPlay = false;
-      img().src = '';
       img().hidden = false;
+      img().removeAttribute('src');
     },
+
+    /* The library's own sliders keep correct state and ARIA values, but their
+       fill property stays at 0% in v1.15.6, so the app paints them. Locating
+       them belongs here: they are <media-*> elements, and app.js is not supposed
+       to know that. Dragging, keyboard control and accessibility stay with
+       the library. */
+    paintTime(ratio) { paintBar('time', ratio); },
+    paintVolume(ratio) { paintBar('volume', ratio); },
+
+    /* True when the key belongs to one of the library's sliders, which handle
+       their own arrow keys. */
+    ownsArrowKey(target) {
+      return !!target.closest?.('media-time-slider, media-volume-slider');
+    },
+
+    /* Fullscreen state, without the app touching document.fullscreenElement. */
+    get fullscreen() { return !!document.fullscreenElement; },
+    onFullscreenChange(fn) { document.addEventListener('fullscreenchange', fn); },
 
     get playing() { return !el().paused; },
     get currentTime() { return el().currentTime || 0; },
