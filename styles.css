@@ -726,3 +726,30 @@ media-time { color: inherit; font: inherit; }
 }
 
 .notice[hidden] { display: none; }
+
+/* ---------- a file that is no longer there ---------- */
+
+/* The row is kept rather than removed: a playlist that silently loses tracks
+   is worse than one that visibly shows a hole. Dimmed, and not clickable. */
+.side-list li.missing { opacity: .5; }
+.side-list li.missing .nm { text-decoration: line-through; }
+.side-list li.missing .dur { color: #c98a7a; font-variant-numeric: normal; }
+
+/* An image glyph with a slash, rather than a blank box that reads as a bug */
+.thumb .gone {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #7a5a52;
+  font-size: 15px;
+}
+.thumb .gone::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  height: 2px;
+  background: #7a5a52;
+  transform: rotate(-38deg);
+}

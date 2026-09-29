@@ -136,6 +136,15 @@ async function drawImageThumb(url) {
 }
 
 async function probe(item) {
+  /* A desktop source can say whether the file is still on disk, and a saved
+     playlist outlives the files in it. Asked first because the alternative -
+     letting the media element discover a moved file - costs a probe timeout
+     per row and produces no message at all. */
+  if (typeof source.fileExists === 'function') {
+    item.missing = !(await source.fileExists(item));
+    if (item.missing) return item;
+  }
+
   /* An image row used to carry the item's own blob URL, so a playlist of large
      photos made the browser hold and decode every original just to paint a
      160px row. Downscale once, like the video path does. */
@@ -431,7 +440,7 @@ function thumbNode(item) {
     box.prepend(img);
   } else {
     const glyph = document.createElement('span');
-    glyph.className = 'gl';
+    glyph.className = item.missing ? 'gone' : 'gl';
     glyph.textContent = item.kind === 'audio' ? '♪' : item.kind === 'image' ? '▢' : '▣';
     box.append(glyph);
   }
@@ -462,6 +471,11 @@ function renderList() {
 
     const dur = document.createElement('span');
     dur.className = 'dur';
+    if (item.missing) {
+      dur.classList.add('missing');
+      dur.textContent = t('panel.missing');
+      dur.title = t('panel.missingHint');
+    }
     dur.textContent = item.kind === 'image' ? '—' : item.duration ? fmt(item.duration) : (item.openEnded ? '∞' : '…');
 
     const x = document.createElement('button');
@@ -472,6 +486,7 @@ function renderList() {
     x.textContent = '✕';
     x.dataset.x = String(i);
 
+    if (item.missing) li.classList.add('missing');
     li.append(thumbNode(item), name, dur, x);
     list.append(li);
   });
@@ -582,6 +597,32 @@ for (const key of Object.keys(FITS)) $('fit-' + key).onclick = () => setFit(FITS
 $('fs').onclick = () => media.toggleFullscreen();
 $('open').onclick = () => pick(true);
 $('add').onclick = () => pick(false);
+
+/* A folder is only meaningful where files have real paths, so the control only
+   appears when the source offers one. */
+if (typeof source.openFolder === 'function') {
+  const addFolder = $('add-folder');
+  if (addFolder) {
+    addFolder.hidden = false;
+    addFolder.onclick = async () => {
+      const all = await source.openFolder();
+      reportUnusable(all);
+      const picked = all.filter((it) => it.kind);
+      if (picked.length) addItems(picked, false);
+    };
+  }
+}
+
+/* On the desktop the webview delivers dropped paths on a shell event, not as a
+   DOM DragEvent with files - there is no DataTransfer to read. The adapter
+   subscribes and answers here, so the same add-and-play rule applies. */
+if (typeof source.onExternalDrop === 'function') {
+  source.onExternalDrop((incoming) => {
+    reportUnusable(incoming);
+    const picked = incoming.filter((it) => it.kind);
+    if (picked.length) addItems(picked, true);
+  });
+}
 
 window.addEventListener('resize', () => {
   publishBarHeight();
@@ -842,7 +883,14 @@ list.addEventListener('click', (e) => {
   const x = e.target.closest?.('.x');
   if (x) return removeItem(Number(x.dataset.x));
   const li = e.target.closest?.('li');
-  if (li) load(Number(li.dataset.i), autoStart);
+  if (!li) return;
+  /* A row whose file has moved is still removable, but selecting it would
+     hand the player a path that is not there. */
+  if (items[Number(li.dataset.i)]?.missing) {
+    notice(t('panel.missingHint'));
+    return;
+  }
+  load(Number(li.dataset.i), autoStart);
 });
 
 /* Keyboard equivalent of clicking a row. Without it the playlist is

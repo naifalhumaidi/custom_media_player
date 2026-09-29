@@ -10,9 +10,14 @@
     "test:watch": "vitest",
     "test:e2e": "./tests/e2e/run.sh",
     "test:media": "./tests/e2e/make-media.sh",
-    "test:all": "npm test && npm run test:e2e"
+    "test:all": "npm test && npm run test:e2e",
+    "build:web": "node scripts/build-frontend.mjs",
+    "desktop:dev": "npm run build:web && tauri dev",
+    "desktop:build": "tauri build",
+    "icon": "tauri icon icon-source.png"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.12.0",
     "jsdom": "^30.1.1",
     "vitest": "^5.0.2"
   }

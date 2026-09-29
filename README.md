@@ -120,8 +120,24 @@ tests/unit/         vitest suites
 tests/e2e/          headless browser suites
 ```
 
-`requirements.md` is the specification of record. The rest of the documentation
-is in [`docs/`](docs/).
+`requirements.md` is the specification of record. The rest is in [`docs/`](docs/):
+[analysis](docs/analysis.md), [system design](docs/system-design.md),
+[architecture](docs/architecture.md), and
+[the desktop build](docs/desktop.md).
+
+## The desktop app
+
+The same code in a native window, with real file paths and a playlist that
+survives a restart.
+
+```bash
+npm run desktop:dev      # build the web assets, then launch
+npm run desktop:build    # .deb, .appimage, .msi, setup.exe
+```
+
+See [`docs/desktop.md`](docs/desktop.md) — including how to check whether the
+machine can actually decode H.264, which on Linux is the one thing that silently
+breaks a video player.
 
 ## Design notes
 
@@ -146,6 +162,6 @@ at more length where they live:
 ## Not built yet
 
 Streaming (HLS/DASH), captions, speed control, picture-in-picture, editing,
-tag reading, multiple windows, and any network source. The desktop shell is
-planned but not started — see `docs/system-design.md` for what it changes and
-what it does not.
+tag reading, multiple windows, and any network source. Keyboard reordering of
+the playlist is a real accessibility gap: a row can be played and removed from
+the keyboard, but not moved.

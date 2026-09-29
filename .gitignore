@@ -13,3 +13,9 @@ package-lock.json
 
 # e2e fixtures are generated, and screenshots are scratch
 tests/e2e/media/
+
+# build output: dist/ is assembled from an allowlist, and src-tauri/target is
+# several gigabytes of compiled Rust. Neither belongs in version control.
+dist/
+src-tauri/target/
+src-tauri/gen/schemas/

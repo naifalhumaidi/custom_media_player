@@ -274,6 +274,33 @@ the browser never re-activates the focused button instead.
 - 15.5 Responses carry an ETag and `nosniff`, and are streamed rather than read
       whole into memory.
 
+## 16. Desktop phase
+- 16.1 The desktop shell is **Tauri 2**, wrapping the same application. No
+      application code is duplicated: the playlist, panel, transport, settings
+      and localisation are the files already in this repository.
+- 16.2 `js/source-web.js` and `js/source-tauri.js` satisfy one contract, and
+      `js/source.js` selects between them. The desktop adapter registers
+      nothing in a browser, so `index.html` can always include it.
+- 16.3 Files are **referenced by path, never copied.** No disk duplication and
+      no library folder to manage.
+- 16.4 A playlist therefore outlives the files in it. A file that has moved
+      keeps its row, marked and not playable, and the rest of the playlist is
+      unaffected. Nothing is ever removed behind the user's back.
+- 16.5 Saved state is one JSON file in the OS config directory, written to a
+      sibling and renamed, so a crash mid-write cannot leave a truncated file.
+      It holds the same keys the browser writes to `localStorage`, plus
+      `items`.
+- 16.6 The app has **no network capability**, no filesystem plugin, and a CSP
+      that permits only its own origin. It reaches the disk only through its own
+      six commands.
+- 16.7 The asset protocol scope is broad on purpose: a media player must open a
+      file from anywhere the user points at, including removable media.
+- 16.8 On Linux the webview decodes through GStreamer, and a machine without
+      the MP4 demuxer shows an app that silently plays nothing.
+      `custom-media-player --diagnose` reports whether H.264 actually loads.
+- 16.9 Both Linux and Windows are build targets. Nothing has been run on
+      Windows; `docs/desktop.md` §8 is the checklist for that.
+
 ## Out of scope (for now)
 - Streaming formats (HLS/DASH), captions, speed control, PiP
 - Editing, conversion, tags/metadata, multi-window, mobile layout

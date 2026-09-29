@@ -396,3 +396,12 @@ export async function createApp(options = {}) {
 }
 
 export { FakeDataTransfer, SCRIPTS as SCRIPT_ORDER };
+
+/* Loads a classic script against the current jsdom window, for the modules
+   that register nothing on their own (they are selected by a shell that only
+   exists in the desktop build). Used by the desktop-adapter tests. */
+export function evalSource(source) {
+  // eslint-disable-next-line no-new-func
+  new Function(source)();
+  return globalThis.window;
+}

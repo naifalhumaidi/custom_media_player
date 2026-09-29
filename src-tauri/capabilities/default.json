@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The minimum this app needs: a window, and the dialog it opens. No network, no shell, no filesystem plugin - the app reaches the filesystem only through its own commands.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-title",
+    "dialog:allow-open"
+  ]
+}

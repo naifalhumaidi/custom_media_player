@@ -61,6 +61,10 @@
       /* --- playlist panel --- */
       'panel.title': 'Playlist',
       'panel.add': 'Add files to the end',
+      'panel.addFolder': 'Add a folder',
+      'panel.addFolderAria': 'Add every playable file in a folder',
+      'panel.missing': 'gone',
+      'panel.missingHint': 'This file is no longer where it was. It is kept in case you move it back.',
       'panel.close': 'Close the playlist (P)',
       'panel.closeAria': 'Close playlist',
       'panel.hint': 'Drop here to add — playback keeps going',
@@ -188,6 +192,10 @@
       /* --- لوحة قائمة التشغيل --- */
       'panel.title': 'قائمة التشغيل',
       'panel.add': 'إضافة ملفات إلى النهاية',
+      'panel.addFolder': 'إضافة مجلد',
+      'panel.addFolderAria': 'إضافة كل ملف قابل للتشغيل في مجلد',
+      'panel.missing': 'مفقود',
+      'panel.missingHint': 'هذا الملف لم يعد في مكانه. أُبقي في حال أعدته إلى مكانه.',
       'panel.close': 'إغلاق قائمة التشغيل (P)',
       'panel.closeAria': 'إغلاق قائمة التشغيل',
       'panel.hint': 'أفلت هنا للإضافة — يستمر التشغيل',
