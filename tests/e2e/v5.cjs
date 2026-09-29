@@ -58,7 +58,7 @@ const expect = {
   'en: first duration': '0:08',
   'ar: duration digits': '٠:٠٨',
   'en: total': '4 items',
-  'ar: total': '٤ عنصر',
+  'ar: total': '٤ عناصر',
   'ar: html dir': 'rtl',
   'ar: html lang': 'ar',
   'ar: settings closed': true,

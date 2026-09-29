@@ -62,6 +62,13 @@ export function defineFakeLibrary(window) {
     get src() { return this.#src; }
     set src(value) {
       this.#src = Array.isArray(value) ? value : (value ? [value] : []);
+      /* A real element reports the OUTGOING time as it is torn down: a pause
+         during a source change is followed by a time-update carrying the old
+         track's position. Reproduced here, or a test for that defect is
+         testing nothing at all - the fake would simply never emit the event. */
+      if (this.#currentTime) {
+        this.#emit('time-update', { detail: { currentTime: this.#currentTime } });
+      }
       /* a fresh source resets the timeline, exactly as a real element does */
       this.#duration = NaN;
       this.#currentTime = 0;

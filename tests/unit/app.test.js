@@ -696,3 +696,130 @@ describe('the dialogs', () => {
     expect(app.$('settings-modal').contains(app.document.activeElement)).toBe(true);
   });
 });
+
+describe('defects the final audit found', () => {
+  it('the notice is actually visible, not hidden inside the start window', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO(), app.file('x.txt', 'text/plain')]);
+    /* #drop is display:none as soon as the playlist is non-empty, so a notice
+       inside it could never be seen - and every one of these conditions only
+       arises once the playlist is non-empty */
+    expect(app.$('drop').hidden).toBe(true);
+    expect(app.$('notice').hidden).toBe(false);
+    expect(app.$('notice').closest('#drop')).toBeNull();
+  });
+
+  it('a late time-update does not become the next track\'s resume position', async () => {
+    app = await createApp();
+    app.player.reportedDuration = 600;
+    await dropOnStage([VIDEO(), VIDEO2()]);
+    await app.settle(1);
+    app.player.currentTime = 124;
+    /* The click swaps the source, and a real element reports the outgoing time
+       as it is torn down - after the index has already moved to the new item.
+       That is what used to become the new track's resume position. */
+    app.rows()[1].dispatchEvent(new app.window.MouseEvent('click', { bubbles: true }));
+    await app.settleAll();
+    expect(app.prefs().index).toBe(1);
+    expect(app.prefs().position).toBe(0);
+  });
+
+  it('an item the source cannot resolve is reported, not thrown', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO()]);
+    /* release() now keeps the File, so break the item the way a desktop
+       adapter with a vanished path would */
+    const item = { name: 'gone.mp4', kind: 'video', mime: 'video/mp4', file: null };
+    expect(() => app.window.MediaFileSource.urlFor(item)).toThrow(/released/);
+  });
+
+  it('one unresolvable item does not stop the rest of the batch', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO(), app.file('b.mp4', 'video/mp4'), app.file('c.mp4', 'video/mp4')]);
+    expect(new Set(app.durations()).size).toBe(1);
+    expect(app.durations()[0]).toBe('0:11');
+  });
+
+  it('the undo replaces the list rather than merging into it', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO(), VIDEO2()]);
+    app.key('x', { shiftKey: true });
+    await app.settle(1);
+    /* the user built a different list before reaching for the undo */
+    await dropOnStage([app.file('new.mp4', 'video/mp4')]);
+    expect(app.names()).toEqual(['new.mp4']);
+    app.key('z', { shiftKey: true });
+    await app.settleAll();
+    expect(app.names()).toEqual(['new.mp4']);
+  });
+
+  it('an undo does not survive an edit', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO(), VIDEO2()]);
+    app.key('x', { shiftKey: true });
+    await app.settle(1);
+    await dropOnStage([app.file('new.mp4', 'video/mp4')]);
+    app.key('z', { shiftKey: true });
+    await app.settleAll();
+    /* it was already consumed by the drop; Shift+Z must not resurrect the
+       list the user replaced */
+    expect(app.names()).toEqual(['new.mp4']);
+  });
+
+  it('the settings dialog keeps ? and i to itself', async () => {
+    app = await createApp();
+    app.$('settings').click();
+    await app.settle(1);
+    app.key('i');
+    await app.settle(1);
+    /* stacking them left a dialog the keyboard could not dismiss */
+    expect(app.$('help-modal').hidden).toBe(true);
+    expect(app.$('settings-modal').hidden).toBe(false);
+  });
+
+  it('typing in a field does not open a dialog', async () => {
+    app = await createApp();
+    app.$('settings').click();
+    await app.settle(1);
+    app.$('set-lang').focus();
+    app.key('i');
+    await app.settle(1);
+    expect(app.$('help-modal').hidden).toBe(true);
+  });
+
+  it('clicking a still image moves on, as the instructions promise', async () => {
+    app = await createApp();
+    await dropOnStage([IMAGE(), VIDEO()]);
+    expect(app.stage.dataset.kind).toBe('image');
+    app.$('still').dispatchEvent(new app.window.MouseEvent('click', { bubbles: true }));
+    await app.settle(1);
+    expect(app.stage.dataset.kind).toBe('video');
+  });
+
+  it('the arrow keys get out of a focused remove button', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO(), VIDEO2()]);
+    const x = app.rows()[0].querySelector('.x');
+    x.focus();
+    expect(app.document.activeElement).toBe(x);
+    app.rows()[0].dispatchEvent(new app.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    /* focus was stranded on a button with no way off it */
+    expect(app.document.activeElement).not.toBe(x);
+  });
+
+  it('a track change does not leave listeners behind on the player', async () => {
+    app = await createApp();
+    const files = Array.from({ length: 30 }, (_, i) => app.file(`c${i}.mp4`, 'video/mp4'));
+    await dropOnStage(files);
+    const count = () => Object.getOwnPropertyNames(Object.getPrototypeOf(app.player)).length;
+    void count();
+    /* measurable through the bridge: skipping must not accumulate handlers */
+    for (let i = 0; i < 25; i++) {
+      app.key('.');
+      await app.settle(1);
+    }
+    expect(app.rows()).toHaveLength(30);
+    expect(app.counter()).toBe('26 / 30');
+    expect(app.errors).toEqual([]);
+  });
+});

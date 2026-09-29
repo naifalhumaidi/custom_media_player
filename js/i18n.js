@@ -300,10 +300,13 @@
     /* a table value may be a set of plural forms keyed by category */
     let out = raw;
     if (raw && typeof raw === 'object' && vars && vars.n !== undefined) {
-      const category = pluralCategory(Number(vars.n));
+      const category = pluralCategory(vars.n);
       const fallback = table === STRINGS.en ? STRINGS.en[key] : null;
       out = raw[category] ?? raw.other ?? (fallback && typeof fallback === 'object' ? fallback.other : null) ?? key;
     }
+    /* a plural set asked for with no count would otherwise reach .split() as
+       an object and throw, taking the caller - a render path - down with it */
+    if (typeof out !== 'string') out = (out && out.other) || key;
     if (vars) {
       for (const name of Object.keys(vars)) {
         out = out.split('{' + name + '}').join(String(vars[name]));
@@ -312,9 +315,21 @@
     return out;
   }
 
+  /* The count usually arrives already formatted, and in Arabic that is
+     Arabic-Indic digits, which Number() cannot read - it returns NaN and
+     Intl.PluralRules then answers "other" for every value, silently reducing
+     six plural forms to one. Normalise back to ASCII digits first. */
+  const ASCII_DIGITS = /[\u0660-\u0669]/g;
+  const asNumber = (value) => {
+    const n = Number(String(value).replace(ASCII_DIGITS, (d) => d.charCodeAt(0) - 0x0660));
+    return Number.isFinite(n) ? n : NaN;
+  };
+
   function pluralCategory(count) {
+    const n = asNumber(count);
+    if (!Number.isFinite(n)) return 'other';
     try {
-      return new Intl.PluralRules(STRINGS[lang].locale.split('-')[0]).select(count);
+      return new Intl.PluralRules(STRINGS[lang].locale.split('-')[0]).select(n);
     } catch {
       return 'other';
     }

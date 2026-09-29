@@ -110,8 +110,12 @@
     <div id="drop" class="drop">
       <!-- the small copy; assets/logo.png is the full-size original -->
       <img class="logo" src="assets/logo-small.png" width="1200" height="675" alt="Media Tools" data-i18n-alt="app.logoAlt">
-      <p id="notice" class="notice" role="status" hidden></p>
     </div>
+
+    <!-- a sibling of #drop, not a child: #drop is hidden as soon as the
+         playlist is non-empty, which is exactly when these messages fire, so
+         inside it they could never be seen -->
+    <p id="notice" class="notice" role="status" aria-live="polite" hidden></p>
   </main>
 
   <div id="help-modal" class="modal" hidden>

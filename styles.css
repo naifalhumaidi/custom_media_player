@@ -704,6 +704,9 @@ media-time { color: inherit; font: inherit; }
 
 .notice {
   position: absolute;
+  /* above the panel (20) and the control bar (25), or a message during
+     playback would be painted underneath both */
+  z-index: 30;
   bottom: 22%;
   left: 50%;
   /* the notice is centred text, so it is positioned physically on purpose:

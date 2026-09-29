@@ -43,7 +43,6 @@ const SEEK_STEP = 10;
 const VOL_STEP = 0.05;
 const THUMB_W = 160;
 const FITS = { d: 'contain', c: 'cover', s: 'stretch' };
-const FIT_LABEL = { d: 'Default', c: 'Crop', s: 'Stretch' };
 
 let items = [];
 let index = 0;
@@ -119,7 +118,11 @@ async function drawImageThumb(url) {
   try {
     const img = new Image();
     img.src = url;
-    await (img.decode ? img.decode() : new Promise((r) => { img.onload = r; }));
+    /* the fallback must be able to FAIL: without an onerror, a corrupt image
+       never settles and permanently occupies one of the three probe workers */
+    await (img.decode
+      ? img.decode()
+      : new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; }));
     if (!img.naturalWidth) return null;
     const scale = THUMB_W / img.naturalWidth;
     const canvas = document.createElement('canvas');
@@ -147,7 +150,14 @@ async function probe(item) {
   el.muted = true;
   el.playsInline = true;
   el.preload = 'metadata';
-  el.src = source.urlFor(item);
+  try {
+    el.src = source.urlFor(item);
+  } catch (err) {
+    /* unresolvable item: leave the row on its placeholder rather than
+       rejecting and taking the whole batch with it */
+    console.warn('[app] cannot resolve', item.name, err);
+    return item;
+  }
 
   try {
     /* Short on purpose: a file that never reports metadata would otherwise
@@ -156,6 +166,10 @@ async function probe(item) {
        frozen with no indication anything is happening. */
     await once(el, 'loadedmetadata', 2500);
     if (Number.isFinite(el.duration)) item.duration = el.duration;
+    /* A streamed or open-ended source reports Infinity. Discarding it left the
+       row at "..." forever and the total permanently unavailable, so it is
+       recorded as open-ended and rendered as such. */
+    else if (el.duration === Infinity) item.duration = null, item.openEnded = true;
     if (el.videoWidth) {
       el.currentTime = Math.min(0.1, el.duration / 2);
       await once(el, 'seeked', 2000);
@@ -166,6 +180,14 @@ async function probe(item) {
   el.removeAttribute('src');
   el.load();
   return item;
+}
+
+/* probeAll's promise is deliberately not awaited by its callers - probing is
+   background work - but a rejection must not be left unhandled: one
+   unresolvable item would otherwise take the rest of the batch's durations
+   with it and surface as nothing at all. */
+function runProbes(batch) {
+  probeAll(batch).catch((err) => console.warn('[app] the probe queue stopped:', err));
 }
 
 async function probeAll(batch) {
@@ -184,6 +206,10 @@ async function probeAll(batch) {
 
 function addItems(incoming, play) {
   if (!incoming || !incoming.length) return;
+  /* the list has moved on, so a pending undo would restore a state the user
+     has since replaced */
+  undo = null;
+  clearTimeout(undoTimer);
   /* Hold until the restore has landed, then apply in arrival order. Anything
      added now would otherwise be wiped by the restore that follows. */
   if (!ready) {
@@ -198,7 +224,7 @@ function addItems(incoming, play) {
   renderEmptyState();
   if (wasEmpty || play) load(wasEmpty ? 0 : items.length - fresh.length, true);
   else render();
-  probeAll(fresh);
+  runProbes(fresh);
   scheduleSave();
 }
 
@@ -209,13 +235,21 @@ function restoreCleared() {
   const saved = undo;
   undo = null;
   clearTimeout(undoTimer);
-  addItems(saved.items, false);
-  if (saved.items.length) load(saved.index, false);
-  notice(t('notice.restored', { n: num(saved.items.length) }));
+  /* Replace the list, do not append to it: addItems() concatenates, so an
+     undo after a fresh drop produced the two lists merged and then indexed
+     the old position into the combined array. */
+  if (items.length) clearAll(false);
+  items = saved.items.slice();
+  index = 0;
+  render();
+  if (items.length) load(Math.min(saved.index, items.length - 1), false);
+  notice(t('notice.restored', { n: num(items.length) }));
 }
 
 function removeItem(i) {
   if (i < 0 || i >= items.length) return;
+  undo = null;
+  clearTimeout(undoTimer);
   const wasCurrent = i === index;
   const nextIndex = i < index ? index - 1 : index;
   const removed = items[i];
@@ -283,7 +317,18 @@ function load(i, play) {
   const it = items[index];
   stage.dataset.kind = it.kind;
 
-  media.load({ url: source.urlFor(it), mime: it.mime, position: it.position }, it.kind, play);
+  let url;
+  try {
+    url = source.urlFor(it);
+  } catch (err) {
+    /* The source cannot produce something playable for this item. `items` and
+       the DOM have already been updated by this point, so bail out visibly
+       rather than letting the throw escape into whatever called load(). */
+    console.warn('[app] cannot resolve', it.name, err);
+    notice(t('notice.cannotPlay'));
+    return;
+  }
+  media.load({ url, mime: it.mime, position: it.position }, it.kind, play);
 
   /* a still image has no timeline, so it never counts as "playing" */
   syncIcons(!!play && it.kind !== 'image');
@@ -417,7 +462,7 @@ function renderList() {
 
     const dur = document.createElement('span');
     dur.className = 'dur';
-    dur.textContent = item.kind === 'image' ? '—' : item.duration ? fmt(item.duration) : '…';
+    dur.textContent = item.kind === 'image' ? '—' : item.duration ? fmt(item.duration) : (item.openEnded ? '∞' : '…');
 
     const x = document.createElement('button');
     x.className = 'x';
@@ -452,7 +497,11 @@ function refreshRow(item) {
   else if (existing) li.replaceChild?.(nextThumb, existing);
   else li.prepend(nextThumb);
   const durCell = li.querySelector?.('.dur');
-  if (durCell) durCell.textContent = item.kind === 'image' ? '—' : item.duration ? fmt(item.duration) : '…';
+  if (durCell) {
+    durCell.textContent = item.kind === 'image' ? '—'
+      : item.duration ? fmt(item.duration)
+      : (item.openEnded ? '∞' : '…');
+  }
   updateTotal();
 }
 
@@ -545,6 +594,8 @@ if (typeof ResizeObserver === 'function') {
 
 media.on('time', ({ currentTime }) => {
   if (stage.dataset.kind === 'image') return;
+  /* The bridge already withholds time updates from a provider that has been
+     replaced, so by the time one arrives it belongs to the current item. */
   if (items[index]) items[index].position = currentTime;
   const d = media.duration;
   media.paintTime(Number.isFinite(d) && d > 0 ? currentTime / d : 0);
@@ -559,8 +610,10 @@ media.on('time', ({ currentTime }) => {
 });
 
 /* The <img> sits above the player so a click on a picture never reaches the
-   library's play/pause gesture, and it must not skip the image either. Use
-   Space/Enter, the next button, or "." to move on. */
+   library's play/pause gesture. A still image has no play/pause to speak of,
+   so a click on one moves on - the same thing Space does, which is what the
+   instructions promise. */
+still.addEventListener('click', () => step(1));
 
 media.on('pause', scheduleSave);
 /* A notice describes a state the user is in; it is retired when the media
@@ -688,12 +741,6 @@ document.addEventListener('keydown', (e) => {
 /* One modal at a time: opening settings closes the instructions dialog and vice
    versa, so the two can never stack. The button itself is wired in settings.js
    because that module owns the dialog. */
-function toggleSettings() {
-  if (settings.isOpen()) return settings.close();
-  setHelp(false);
-  settings.open();
-}
-
 /* a click on the backdrop closes; a click inside the card must not bubble out */
 helpModal.addEventListener('pointerdown', (e) => {
   if (e.target === helpModal) setHelp(false);
@@ -803,13 +850,13 @@ list.addEventListener('click', (e) => {
 list.addEventListener('keydown', (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const x = e.target.closest?.('.x');
-  if (x) {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      removeItem(Number(x.dataset.x));
-    }
+  if (x && (e.key === 'Enter' || e.key === ' ')) {
+    e.preventDefault();
+    removeItem(Number(x.dataset.x));
     return;
   }
+  /* Any other key - including the arrows - belongs to the row, so focus is not
+     stranded on a button the user cannot get out of. */
   const li = e.target.closest?.('li');
   if (!li) return;
   if (e.key === 'Enter' || e.key === ' ') {
@@ -910,13 +957,16 @@ document.addEventListener('keydown', (e) => {
   /* Dialogs and form controls own the keyboard while they are up. Without this
      M muted the video behind the settings dialog, arrow keys changed the volume
      while a <select> was open, and Space could not scroll the instructions. */
-  const dialogOpen = settings.isOpen() || !helpModal.hidden;
   const typing = e.target.closest?.('input, select, textarea, [contenteditable="true"]');
 
-  if (k === '?' || k === 'i') return setHelp(helpModal.hidden);
   if (k === 'escape' && settings.isOpen()) return settings.close();
   if (k === 'escape' && !helpModal.hidden) return setHelp(false);
-  if (dialogOpen || typing) return;
+  /* Settings owns the keyboard entirely, ?/i included: handled above this
+     guard, `i` opened the instructions dialog on top of it, which broke the
+     one-modal-at-a-time rule and left a dialog the keyboard could not
+     dismiss. The instructions dialog is exempt, because ?/i toggles it. */
+  if (settings.isOpen() || typing) return;
+  if (k === '?' || k === 'i') return setHelp(helpModal.hidden);
 
   /* let the library's own sliders handle their arrow keys */
   if (media.ownsArrowKey(e.target) && k.startsWith('arrow')) return;
@@ -1016,7 +1066,7 @@ async function restore() {
   index = mod(state.index || 0, items.length);
   items[index].position = state.position || 0;
   load(index, false);
-  probeAll(items);
+  runProbes(items);
 }
 
 /* settings first: the language decides every string, and the brand colour is

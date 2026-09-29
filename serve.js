@@ -63,7 +63,11 @@ const server = http.createServer((req, res) => {
     const type = TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream';
     const etag = `W/"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`;
 
-    if (req.headers['if-none-match'] === etag) {
+
+    /* A range request is answered from the range, never from the cache: a 304
+       carries no body, and a media client that asked for a byte range cannot
+       use one. */
+    if (!req.headers.range && req.headers['if-none-match'] === etag) {
       res.writeHead(304, { etag, ...SECURITY }).end();
       return;
     }

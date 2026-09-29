@@ -26,6 +26,12 @@
   let pendingSeek = 0;
   let wantPlay = false;
   let currentLoad = 0;
+  /* False from the moment a source is replaced until the NEW provider reports
+     its metadata. A real pause during teardown is followed by a time-update
+     carrying the OUTGOING track's time, and the app - which has already moved
+     its index to the new item - would record it as the new track's resume
+     position. Only this file knows when the old provider is really gone. */
+  let sourceReady = true;
 
   /* resolved lazily so the bridge is safe to touch before init() */
   const el = () => player || (player = document.getElementById('media'));
@@ -69,14 +75,29 @@
      load and close over their own ticket; a listener registered once in
      init() could not tell which load an event belonged to, because the events
      carry no identity of their own. */
+  let live = [];
+
+  /* A load that is replaced never gets to run its handler, so the handler
+     cannot be the thing that cleans up. Every installed pair is tracked here
+     and removed at the next load: skipping through a long playlist otherwise
+     leaves thousands of closures on the player, all of which every later
+     event is dispatched through. */
+  function dropLive() {
+    for (const [name, fn] of live) el().removeEventListener(name, fn);
+    live = [];
+  }
+
   function onSuperseded(events, handler) {
     const seq = currentLoad;
     const wrapped = (e) => {
       if (seq !== currentLoad) return;
-      for (const name of events) el().removeEventListener(name, wrapped);
+      dropLive();
       handler(e);
     };
-    for (const name of events) el().addEventListener(name, wrapped);
+    for (const name of events) {
+      el().addEventListener(name, wrapped);
+      live.push([name, wrapped]);
+    }
   }
 
   const paintBar = (which, ratio) => {
@@ -109,9 +130,10 @@
     el().keyShortcuts = {};
 
     /* the real event names of the library, verified against its type defs */
-    el().addEventListener('time-update', (e) =>
-      emit('time', { currentTime: e.detail?.currentTime ?? el().currentTime }),
-    );
+    el().addEventListener('time-update', (e) => {
+      if (!sourceReady) return;
+      emit('time', { currentTime: e.detail?.currentTime ?? el().currentTime });
+    });
     el().addEventListener('play', () => emit('play'));
     el().addEventListener('pause', () => emit('pause'));
     el().addEventListener('volume-change', (e) =>
@@ -148,7 +170,9 @@
            waits for an IntersectionObserver on a provider that does not exist
            yet, and nothing is ever created. */
     load(item, kind, autoplay) {
+      dropLive();
       currentLoad = ++loadSeq;
+      sourceReady = false;
       pendingSeek = item.position || 0;
       wantPlay = !!autoplay && kind !== 'image';
       pause();
@@ -176,6 +200,7 @@
       /* installed BEFORE the source is attached, so the very first metadata
          event is caught rather than the next one */
       onSuperseded(['loaded-metadata', 'can-play'], () => {
+        sourceReady = true;
         if (pendingSeek > 0) {
           el().currentTime = pendingSeek;
           pendingSeek = 0;
@@ -195,7 +220,9 @@
     },
 
     clear() {
+      dropLive();
       currentLoad = ++loadSeq;
+      sourceReady = false;
       pause();
       wantPlay = false;
       pendingSeek = 0;
@@ -222,6 +249,11 @@
     /* Fullscreen state, without the app touching document.fullscreenElement. */
     get fullscreen() { return !!document.fullscreenElement; },
     onFullscreenChange(fn) { document.addEventListener('fullscreenchange', fn); },
+
+    /* Identifies the current load. A pause during teardown is followed by a
+       time-update carrying the OUTGOING track's time, and the app's handler
+       would otherwise write it into the incoming item's resume position. */
+    ticket() { return currentLoad; },
 
     get playing() { return !el().paused; },
     get currentTime() { return el().currentTime || 0; },

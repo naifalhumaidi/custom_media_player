@@ -114,6 +114,27 @@ describe('t()', () => {
     const many = I18n.t('panel.items', { n: 11 });
     expect(new Set([zero, one, two, few, many]).size).toBeGreaterThan(3);
   });
+
+  it('picks the Arabic category from digits the caller already formatted', () => {
+    /* updateTotal() passes num(count), which in Arabic is Arabic-Indic digits.
+       Number() cannot read those, and Intl.PluralRules answers "other" for
+       NaN - so the six forms silently collapsed to one. */
+    I18n.setLang('ar');
+    /* the digit glyphs legitimately differ - what must match is the chosen
+       form, so compare the text with the digits stripped out */
+    const words = (n) => I18n.t('panel.items', { n: I18n.num(n) }).replace(/[٠-٩\d]/g, '');
+    for (const n of [0, 1, 2, 3, 11]) {
+      expect(words(n), `count ${n} picked the wrong Arabic form`)
+        .toBe(I18n.t('panel.items', { n }).replace(/[٠-٩\d]/g, ''));
+    }
+    /* and they are genuinely different forms, not all "other" */
+    expect(new Set([1, 2, 3, 11].map(words)).size).toBeGreaterThan(2);
+  });
+
+  it('a plural set asked for with no count returns text, not an object', () => {
+    expect(typeof I18n.t('panel.items')).toBe('string');
+    expect(typeof I18n.t('panel.itemsTotal')).toBe('string');
+  });
 });
 
 describe('num()', () => {

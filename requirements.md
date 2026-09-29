@@ -198,6 +198,13 @@ the browser never re-activates the focused button instead.
   naturally. Arabic uses `ar-u-nu-arab`: with a bare `ar` the browser resolves
   the locale to the **Latin** numbering system, which would leave Western digits
   inside Arabic text.
+- The plural category is chosen from the count, and the count usually arrives
+  already formatted — in Arabic that is Arabic-Indic digits, which `Number()`
+  cannot read. It is normalised back to ASCII first, or every count silently
+  collapses to the `other` form and Arabic's six categories are dead code.
+- A keyboard hint names the **physical key**: `,` and `?` stay ASCII in both
+  languages. A localised `،` or `؟` is a different code point, so following the
+  tooltip would press a key that does nothing.
 - The markup declares its own strings with `data-i18n`, `data-i18n-title` and
   `data-i18n-aria`, so switching never needs the strings duplicated in JS.
   Anything the app builds later (tooltips, counts, durations) goes through
@@ -214,7 +221,23 @@ the browser never re-activates the focused button instead.
   name: its padding overrides `.btn.ic`'s `padding: 0` and the flexed icon
   shrinks to a few pixels.
 
-## 14. Quality gates
+## 14. Failure behaviour
+- 14.0 A failure the user cannot see is indistinguishable from the app having
+      hung. Every one of these produces a message: a file that will not decode,
+      an autoplay the browser refused, and files in a drop that cannot play.
+- 14.1 A notice has one of two lifetimes, because the messages mean different
+      things. "Press play to start" describes the current state and is retired
+      when the media starts; "3 files cannot be played here" describes something
+      already done and simply times out. Clearing the second when the video
+      loaded hid the refusal in the same tick it appeared.
+- 14.2 The notice lives beside the start window, not inside it. The start
+      window is hidden as soon as the playlist is non-empty, which is exactly
+      when these messages arise.
+- 14.3 `⇧X` is undoable with `⇧Z` for thirty seconds. It is the only action that
+      destroys work, and the browser source cannot re-resolve a file that was
+      never stored, so recovery has to happen before the release.
+
+## 15. Quality gates
 - 14.1 `npm test` must pass. The unit tests load the **real** `index.html` and the
       **real** scripts in jsdom; only the playback library is faked, which is the
       boundary `js/media.js` exists to isolate. A hand-written DOM stub is not
@@ -233,7 +256,7 @@ the browser never re-activates the focused button instead.
 - 14.7 A test that fails because the product changed is only acceptable when the
       change was intended **and** the spec above was updated with it.
 
-## 15. Serving
+## 16. Serving
 - 15.1 The app is served over HTTP by `node serve.js`; opening `index.html` from
       `file://` does not work, because ES modules and custom elements need a real
       origin.
