@@ -9,6 +9,10 @@ Prototype that grows into a real local media player. Desktop shell comes last.
 - 1.4 Non-media files are ignored.
 - 1.5 Items keep a stable identity: name, kind, **MIME type**, path, duration,
       thumbnail, saved position. The MIME type is mandatory (see 8.5).
+- 1.6 The decision "what kind of file is this" lives in ONE place, `js/mime.js`,
+      shared by every source. The browser source is handed a `File` and the
+      desktop source a path, but the answer is the same and getting it wrong
+      adds a row that can never play.
 
 ## 2. Display
 - 2.1 Media fills the window edge to edge.

@@ -19,6 +19,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(HERE, '../..');
 
 export const SCRIPTS = [
+  'js/mime.js',
   'js/source-web.js',
   'js/source.js',
   'js/media.js',
