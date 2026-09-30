@@ -74,35 +74,101 @@ do.
 Being precise about this, because "it builds" is not "it works" and the
 difference matters when you hand it to someone.
 
-**Verified by running the built binary here**
+**Verified by running the release binary on a virtual display**
 
-- the shell builds and launches
-- the window opens and the page mounts
-- `window.__TAURI__` is reachable, with `invoke`, `convertFileSrc` and
-  `event.listen`
-- `convertFileSrc` produces `asset://localhost/<encoded path>` on Linux
+Everything below was produced by `tests/e2e/desktop.sh`, which runs the built
+binary under `Xvfb` with audio routed to a sink with no output. Nothing is drawn
+and nothing is heard.
+
+- the shell builds, launches, opens its window, and the page mounts
 - `js/source-tauri.js` registers and `js/source.js` selects it — the diagnostic
   reports `active_source: desktop`
-- `MediaBridge` mounts, so the playback side is intact
+- `MediaBridge` mounts
+- **a real H.264 file plays.** A 127 KB file off disk, through the same call the
+  app makes, reaches `readyState 4`
+- **an MP3 plays**, same route
+- **the window goes fullscreen and comes back.** Not through the page: WebKitGTK
+  has no HTML Fullscreen API, so the page cannot do it
+- **a dropped file arrives carrying a playable URL** — the shell emits the event
+  the platform emits, covering the event, the adapter and the registration. It
+  stops at the toolkit boundary, because no machine can invent a pointer drag
+- **the playlist survives a restart.** The previous run's `state.json` is read
+  through the adapter, and every row is re-registered with the shell
+- **the native dialog command exists and opens something** — raced against a
+  timer, since a command that never settles is a dialog waiting for a click
+- `window.__TAURI__` is reachable, with `invoke` and `event.listen`
 
 **Verified without a screen**
 
-- `cargo test` — 6 tests over the state file, the staged write, the folder
-  listing order and the existence check
-- `npm test` — 20 tests over the desktop adapter against a stubbed shell: path
-  to item mapping, Windows paths, asset-URL caching, `release`, a moved file, a
-  folder, the persisted keys, a failed write, and drop coalescing
+- `cargo test` — 17 tests: the state file, the staged write, folder listing
+  order, the existence check, and eleven over the loopback media server
+  (whole file, both range forms, content type, an unknown token, a path in a
+  URL, a deleted file, an empty file, stable tokens)
+- `npm test` — 155 tests, including 27 over the desktop adapter against a
+  stubbed shell
+- the five browser e2e suites
 
-**Not verified, and it needs a human with a display**
+**Still needs a human**
 
-- the native file and folder dialogs opening and returning
-- a video actually playing
-- a dropped file arriving
-- the playlist surviving a restart
+- the native dialogs *returning* a chosen path. That needs a click. The command
+  is confirmed present and the window opens; what happens after the click is not
+  machine-checkable
+- how it looks and feels on a real screen, at real window sizes
+- the Windows build, which is cross-compiled and has never been run (§8)
 
-This machine has no virtual display and no permission to install one, so those
-remain. `cargo test` and the stubbed-shell tests cover the logic either side of
-each of them; what they cannot cover is the two lines of glue in the middle.
+## 3a. Two bugs that were not bugs in this app
+
+Both were reported as "it has bugs". Neither was in the application logic; both
+were platform facts that the shell had to accommodate. They are written down
+here because the obvious fix — using Tauri's documented `convertFileSrc` and
+the HTML Fullscreen API — is wrong on Linux, and the next person will try it.
+
+### Local files could not be played at all
+
+On Linux the webview decodes through GStreamer, and GStreamer resolves media URIs
+with its own URI handlers. Tauri registers its `asset://` protocol with WebKit's
+network layer only, so a media element pointed at `asset://localhost/...` never
+gets a byte:
+
+```
+No URI handler implemented for "asset"   (missing-plugin)
+```
+
+Every alternative was measured, and each fails:
+
+| URL | why it fails |
+|---|---|
+| `asset://localhost/...` | Tauri serves it; GStreamer has no handler |
+| `tauri://localhost/...` | the app's own origin; likewise no handler |
+| `file:///...` | WebKit refuses local resources for a page that is not itself a file |
+| `http://asset.localhost/...` | that is the *Windows* form of the asset protocol; nothing listens on Linux |
+| `data:...` | works, and is unusable for a two-hour video |
+
+So the shell serves the bytes itself, on an ephemeral loopback port
+(`src-tauri/src/media_server.rs`). Range requests are answered properly, which is
+what makes seeking work at all. Files are addressed by an opaque token, not by
+path, so nothing on the machine can walk the filesystem through it.
+
+Two consequences, both easy to get wrong:
+
+- **A URL must never be saved.** It names the port of the process that wrote it.
+  `saveState` strips it and `loadState` re-registers, or the next launch restores
+  a playlist that looks complete and plays nothing.
+- **`WEBKIT_GST_ALLOWED_URI_PROTOCOLS` is set before the webview exists.**
+  WebKitGTK keeps a hardcoded list of schemes its media stack will open — `blob`,
+  `data`, `file`, `http`, `https` — and refuses everything else silently.
+
+### Fullscreen did nothing
+
+WebKitGTK has no HTML Fullscreen API. `requestFullscreen` does not exist,
+`document.fullscreenElement` is always null, and `fullscreenchange` never fires.
+The button was dead on Linux and the `f` shortcut reported a failure to a console
+nobody was watching.
+
+The window itself can still go fullscreen, so the page asks the shell
+(`set_fullscreen` / `is_fullscreen`). `js/media.js` prefers that hook when it is
+present and keeps the HTML path for the browser build, which never had a problem
+— the bridge still does not know a shell exists.
 
 ## 4. The codec problem, and how to check it
 
