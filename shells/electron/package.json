@@ -1,0 +1,16 @@
+{
+  "name": "custom-media-player",
+  "productName": "Custom Media Player",
+  "version": "1.0.0",
+  "description": "A media player that keeps real file paths, so a playlist survives a restart.",
+  "license": "MIT",
+  "private": true,
+  "main": "main.cjs",
+  "author": {
+    "name": "Almenber"
+  },
+  "scripts": {
+    "start": "electron .",
+    "walkthrough": "electron . --walkthrough"
+  }
+}

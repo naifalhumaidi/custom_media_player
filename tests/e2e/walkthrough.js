@@ -25,9 +25,44 @@
   const say = (key, value) => { report[key] = value; };
   window.__DIAG__ = report;
 
-  const channel = (window.__TAURI__ && window.__TAURI__.core) || window.__TAURI_INTERNALS__;
-  const invoke = (cmd, args) => channel.invoke(cmd, args || {});
+  /* One walkthrough, both shells. The Tauri build has a command channel; the
+     Electron build offers the same handful of operations under its own names.
+     Resolving through here rather than in the tests means a journey is written
+     once and runs against whichever shell is under test - and a journey that
+     only works on one of them is a journey nobody is really testing. */
+  const tauri = (window.__TAURI__ && window.__TAURI__.core) || window.__TAURI_INTERNALS__;
+  const walk = window.MediaShell && window.MediaShell.walkthrough;
+
+  const invoke = tauri
+    ? (cmd, args) => tauri.invoke(cmd, args || {})
+    : (cmd, args) => {
+      if (!walk) return Promise.reject(new Error('no walkthrough channel in this shell'));
+      if (cmd === 'diagnostic_set_size') return walk.setSize(args.width, args.height);
+      if (cmd === 'is_fullscreen') return walk.isFullscreen();
+      if (cmd === 'diagnostic_simulate_drop') return walk.simulateDrop(args.paths);
+      return Promise.reject(new Error('this shell cannot ' + cmd));
+    };
+
+  const channel = tauri;
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  /* Wait for a condition rather than for a length of time.
+
+     Fixed sleeps made this flaky in both directions: a cold start after a
+     rebuild can take longer than the sleep, so a working player was reported as
+     not playing. The answer is not a longer sleep - it is waiting for the thing
+     being measured, with a ceiling so a genuinely broken player still ends the
+     run instead of hanging it. */
+  const waitFor = async (predicate, timeout, label) => {
+    const deadline = Date.now() + timeout;
+    for (;;) {
+      let ok = false;
+      try { ok = await predicate(); } catch { ok = false; }
+      if (ok) return true;
+      if (Date.now() >= deadline) { say('walkthrough_timeout', `gave up waiting for ${label} after ${timeout}ms`); return false; }
+      await wait(120);
+    }
+  };
   const probeFile = String(window.__PROBE_FILE__ || '');
 
   /* Sizes a person might plausibly have: a laptop, a small laptop, a
@@ -213,7 +248,10 @@
 
     const before = document.querySelectorAll('.row').length;
     await invoke('diagnostic_simulate_drop', { paths: [probeFile] });
-    await wait(1500);
+    /* Until the player knows the file. `duration` is the honest signal: a
+       playlist can contain the row while the media has not loaded yet, and
+       treating that as "loaded" is how a real failure gets missed. */
+    await waitFor(() => Number.isFinite(bridge.duration) && bridge.duration > 0, 12000, 'the file to load');
 
     /* Did it reach the playlist? */
     const rows = document.querySelectorAll('.row').length;
@@ -223,7 +261,7 @@
        play". A <video> element with a src says nothing about whether the app's
        player started it. */
     await bridge.play();
-    await wait(2000);
+    await waitFor(() => bridge.playing && bridge.currentTime > 0, 8000, 'playback to start');
 
     /* Every media element on the page, not just the first one found. Vidstack
        wraps a real <video> in its own custom element, and a query that stops at
@@ -330,6 +368,9 @@
       ? `FAIL - ${failures.length} problem(s): ${failures.join(', ')}`
       : 'PASS - every journey worked');
 
+    /* Left on the window as well, so a shell can read the whole report without
+       needing a command to carry it. */
+    window.__WALKTHROUGH_REPORT__ = report;
     if (channel) {
       try {
         await channel.invoke('print_diagnostic', { report, done: true });

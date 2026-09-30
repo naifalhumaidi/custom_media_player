@@ -62,6 +62,11 @@ fi
 
 export DISPLAY=":$DISPLAY_NUM"
 export GDK_BACKEND=x11
+
+# Belt and braces against the same failure as the Electron runner: anything that
+# prefers Wayland over DISPLAY would open a window on the real screen instead of
+# on the framebuffer this script just started.
+unset WAYLAND_DISPLAY
 # WebKitGTK is far happier without compositing in a framebuffer
 export WEBKIT_DISABLE_COMPOSITING_MODE=1
 export LIBGL_ALWAYS_SOFTWARE=1

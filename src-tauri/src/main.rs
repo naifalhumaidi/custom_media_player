@@ -332,6 +332,9 @@ fn main() {
             if payload.event() != tauri::webview::PageLoadEvent::Finished {
                 return;
             }
+            /* The walkthrough script lives with the tests, not in the shell:
+               both desktop shells run the same one, so a journey is written once
+               and cannot drift between them. */
             /* Two ways in, and they measure different things. `--diagnose`
                answers whether this machine can play at all. `--walkthrough`
                drives the journeys a person drives, in the real window, at real
@@ -343,7 +346,7 @@ fn main() {
                     "window.__PROBE_FILE__ = {};",
                     serde_json::to_string(&probe).unwrap_or_else(|_| "\"\"".into())
                 );
-                let script = format!("{preamble}\n{}", include_str!("walkthrough.js"));
+                let script = format!("{preamble}\n{}", include_str!("../../tests/e2e/walkthrough.js"));
                 window.eval(&script).ok();
                 let window = window.clone();
                 std::thread::spawn(move || {

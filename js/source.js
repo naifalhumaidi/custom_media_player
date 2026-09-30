@@ -31,17 +31,27 @@
          it: a silent failure loses the language, the colour and the position
          with no visible sign.
 
-   To add the desktop shell: register window.MediaFileSourceTauri before this
-   file runs. Nothing in app.js needs to change. */
+   To add a desktop shell: register window.MediaFileSourceTauri or
+   window.MediaFileSourceElectron before this file runs. Nothing in app.js needs
+   to change - which is the point of the arrangement, and the reason the contract
+   above is enforced here rather than discovered at the first playlist operation. */
 
 (() => {
   const REQUIRED = ['canPersist', 'openFiles', 'urlFor', 'release', 'loadState', 'saveState'];
 
+  /* In order of preference, and the order matters: a desktop adapter registers
+     itself only when its shell is really present, so whichever one is found
+     first is the one that can actually reach a filesystem. Falling through to the
+     browser source is what makes the same page work in all three builds. */
   const tauri = window.__TAURI_INTERNALS__ && window.MediaFileSourceTauri;
-  const source = tauri || window.MediaFileSourceWeb;
+  const electron = window.MediaFileSourceElectron;
+  const source = tauri || electron || window.MediaFileSourceWeb;
 
   if (!source) {
-    throw new Error('custom-media-player: no file source loaded (expected window.MediaFileSourceWeb)');
+    throw new Error(
+      'custom-media-player: no file source loaded (expected window.MediaFileSourceWeb, ' +
+      'window.MediaFileSourceTauri or window.MediaFileSourceElectron)',
+    );
   }
 
   /* Fail here, at load, rather than halfway through a playlist operation: a

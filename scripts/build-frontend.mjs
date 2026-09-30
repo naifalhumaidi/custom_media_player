@@ -23,6 +23,7 @@ const FILES = [
   'js/mime.js',
   'js/source-web.js',
   'js/source-tauri.js',
+  'js/source-electron.js',
   'js/source.js',
   'js/media.js',
   'js/i18n.js',
