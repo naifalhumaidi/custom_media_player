@@ -6,6 +6,9 @@
   "permissions": [
     "core:default",
     "core:window:allow-set-title",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen",
+    "core:window:allow-inner-size",
     "dialog:allow-open"
   ]
 }

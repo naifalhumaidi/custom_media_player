@@ -246,9 +246,25 @@
       return !!target.closest?.('media-time-slider, media-volume-slider');
     },
 
-    /* Fullscreen state, without the app touching document.fullscreenElement. */
-    get fullscreen() { return !!document.fullscreenElement; },
-    onFullscreenChange(fn) { document.addEventListener('fullscreenchange', fn); },
+    /* Fullscreen state, without the app touching document.fullscreenElement.
+
+       Read from the shell when a shell offers it. WebKitGTK has no HTML
+       Fullscreen API, so there `document.fullscreenElement` is permanently
+       null and the button can never show what it did. The browser build has no
+       problem and keeps the HTML path. */
+    get fullscreen() {
+      const shell = window.MediaFullscreen;
+      if (shell && typeof shell === 'object') return !!shell.active;
+      return !!document.fullscreenElement;
+    },
+    onFullscreenChange(fn) {
+      const shell = window.MediaFullscreen;
+      if (shell && typeof shell.onChange === 'function') {
+        shell.onChange(() => fn());
+        return;
+      }
+      document.addEventListener('fullscreenchange', fn);
+    },
 
     /* Identifies the current load. A pause during teardown is followed by a
        time-update carrying the OUTGOING track's time, and the app's handler
@@ -292,8 +308,24 @@
 
     /* Fullscreen the whole stage, not the player element: the player is a
        sibling of the playlist panel, so fullscreening only the player would
-       hide the panel and the control bar. */
-    toggleFullscreen() {
+       hide the panel and the control bar.
+
+       Through the shell where one offers it, because the HTML API does not
+       exist on WebKitGTK - see js/source-tauri.js. The browser build is
+       unaffected and still uses the page. */
+    async toggleFullscreen() {
+      const shell = window.MediaFullscreen;
+      if (shell && typeof shell.toggle === 'function') {
+        try {
+          await shell.toggle();
+        } catch (err) {
+          /* Reported rather than swallowed: a fullscreen button that does
+             nothing is diagnosable, one that fails silently is not. */
+          console.warn('[media] the window refused fullscreen:', err && (err.message || err));
+        }
+        return;
+      }
+
       const target = document.getElementById('stage');
       try {
         const p = document.fullscreenElement

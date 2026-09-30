@@ -165,6 +165,40 @@ fn file_exists(path: String) -> bool {
 }
 
 /* ------------------------------------------------------------------ */
+/* window                                                              */
+/* ------------------------------------------------------------------ */
+
+/* Fullscreen, at the OS level rather than through the page.
+
+   WebKitGTK has no HTML Fullscreen API: `requestFullscreen` is absent, so on
+   Linux the desktop build had a fullscreen button that could not work and a
+   keyboard shortcut that reported a failure nobody could see. The window
+   itself can still go fullscreen, so the page asks for that instead.
+
+   The state is tracked here as well as read back, because a window can also
+   leave fullscreen without the page asking - a window manager shortcut, or the
+   user dragging it to another monitor - and the button has to follow. */
+static FULLSCREEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[tauri::command]
+async fn set_fullscreen(window: WebviewWindow, fullscreen: bool) -> Result<(), String> {
+    window
+        .set_fullscreen(fullscreen)
+        .map_err(|e| format!("the window refused to go fullscreen: {e}"))?;
+    FULLSCREEN.store(fullscreen, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
+}
+
+#[tauri::command]
+fn is_fullscreen(window: WebviewWindow) -> bool {
+    /* The window's own answer is the truth; the flag only covers the moment
+       between a request and the event it produces. */
+    let live = window.is_fullscreen().unwrap_or(false);
+    FULLSCREEN.store(live, std::sync::atomic::Ordering::Relaxed);
+    live
+}
+
+/* ------------------------------------------------------------------ */
 /* local media                                                         */
 /* ------------------------------------------------------------------ */
 
@@ -285,6 +319,8 @@ fn main() {
             pick_files,
             pick_folder,
             media_url,
+            set_fullscreen,
+            is_fullscreen,
             list_folder,
             file_exists,
             print_diagnostic,

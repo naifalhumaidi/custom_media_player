@@ -75,6 +75,86 @@
     return items;
   }
 
+  /* ---- fullscreen, through the window -------------------------------------
+     WebKitGTK has no HTML Fullscreen API. `requestFullscreen` does not exist,
+     `document.fullscreenElement` is always null, and `fullscreenchange` never
+     fires - so the desktop build's fullscreen button could not do anything and
+     reported no failure either. The window itself can still go fullscreen, so
+     the page asks the shell instead.
+
+     js/media.js prefers this when it is present and keeps the HTML path for the
+     browser build, which has no problem. The bridge does not learn that a shell
+     exists; it only notices that something can do the job. */
+  let fullscreenActive = false;
+  const fullscreenListeners = [];
+
+  const announce = () => {
+    for (const fn of fullscreenListeners) {
+      try {
+        fn(fullscreenActive);
+      } catch (err) {
+        console.warn('[tauri] a fullscreen listener threw:', err);
+      }
+    }
+  };
+
+  /* The window can leave fullscreen without the page asking - a window manager
+     shortcut, or being dragged to another monitor - so this follows the window
+     rather than only the button. Resizing is the event the platform actually
+     produces for it; there is no fullscreen event in the page's world. */
+  function watchWindow() {
+    const api = tauri.window;
+    if (!api || typeof api.getCurrentWindow !== 'function') return;
+    api.getCurrentWindow()
+      .onResized(() => {
+        invoke('is_fullscreen')
+          .then((live) => {
+            if (live === fullscreenActive) return;
+            fullscreenActive = live;
+            announce();
+          })
+          /* Not knowing is not the same as knowing it ended. Guessing would
+             strand the button in the wrong state. */
+          .catch(() => {});
+      })
+      .catch(() => {});
+  }
+
+  const fullscreenHook = {
+    get active() { return fullscreenActive; },
+    async toggle() {
+      const next = !fullscreenActive;
+      /* Set first so a synchronous read right after this call agrees with the
+         button the user just pressed. Reverted if the window says no. */
+      fullscreenActive = next;
+      try {
+        await invoke('set_fullscreen', { fullscreen: next });
+      } catch (err) {
+        fullscreenActive = !next;
+        throw err;
+      }
+      announce();
+    },
+    onChange(fn) {
+      fullscreenListeners.push(fn);
+    },
+  };
+
+  /* Installed only once the shell has confirmed it can answer. Guessing with
+     `typeof invoke === 'function'` proves nothing - invoke is always a
+     function - and an older shell with no such command would leave a button
+     wired to a route that does not exist. */
+  invoke('is_fullscreen')
+    .then((live) => {
+      fullscreenActive = live;
+      window.MediaFullscreen = fullscreenHook;
+      watchWindow();
+    })
+    .catch(() => {
+      /* No fullscreen command here. js/media.js keeps the page's own API, which
+         is the honest thing to fall back to rather than a dead button. */
+    });
+
   window.MediaFileSourceTauri = {
     /* The whole point of the desktop build: the playlist is written as paths
        and read back on the next launch. */

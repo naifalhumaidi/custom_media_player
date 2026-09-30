@@ -38,6 +38,16 @@ function installShell(options = {}) {
       }
       return `http://127.0.0.1:35415/m/${Buffer.from(p).toString('hex').slice(0, 16)}`;
     },
+    /* The window's own answer, which is the truth. `refuseFullscreen` makes the
+       window say no, which is a case the page has to survive honestly. */
+    is_fullscreen: () => options.startFullscreen === true,
+    set_fullscreen: ({ fullscreen }) => {
+      if (options.refuseFullscreen) {
+        return Promise.reject(new Error('the window refused to go fullscreen'));
+      }
+      options.startFullscreen = fullscreen;
+      return Promise.resolve();
+    },
     load_state: () => options.state === undefined ? null : options.state,
     save_state: (args) => {
       calls.push(['save_state', args]);
@@ -62,6 +72,16 @@ function installShell(options = {}) {
          encoding is the part worth reproducing. */
       convertFileSrc: (p) => 'asset://localhost/' + String(p).split('/').map(encodeURIComponent).join('/'),
     },
+    /* Stand-in for the window API the shell uses to notice a fullscreen change
+       that did not come from the page. */
+    window: {
+      getCurrentWindow: () => ({
+        onResized: (fn) => {
+          listeners['resized'] = fn;
+          return Promise.resolve(() => { delete listeners['resized']; });
+        },
+      }),
+    },
     event: {
       listen: (name, fn) => {
         listeners[name] = fn;
@@ -69,7 +89,16 @@ function installShell(options = {}) {
       },
     },
   };
-  return { calls, listeners, emit: (name, payload) => listeners[name] && listeners[name]({ payload }) };
+  return {
+    calls,
+    listeners,
+    /* Exposed because several tests drive the window's state directly, the way
+       a window manager would. */
+    options,
+    emit: (name, payload) => listeners[name] && listeners[name]({ payload }),
+    /* The platform's event for a fullscreen change made outside the page. */
+    resize: (payload) => listeners['resized'] && listeners['resized'](payload),
+  };
 }
 
 describe('registration', () => {
@@ -77,6 +106,7 @@ describe('registration', () => {
     delete window.__TAURI__;
     delete window.__TAURI_INTERNALS__;
     delete window.MediaFileSourceTauri;
+    delete window.MediaFullscreen;
   });
 
   it('registers nothing in a browser, so index.html can always include it', () => {
@@ -388,4 +418,151 @@ describe('with a shell', () => {
        pretending to support it would silently break every drop. */
     expect(SRC.dropItems({ dataTransfer: { files: [1, 2, 3] } })).toEqual([]);
   });
+});
+
+/* ---- fullscreen, through the window ------------------------------------- */
+
+describe('fullscreen through the window', () => {
+  /* Its own block, deliberately. The shell describe loads the adapter in a
+     beforeEach, so a test here that installs a second adapter races the first
+     one's pending probe - and the winner is whichever resolves first, which is
+     not the one under test. A clean slate per test is the only honest way to
+     assert on something installed asynchronously. */
+
+  let shell;
+
+  /* WebKitGTK has no HTML Fullscreen API: requestFullscreen does not exist,
+     document.fullscreenElement is permanently null and fullscreenchange never
+     fires. The button was therefore dead on Linux, and reported nothing. */
+
+  const install = async (options) => {
+    shell = installShell(options);
+    // eslint-disable-next-line no-new-func
+    new Function(MIME_SRC)();
+    // eslint-disable-next-line no-new-func
+    new Function(SOURCE_SRC)();
+    /* The hook appears only once the shell has answered, so a test that wants
+       to inspect it has to let that answer land first. */
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    return window.MediaFullscreen;
+  };
+
+  beforeEach(() => {
+    delete window.MediaFullscreen;
+    delete window.MediaFileSourceTauri;
+  });
+
+  afterEach(() => {
+    delete window.__TAURI__;
+    delete window.__TAURI_INTERNALS__;
+    delete window.MediaFullscreen;
+    delete window.MediaFileSourceTauri;
+  });
+
+/* ---- fullscreen, through the window ---------------------------------- */
+
+/* WebKitGTK has no HTML Fullscreen API: requestFullscreen does not exist,
+   document.fullscreenElement is permanently null and fullscreenchange never
+   fires. The button was therefore dead on Linux and said nothing. These are
+   the only tests that cover the route that replaced it. */
+
+/* The hook is installed only after the shell has answered, so a test that
+   wants to inspect it has to let that answer land first. Not awaiting here is
+   how a test ends up asserting on undefined and blaming the adapter. */
+const installWithFullscreen = async (options) => {
+  shell = installShell(options);
+  // eslint-disable-next-line no-new-func
+  new Function(MIME_SRC)();
+  // eslint-disable-next-line no-new-func
+  new Function(SOURCE_SRC)();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  return window.MediaFullscreen;
+};
+
+it('offers a fullscreen hook, because the HTML API is not there', async () => {
+  const hook = await installWithFullscreen({});
+  expect(hook).toBeDefined();
+  expect(typeof hook.toggle).toBe('function');
+  expect(hook.active).toBe(false);
+});
+
+it('toggles the window, and the button state follows the window', async () => {
+  const hook = await installWithFullscreen({});
+
+  await hook.toggle();
+  expect(shell.options.startFullscreen).toBe(true);
+  expect(hook.active).toBe(true);
+
+  await hook.toggle();
+  expect(shell.options.startFullscreen).toBe(false);
+  expect(hook.active).toBe(false);
+});
+
+it('reverts its state when the window refuses, rather than lying about it', async () => {
+  const hook = await installWithFullscreen({ refuseFullscreen: true });
+  await expect(hook.toggle()).rejects.toThrow(/refused/);
+  /* A button showing fullscreen when the window is not is worse than one
+     that did nothing: the user has no way to tell the two apart. */
+  expect(hook.active).toBe(false);
+});
+
+/* The window can leave fullscreen without the page asking - a window manager
+   shortcut, or being dragged to another monitor. */
+it('follows the window when fullscreen ends without the page asking', async () => {
+  const hook = await installWithFullscreen({ startFullscreen: true });
+  expect(hook.active).toBe(true);
+
+  const seen = [];
+  hook.onChange(() => seen.push(hook.active));
+
+  shell.options.startFullscreen = false;
+  shell.resize();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(hook.active).toBe(false);
+  expect(seen).toContain(false);
+});
+
+it('keeps notifying the other listeners when one of them throws', async () => {
+  const hook = await installWithFullscreen({ startFullscreen: true });
+
+  let reached = false;
+  hook.onChange(() => { throw new Error('a bad listener'); });
+  hook.onChange(() => { reached = true; });
+
+  shell.options.startFullscreen = false;
+  shell.resize();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(reached).toBe(true);
+});
+
+/* A window manager can restore fullscreen across a crash, so the initial
+   state is asked for rather than assumed to be false. */
+it('starts from the window, not from an assumption', async () => {
+  shell = installShell({ startFullscreen: true });
+  // eslint-disable-next-line no-new-func
+  new Function(MIME_SRC)();
+  // eslint-disable-next-line no-new-func
+  new Function(SOURCE_SRC)();
+
+  /* Not yet: the answer has not come back, and claiming otherwise would flash
+     the wrong button on every launch. */
+  expect(window.MediaFullscreen).toBeUndefined();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(window.MediaFullscreen.active).toBe(true);
+});
+
+it('offers no hook when the shell cannot answer, leaving the HTML path alone', async () => {
+  shell = installShell({});
+  window.__TAURI__.core.invoke = (cmd) => (
+    cmd === 'is_fullscreen' ? Promise.reject(new Error('no such command')) : Promise.resolve()
+  );
+  // eslint-disable-next-line no-new-func
+  new Function(MIME_SRC)();
+  // eslint-disable-next-line no-new-func
+  new Function(SOURCE_SRC)();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  /* An older shell without the command is not a reason to break the app;
+     js/media.js keeps using the page's own API in that case. */
+  expect(window.MediaFullscreen).toBeUndefined();
+});
 });

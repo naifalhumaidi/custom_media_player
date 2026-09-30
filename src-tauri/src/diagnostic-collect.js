@@ -8,7 +8,7 @@
    in a window that is not the focused one, so a page-side timeout is not
    trustworthy. This is polled from a Rust thread, which is not throttled. */
 
-(() => {
+(async () => {
   const report = window.__DIAG__ || { error: 'the page never recorded anything' };
   report.page_was_hidden = String(document.hidden);
   report.visibility = String(document.visibilityState);
@@ -29,6 +29,32 @@
       + report.stage2_video_packaged;
   } else {
     report.verdict = 'FAIL - the probe never reached the media stack';
+  }
+
+  /* Fullscreen, driven exactly as the button drives it. Worth proving rather
+     than assuming: WebKitGTK has no HTML Fullscreen API at all, so this is the
+     only route there is, and it was never exercised before. */
+  try {
+    const shellFs = window.MediaFullscreen;
+    if (shellFs && typeof shellFs.toggle === 'function') {
+      const channel = (window.__TAURI__ && window.__TAURI__.core)
+        || window.__TAURI_INTERNALS__;
+      const before = await channel.invoke('is_fullscreen');
+      await shellFs.toggle();
+      await new Promise((r) => setTimeout(r, 400));
+      const during = await channel.invoke('is_fullscreen');
+      report.fullscreen_shell = 'present, changed the window: ' + (before !== during);
+      report.fullscreen_button_state = String(shellFs.active);
+      /* Back, so the diagnostic does not leave the window fullscreen. */
+      await shellFs.toggle();
+      await new Promise((r) => setTimeout(r, 300));
+      report.fullscreen_restored = String(!(await channel.invoke('is_fullscreen')));
+    } else {
+      report.fullscreen_shell = 'ABSENT - the button would do nothing';
+      report.fullscreen_html_api = typeof document.documentElement.requestFullscreen;
+    }
+  } catch (err) {
+    report.fullscreen_shell = 'threw: ' + err;
   }
 
   const core = window.__TAURI__ && window.__TAURI__.core;
