@@ -18,7 +18,6 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ELECTRON="${ELECTRON_BIN:-/usr/lib/electron41/electron}"
 PORT="${PORT:-8000}"
-NULL_SINK="mt_e2e_sink"
 
 cd "$ROOT"
 
@@ -44,27 +43,20 @@ if ! curl -fsS -o /dev/null "http://127.0.0.1:$PORT/"; then
 fi
 
 # ---- a sink with no output ---------------------------------------------------
-SINK_LOADED=""
-if command -v pactl >/dev/null 2>&1; then
-  if pactl list short sinks 2>/dev/null | grep -q ":$NULL_SINK$"; then
-    SINK_LOADED="existing"
-  elif pactl load-module module-null-sink "sink_name=$NULL_SINK" >/dev/null 2>&1; then
-    SINK_LOADED="loaded"
-  fi
-  if [ -n "$SINK_LOADED" ]; then
-    echo "e2e: audio routed to the null sink '$NULL_SINK' ($SINK_LOADED)"
-  else
-    echo "e2e: WARNING no null sink available; relying on --mute-audio alone" >&2
-  fi
-else
-  echo "e2e: WARNING pactl not found; relying on --mute-audio alone" >&2
-fi
+# Shared with the desktop runner, and the single place that decides silence.
+#
+# This used to create and tear down its own sink, and the teardown never
+# worked: it read `pactl list short modules` and split on ":", while pactl
+# separates those columns with tabs. The failure was silent, and twenty
+# `mt_e2e_sink` sinks accumulated on the machine before it was noticed.
+# shellcheck source=tests/e2e/quiet.sh
+. "$ROOT/tests/e2e/quiet.sh"
 
-cleanup() {
-  [ "$SINK_LOADED" = "loaded" ] && pactl unload-module "$(pactl list short modules | grep ":$NULL_SINK" | cut -d: -f1 | head -1)" 2>/dev/null
-  return 0
-}
-trap 'cleanup' EXIT
+if [ -n "${PULSE_SINK:-}" ]; then
+  echo "e2e: audio routed to the null sink '$PULSE_SINK'"
+else
+  echo "e2e: WARNING no null sink available; relying on --mute-audio alone" >&2
+fi
 
 # ---- suites ------------------------------------------------------------------
 if [ $# -gt 0 ]; then
@@ -85,7 +77,7 @@ for suite in "${SUITES[@]}"; do
   raw="$(mktemp)"
   # Electron's own flags: the suites need autoplay to be allowed, and audio
   # off. The harness sets these too, so a hand-run suite is quiet as well.
-  PULSE_SINK="$NULL_SINK" timeout 400 "$ELECTRON" \
+  timeout 400 "$ELECTRON" \
     --mute-audio \
     --autoplay-policy=no-user-gesture-required \
     "$suite" >"$raw" 2>&1
