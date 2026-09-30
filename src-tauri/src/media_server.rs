@@ -73,6 +73,23 @@ fn registry() -> &'static Mutex<Registry> {
    bug which reconnects in a loop cannot spawn threads without end. */
 const MAX_CONNECTIONS: usize = 24;
 
+/* A media element carrying a `crossorigin` attribute makes a CORS request, and
+   a response without these headers is discarded *without an error*: the element
+   reports NETWORK_NO_SOURCE and sits at readyState 0 for ever, showing nothing
+   and saying nothing.
+
+   That is not a corner case. The player library puts `crossorigin` on its own
+   element, so every video failed this way while a plain `<video>` pointed at the
+   very same URL loaded fine - which is why the media diagnostic and the
+   application disagreed for as long as they did.
+
+   Sending them is safe here. Only paths the application registered are
+   reachable, they are addressed by unguessable tokens, and the listener is
+   bound to loopback: another page on the same machine would have to guess a
+   token before it could read a byte. */
+const CORS: &str = "Access-Control-Allow-Origin: *\r\n\
+     Access-Control-Expose-Headers: Content-Range, Content-Length, Accept-Ranges, Content-Type\r\n";
+
 fn connections() -> &'static AtomicUsize {
     static COUNT: OnceLock<AtomicUsize> = OnceLock::new();
     COUNT.get_or_init(|| AtomicUsize::new(0))
@@ -171,6 +188,21 @@ fn handle(stream: TcpStream) {
         }
     }
 
+    if method == "OPTIONS" {
+        /* A preflight. Answered rather than refused, because a media element
+           with `crossorigin` may send one and a 405 here is a failure the page
+           cannot explain. */
+        respond(
+            &mut writer,
+            204,
+            "text/plain",
+            b"",
+            Some("Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\nAccess-Control-Allow-Headers: Range"),
+            true,
+        );
+        return;
+    }
+
     if method != "GET" && method != "HEAD" {
         respond(&mut writer, 405, "text/plain", b"method not allowed", None, false);
         return;
@@ -240,7 +272,7 @@ fn handle(stream: TcpStream) {
              Content-Range: bytes {start}-{end}/{total}\r\n\
              Accept-Ranges: bytes\r\n\
              Cache-Control: no-store\r\n\
-             Connection: close\r\n\r\n"
+             Connection: close\r\n{CORS}\r\n"
         );
         if method == "HEAD" {
             let _ = writer.write_all(header.as_bytes());
@@ -262,7 +294,7 @@ fn handle(stream: TcpStream) {
              Content-Length: {total}\r\n\
              Accept-Ranges: bytes\r\n\
              Cache-Control: no-store\r\n\
-             Connection: close\r\n\r\n"
+             Connection: close\r\n{CORS}\r\n"
         );
         if method == "HEAD" {
             let _ = writer.write_all(header.as_bytes());
@@ -319,7 +351,7 @@ fn respond(
          Content-Type: {content_type}\r\n\
          Content-Length: {}\r\n\
          Cache-Control: no-store\r\n\
-         Connection: close\r\n",
+         Connection: close\r\n{CORS}\r\n",
         body.len()
     );
     if let Some(extra) = extra {

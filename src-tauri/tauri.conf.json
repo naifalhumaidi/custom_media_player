@@ -15,8 +15,10 @@
         "label": "main",
         "width": 1100,
         "height": 700,
+        "minWidth": 480,
+        "minHeight": 420,
         "center": true,
-        "resizable": false,
+        "resizable": true,
         "fullscreen": false,
         "dragDropEnabled": true
       }

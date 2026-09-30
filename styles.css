@@ -24,7 +24,40 @@ html, body {
   inset: 0;
   display: block;
   width: 100%;
+  /* The player library writes `--player-width` onto this element, from its own
+     measurement, and uses it for the width. That measurement includes the
+     control bar, whose natural width is what it is trying to fit - so the two
+     agree on a number larger than the window and each keeps the other there.
+
+     The result was a player wider than the stage, which clips its overflow: the
+     bar was drawn at 924px inside an 800px window and the last four controls
+     were rendered off screen with nothing to say so. `max-width` breaks the
+     loop by letting the container have the last word. */
+  max-width: 100%;
+  max-height: 100%;
   height: 100%;
+
+  /* The loop has to be broken at the variable, not at `width`. The library
+     writes these two onto the element from its own measurement, and measures
+     the control bar - whose natural width is exactly what it is trying to fit.
+     So it settles on a number wider than the window and each keeps the other
+     there: on an 800px window the player settled at 924px and the last four
+     controls were drawn off screen and clipped.
+
+     `!important` because the value arrives as an inline style, which otherwise
+     wins against anything in this file. Overriding the variable rather than
+     `width` is what makes it stick: the library's own rule then computes a
+     percentage of the stage, and the bar inside it can shrink. */
+  --player-width: 100% !important;
+  --media-width: 100% !important;
+  /* And the width itself, for the same reason. Setting only the variable was
+     not enough: the computed width stayed at the library's own measurement
+     while the variable read 100%, which means the rule that consumes it is not
+     the one producing the used width. `min-width` is the other candidate - CSS
+     lets it win over `max-width` - so it is pinned too. */
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
   /* deliberately no background: a painted backdrop behind letterboxed media
      reads as a hard frame around the picture */
   background: transparent;

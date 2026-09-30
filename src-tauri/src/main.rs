@@ -198,6 +198,24 @@ fn is_fullscreen(window: WebviewWindow) -> bool {
     live
 }
 
+/* Resizes the window from the page, so the layout can be measured at the sizes
+   a person actually uses.
+
+   Diagnostic and walkthrough only. A layout that clips its own controls at one
+   window size is invisible to a unit test, because jsdom reports every element
+   as visible whatever the viewport - the only way to see it is to size a real
+   window and measure where the controls ended up. */
+#[tauri::command]
+async fn diagnostic_set_size(window: WebviewWindow, width: f64, height: f64) -> Result<(), String> {
+    let size = tauri::LogicalSize::new(width, height);
+    window
+        .set_size(tauri::PhysicalSize::new(
+            (size.width * window.scale_factor().unwrap_or(1.0)) as u32,
+            (size.height * window.scale_factor().unwrap_or(1.0)) as u32,
+        ))
+        .map_err(|e| format!("cannot resize the window: {e}"))
+}
+
 /* Diagnostic only, and deliberately so.
 
    A drag that a user starts is delivered by the toolkit, and nothing here can
@@ -292,6 +310,7 @@ fn print_diagnostic(app: AppHandle, window: WebviewWindow, report: Value, done: 
 
 fn main() {
     let diagnose = std::env::args().any(|a| a == "--diagnose");
+    let walkthrough = std::env::args().any(|a| a == "--walkthrough");
 
     /* Before anything WebKit-related exists. WebKitGTK keeps a hardcoded list
        of schemes its media stack will open - blob, data, file, http, https -
@@ -310,7 +329,33 @@ fn main() {
            not exist yet when setup runs, so a lookup there finds nothing and
            the diagnostic silently never happens. */
         .on_page_load(move |window, payload| {
-            if diagnose && payload.event() == tauri::webview::PageLoadEvent::Finished {
+            if payload.event() != tauri::webview::PageLoadEvent::Finished {
+                return;
+            }
+            /* Two ways in, and they measure different things. `--diagnose`
+               answers whether this machine can play at all. `--walkthrough`
+               drives the journeys a person drives, in the real window, at real
+               sizes - the only way to see a control clipped off the edge, since
+               jsdom reports every element as visible whatever the viewport. */
+            if walkthrough {
+                let probe = std::env::var("MT_PROBE_FILE").unwrap_or_default();
+                let preamble = format!(
+                    "window.__PROBE_FILE__ = {};",
+                    serde_json::to_string(&probe).unwrap_or_else(|_| "\"\"".into())
+                );
+                let script = format!("{preamble}\n{}", include_str!("walkthrough.js"));
+                window.eval(&script).ok();
+                let window = window.clone();
+                std::thread::spawn(move || {
+                    /* Long on purpose. The journeys resize the window five
+                       times, drop a file and wait for real playback; cutting
+                       the wait short reports a timeout as a failure. */
+                    std::thread::sleep(std::time::Duration::from_millis(20000));
+                    let _ = window.close();
+                });
+                return;
+            }
+            if diagnose {
                 /* The page records what it finds on window.__DIAG__ and this
                    thread collects it. The page's own timers are not used for
                    the wait: WebKit throttles timers in a page it considers
@@ -351,6 +396,7 @@ fn main() {
             set_fullscreen,
             is_fullscreen,
             diagnostic_simulate_drop,
+            diagnostic_set_size,
             list_folder,
             file_exists,
             print_diagnostic,

@@ -47,6 +47,16 @@ async function main() {
       const dump = kids.map((k) => k.tagName.toLowerCase() + '.' + k.className + '[' + Math.round(k.getBoundingClientRect().left) + '..' + Math.round(k.getBoundingClientRect().right) + ']').join(' ');
       const widest = [...row.children].map((k) => ({ n: k.className, r: Math.round(k.getBoundingClientRect().right), w: Math.round(k.getBoundingClientRect().width) }))
         .filter((x) => x.r > window.innerWidth - 12).map((x) => x.n + ' w' + x.w + ' r' + x.r).join(', ');
+      /* The player must never be wider than the window. On WebKitGTK it was
+         not: the library wrote its own measured width back onto the element,
+         measured from a control bar that was itself trying to fit, and the two
+         agreed on a number larger than the window. Everything inside it was then
+         drawn off screen and clipped, which is invisible here in Chromium - the
+         library sizes itself differently - so this check exists to catch the
+         class of bug in whichever engine can reproduce it. */
+      const media = document.getElementById('media');
+      const mr = media ? media.getBoundingClientRect() : { width: 0 };
+      const mediaOverflow = Math.round(mr.width) > window.innerWidth + 1;
       const over = [...row.querySelectorAll('*')].filter((e) => e.getBoundingClientRect().right > window.innerWidth + 0.5)
         .map((e) => e.tagName.toLowerCase() + '.' + (e.className.baseVal !== undefined ? e.className.baseVal : e.className).toString().split(' ')[0] + '@' + Math.round(e.getBoundingClientRect().right));
       return {
@@ -57,11 +67,12 @@ async function main() {
         volW: Math.round(vr.width), volVisible: cs.display !== 'none' && vr.width > 20,
         overlap, widest, dump, rdump, rscroll: right.scrollWidth, rclient: right.clientWidth,
         barH: Math.round(bar.getBoundingClientRect().height),
+        mediaW: Math.round(mr.width), mediaOverflow,
       };
     })()`);
-    const bad = r.clipped || !r.volVisible || r.overlap;
+    const bad = r.clipped || !r.volVisible || r.overlap || r.mediaOverflow;
     WINS.push({ w, bad });
-    console.log(`  ${String(r.win).padStart(5)}px  row ${r.rowScroll}/${r.rowClient}  lastRight ${String(r.lastRight).padStart(5)}  vol ${String(r.volW).padStart(3)}px ${r.volVisible ? 'vis' : 'GONE'}  ${r.overlap ? 'OVERLAP' : ''} ${r.dump ? r.dump + ' | RIGHT ' + r.rdump + ' scroll ' + r.rscroll + '/' + r.rclient + ' ' : ''}${r.overflowers ? 'Ovf:' + r.overflowers + ' ' : ''}${bad ? '  <-- FAIL' : ''}`);
+    console.log(`  ${String(r.win).padStart(5)}px  row ${r.rowScroll}/${r.rowClient}  lastRight ${String(r.lastRight).padStart(5)}  vol ${String(r.volW).padStart(3)}px ${r.volVisible ? 'vis' : 'GONE'}  ${r.overlap ? 'OVERLAP' : ''} ${r.dump ? r.dump + ' | RIGHT ' + r.rdump + ' scroll ' + r.rscroll + '/' + r.rclient + ' ' : ''}${r.overflowers ? 'Ovf:' + r.overflowers + ' ' : ''}player ${r.mediaW}px${r.mediaOverflow ? ' TOO WIDE' : ''}${bad ? '  <-- FAIL' : ''}`);
   }
   /* One verdict line, like every other suite: a bare list of measurements
      cannot be grepped for pass/fail and a silent regression would go unnoticed. */

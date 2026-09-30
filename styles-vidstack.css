@@ -109,6 +109,34 @@ media-provider > video {
 
 /* ---------- sliders ---------- */
 
+/* The slider element has to be allowed to shrink, and that has to be said here.
+
+   `.vds-slider` is `width: 100%`, and its parent - the custom element - was a
+   flex item with no basis and no `min-width: 0`. A percentage contributes
+   nothing to intrinsic sizing, so the parent took its width from the content it
+   was trying to fit, overflowed the window, and pushed every button that came
+   after it off screen. On a 1600px window the bar reached 1739px and the last
+   four controls were simply not there.
+
+   The time slider absorbs the slack, and is allowed to go as narrow as it needs
+   to; the volume slider stays fixed, because a slider with no width is not a
+   control. */
+media-time-slider {
+  display: block;
+  flex: 1 1 140px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+media-time-slider .vds-slider { max-width: 100%; }
+
+media-volume-slider {
+  display: block;
+  flex: 0 0 64px;
+  width: 64px;
+  min-width: 64px;
+}
+
 .vds-slider {
   display: inline-flex;
   align-items: center;
