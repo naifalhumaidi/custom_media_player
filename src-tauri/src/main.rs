@@ -23,7 +23,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
-use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
 
 mod media_server;
@@ -198,6 +198,31 @@ fn is_fullscreen(window: WebviewWindow) -> bool {
     live
 }
 
+/* Diagnostic only, and deliberately so.
+
+   A drag that a user starts is delivered by the toolkit, and nothing here can
+   stand in for that - no toolkit will invent a pointer drag. What can be
+   checked is everything the app owns: that the event arrives on the page, that
+   js/source-tauri.js subscribes to the right name, that the paths become
+   items, and that each item arrives with a URL it can actually play. That is
+   the part that had never been run.
+
+   Emitting the same event the toolkit emits, from this side, covers exactly
+   that and stops at the toolkit's own boundary. */
+#[tauri::command]
+fn diagnostic_simulate_drop(window: WebviewWindow, paths: Vec<String>) -> Result<(), String> {
+    let payload = serde_json::json!({ "type": "drop", "paths": paths });
+    window
+        .emit("tauri://drag-drop", payload.clone())
+        .map_err(|e| format!("could not deliver the drop: {e}"))?;
+    /* A second name, to tell "the emit did not reach the page" apart from "the
+       page filters this particular name". */
+    window
+        .emit("mt-diag-drop", payload)
+        .map_err(|e| format!("could not deliver the control drop: {e}"))?;
+    Ok(())
+}
+
 /* ------------------------------------------------------------------ */
 /* local media                                                         */
 /* ------------------------------------------------------------------ */
@@ -298,8 +323,12 @@ fn main() {
                    quietly testing something else. */
                 let probe = std::env::var("MT_PROBE_FILE").unwrap_or_default();
                 let audio = std::env::var("MT_PROBE_AUDIO").unwrap_or_default();
+                /* Opt-in, because simulating a drop adds a row to the real
+                   playlist and the app saves it afterwards. A diagnostic that
+                   rewrites what the user left behind is not a diagnostic. */
+                let drop = std::env::var("MT_PROBE_DROP").is_ok_and(|v| v != "0");
                 let preamble = format!(
-                    "window.__PROBE_FILE__ = {}; window.__PROBE_MP3__ = {};",
+                    "window.__PROBE_FILE__ = {}; window.__PROBE_MP3__ = {}; window.__PROBE_DROP__ = {drop};",
                     serde_json::to_string(&probe).unwrap_or_else(|_| "\"\"".into()),
                     serde_json::to_string(&audio).unwrap_or_else(|_| "\"\"".into())
                 );
@@ -321,6 +350,7 @@ fn main() {
             media_url,
             set_fullscreen,
             is_fullscreen,
+            diagnostic_simulate_drop,
             list_folder,
             file_exists,
             print_diagnostic,
