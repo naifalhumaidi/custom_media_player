@@ -131,13 +131,15 @@
     say('stage2_video_packaged', await load('assets/probe.mp4', 10000));
 
     /* Stage 3 - a real file on disk, through the same call the app makes. This
-       is the only stage that actually answers "will the app play a video". */
+       is the only stage that actually answers "will the app play a video".
+       It asks the shell for the URL rather than building one, because that is
+       what the application does. */
     if (probeFile) {
       let url = '';
       try {
-        url = String(core.convertFileSrc(probeFile));
+        url = String(await core.invoke('media_url', { path: probeFile }));
       } catch (err) {
-        say('stage3_video_real_file', 'convertFileSrc THREW: ' + err);
+        say('stage3_video_real_file', 'media_url THREW: ' + err);
       }
       if (url) {
         say('stage3_url', url.slice(0, 70));
@@ -167,17 +169,42 @@
       say('stage5_video_http_asset', 'running');
       say('stage5_video_http_asset', await load(httpAsset, 10000));
 
-      /* Stage 6 and 7 - does declaring the type change the outcome, and does
-         audio-only fare any better than video? An MP3 needs no video decoder,
-         so if it fails too then nothing about H.264 is involved and the fault
-         is in the pipeline rather than in the format. */
+      /* Stage 6 - audio, asked the same way the application asks for it. An MP3
+         needs no video decoder, so this separates "no video decoder" from
+         "no media pipeline". It goes through the shell rather than over
+         file://, because file:// is refused for a page that is not itself a
+         file - which is a fact about loading, not about audio. */
       const mp3 = window.__PROBE_MP3__ || '';
       if (mp3) {
-        say('stage6_audio_mp3', 'running');
-        say('stage6_audio_mp3', await load('file://' + mp3, 10000, 'audio/mpeg'));
+        let audioUrl = '';
+        try {
+          audioUrl = String(await core.invoke('media_url', { path: mp3 }));
+        } catch (err) {
+          say('stage6_audio_mp3', 'media_url THREW: ' + err);
+        }
+        if (audioUrl) {
+          say('stage6_audio_mp3', 'running');
+          say('stage6_audio_mp3', await load(audioUrl, 10000));
+        }
       }
       say('stage7_video_typed', 'running');
       say('stage7_video_typed', await load(fileUrl, 10000, 'video/mp4'));
+    }
+
+    /* Stage 8 - a data: URL, which involves no scheme, no server and no
+       network. Every other scheme has been refused before any load was even
+       attempted, so this separates "this URL is refused" from "the media
+       player will not start at all". If this works, the pipeline is fine and
+       the earlier failures were about which origins it will open. If it fails
+       too, nothing about the URL is at fault. */
+    try {
+      const bytes = new Uint8Array(await (await fetch('assets/probe.mp4')).arrayBuffer());
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+      say('stage8_data_url', 'running');
+      say('stage8_data_url', await load('data:video/mp4;base64,' + btoa(binary), 10000));
+    } catch (err) {
+      say('stage8_data_url', 'could not build a data URL: ' + err);
     }
 
     say('probe_complete', 'yes');

@@ -29,6 +29,15 @@ function installShell(options = {}) {
     pick_folder: () => options.folder === undefined ? null : options.folder,
     list_folder: ({ dir }) => options.folderContents || [],
     file_exists: ({ path: p }) => (options.missing || []).includes(p) ? false : true,
+    /* The shell serves local files over loopback; this mirrors that, including
+       the per-process port that makes a saved URL worthless on the next
+       launch. */
+    media_url: ({ path: p }) => {
+      if ((options.urlFails || []).includes(p)) {
+        return Promise.reject(new Error('could not open a local port'));
+      }
+      return `http://127.0.0.1:35415/m/${Buffer.from(p).toString('hex').slice(0, 16)}`;
+    },
     load_state: () => options.state === undefined ? null : options.state,
     save_state: (args) => {
       calls.push(['save_state', args]);
@@ -150,37 +159,117 @@ describe('with a shell', () => {
     expect(items[0].path).toBe('C:\\Users\\me\\Videos\\clip.mov');
   });
 
-  it('resolves a path to an asset URL, and caches it', async () => {
-    const item = { path: '/media/a b/clip.mp4' };
-    const first = SRC.urlFor(item);
-    expect(first).toBe('asset://localhost//media/a%20b/clip.mp4');
-    /* the player asks repeatedly, and re-encoding a long path each time would
-       be work for nothing */
-    expect(SRC.urlFor(item)).toBe(first);
+  it('gives an opened file a loopback URL the media stack can open', async () => {
+    shell = installShell({ files: ['/media/a b/clip.mp4'] });
+    // eslint-disable-next-line no-new-func
+    new Function(SOURCE_SRC)();
+    SRC = window.MediaFileSourceTauri;
+
+    const [item] = await SRC.openFiles();
+    /* Not an asset:// URL: GStreamer has no handler for that scheme on Linux,
+       which is why the shell serves the bytes itself. */
+    expect(item.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/m\//);
+    /* The player asks repeatedly; the answer cannot change, so it is kept. */
+    expect(SRC.urlFor(item)).toBe(item.url);
+    expect(SRC.urlFor(item)).toBe(item.url);
   });
 
   it('refuses an item with no path, with a message that says why', () => {
     expect(() => SRC.urlFor({ name: 'x.mp4' })).toThrow(/no path/);
   });
 
-  it('release clears the cached URL and keeps the path', async () => {
-    const item = { path: '/media/clip.mp4' };
+  it('says so plainly when the shell could not give a URL, rather than handing back one that will fail', async () => {
+    shell = installShell({ files: ['/media/clip.mp4'], urlFails: ['/media/clip.mp4'] });
+    // eslint-disable-next-line no-new-func
+    new Function(SOURCE_SRC)();
+    SRC = window.MediaFileSourceTauri;
+
+    const [item] = await SRC.openFiles();
+    expect(item.url).toBeNull();
+    expect(() => SRC.urlFor(item)).toThrow(/could not give/);
+  });
+
+  it('release keeps the URL, because there is nothing to give back', async () => {
+    shell = installShell({ files: ['/media/clip.mp4'] });
+    // eslint-disable-next-line no-new-func
+    new Function(SOURCE_SRC)();
+    SRC = window.MediaFileSourceTauri;
+
+    const [item] = await SRC.openFiles();
     const first = SRC.urlFor(item);
     SRC.release(item);
-    expect(item.url).toBeNull();
+    /* The URL names a path the shell registered, not a blob this adapter
+       created. Dropping it would mean a clear-undo could not bring the row
+       back without asking the shell for it all over again. */
+    expect(item.url).toBe(first);
     expect(item.path).toBe('/media/clip.mp4');
-    /* still resolvable, so a clear-undo can bring the row back */
-    /* The same path always yields the same asset URL - that is the point of a
-       URL. What matters is that the item is still resolvable afterwards. */
     expect(() => SRC.urlFor(item)).not.toThrow();
   });
 
-  it('release is safe to call twice and on nothing', () => {
-    const item = { path: '/media/clip.mp4' };
-    SRC.urlFor(item);
+  it('release is safe to call twice and on nothing', async () => {
+    shell = installShell({ files: ['/media/clip.mp4'] });
+    // eslint-disable-next-line no-new-func
+    new Function(SOURCE_SRC)();
+    SRC = window.MediaFileSourceTauri;
+
+    const [item] = await SRC.openFiles();
     SRC.release(item);
     expect(() => SRC.release(item)).not.toThrow();
     expect(() => SRC.release(null)).not.toThrow();
+  });
+
+  /* The trap this closes: a saved URL names the port of the process that
+     wrote it, which is gone by the next launch. Restoring it as-is produces a
+     playlist that looks complete and plays nothing. */
+  it('re-registers restored rows instead of trusting a saved URL', async () => {
+    shell = installShell({
+      state: {
+        items: [
+          { name: 'one.mp4', path: '/media/one.mp4', kind: 'video', url: 'http://127.0.0.1:9999/m/stale' },
+        ],
+      },
+    });
+    // eslint-disable-next-line no-new-func
+    new Function(SOURCE_SRC)();
+    SRC = window.MediaFileSourceTauri;
+
+    const state = await SRC.loadState();
+    expect(state.items[0].url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/m\//);
+    expect(state.items[0].url).not.toContain('9999');
+  });
+
+  it('does not write a dead URL into the saved state', async () => {
+    shell = installShell({ files: ['/media/clip.mp4'] });
+    // eslint-disable-next-line no-new-func
+    new Function(SOURCE_SRC)();
+    SRC = window.MediaFileSourceTauri;
+
+    const [item] = await SRC.openFiles();
+    expect(item.url).toBeTruthy();
+    await SRC.saveState({ items: [item], index: 0 });
+
+    const saved = shell.calls.find(([cmd]) => cmd === 'save_state');
+    expect(saved).toBeTruthy();
+    expect(saved[1].state.items[0].url).toBeUndefined();
+    expect(saved[1].state.items[0].path).toBe('/media/clip.mp4');
+  });
+
+  /* Dropped files reach the playlist and the first one starts playing at once,
+     so a row handed over without a URL would be visible and unplayable. */
+  it('registers dropped files before handing them to the app', async () => {
+    shell = installShell({});
+    // eslint-disable-next-line no-new-func
+    new Function(SOURCE_SRC)();
+    SRC = window.MediaFileSourceTauri;
+
+    const received = [];
+    const stop = SRC.onExternalDrop((items) => received.push(...items));
+    shell.emit('tauri://drag-drop', { type: 'drop', paths: ['/media/dropped.mp4'] });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(received).toHaveLength(1);
+    expect(received[0].url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/m\//);
+    stop();
   });
 
   it('reports a file that has moved', async () => {

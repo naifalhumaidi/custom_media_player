@@ -26,6 +26,8 @@ use serde_json::Value;
 use tauri::{AppHandle, Manager, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
 
+mod media_server;
+
 /* ------------------------------------------------------------------ */
 /* saved state                                                        */
 /* ------------------------------------------------------------------ */
@@ -163,6 +165,28 @@ fn file_exists(path: String) -> bool {
 }
 
 /* ------------------------------------------------------------------ */
+/* local media                                                         */
+/* ------------------------------------------------------------------ */
+
+/* The URL a local file can actually be played from.
+
+   Not `convertFileSrc`. On Linux the asset URL that returns is unusable: the
+   webview decodes through GStreamer, GStreamer has no URI handler for the
+   `asset://` scheme Tauri registers with the network layer, and the load fails
+   before a single byte is read. See src/media_server.rs for the full account
+   and for the alternatives that were tried and ruled out.
+
+   An Err here is not a shrug: it means the loopback server could not start,
+   which is the one situation in which nothing local can play, and the webview
+   is told rather than left to time out. */
+#[tauri::command]
+fn media_url(path: String) -> Result<String, String> {
+    media_server::register(&path).ok_or_else(|| {
+        "this shell could not open a local port, so local files cannot be played".to_string()
+    })
+}
+
+/* ------------------------------------------------------------------ */
 /* diagnostic                                                         */
 /* ------------------------------------------------------------------ */
 
@@ -210,6 +234,17 @@ fn print_diagnostic(app: AppHandle, window: WebviewWindow, report: Value, done: 
 fn main() {
     let diagnose = std::env::args().any(|a| a == "--diagnose");
 
+    /* Before anything WebKit-related exists. WebKitGTK keeps a hardcoded list
+       of schemes its media stack will open - blob, data, file, http, https -
+       and refuses everything else with no message the page can see. The app's
+       own origin and Tauri's asset scheme are both on neither list, so this
+       has to be in place before the webview starts or no local file loads. */
+    std::env::set_var("WEBKIT_GST_ALLOWED_URI_PROTOCOLS", "asset,tauri");
+
+    /* Also before the webview: the loopback port has to exist by the time the
+       first item asks for a URL. */
+    media_server::start();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         /* on_page_load, not setup: the window declared in tauri.conf.json does
@@ -249,6 +284,7 @@ fn main() {
             save_state,
             pick_files,
             pick_folder,
+            media_url,
             list_folder,
             file_exists,
             print_diagnostic,

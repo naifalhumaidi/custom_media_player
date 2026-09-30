@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: blob: asset: http://asset.localhost tauri:; media-src 'self' blob: asset: http://asset.localhost tauri:; style-src 'self' 'unsafe-inline'; script-src 'self'",
+      "csp": "default-src 'self'; img-src 'self' data: blob: asset: http://asset.localhost tauri: http://127.0.0.1:*; media-src 'self' blob: asset: http://asset.localhost tauri: http://127.0.0.1:*; style-src 'self' 'unsafe-inline'; script-src 'self'",
       "assetProtocol": {
         "enable": true,
         "scope": [

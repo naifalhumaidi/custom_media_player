@@ -46,19 +46,33 @@
     };
   }
 
-  /* How a path becomes something the webview will load. convertFileSrc is the
-     documented route; if it is absent the asset URL is built by hand, because
-     a missing function here would mean the app silently plays nothing. */
-  function assetUrl(path) {
-    if (typeof core.convertFileSrc === 'function') {
-      return core.convertFileSrc(path);
-    }
-    const encoded = path.split('/').map(encodeURIComponent).join('/');
-    /* Linux and Windows serve the asset protocol over http on this host name;
-       macOS uses a custom scheme. Getting this wrong fails loudly at load
-       rather than quietly, so the fallback is worth having. */
-    const host = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? null : 'http://asset.localhost/';
-    return host ? host + encoded.replace(/^([A-Za-z]):/, '$1:') : 'asset://localhost/' + encoded;
+  /* How a path becomes something the webview will load.
+
+     Not convertFileSrc, and not the asset protocol. On Linux the webview
+     decodes through GStreamer, GStreamer has no URI handler for the asset
+     scheme, and the load fails with no error the page can see - the file
+     simply never starts. The shell therefore serves local files over loopback
+     and hands back that URL. See src-tauri/src/media_server.rs for the whole
+     account, including the alternatives that were tried.
+
+     Registration happens when an item enters the playlist rather than when the
+     player asks for it. That keeps `urlFor` synchronous, which is the contract
+     in js/source.js and what app.js relies on in three places, including one
+     where a rejected promise would be an unhandled rejection rather than a
+     catchable error. */
+  async function withUrls(items) {
+    await Promise.all(items.map(async (item) => {
+      if (!item || !item.path) return;
+      try {
+        item.url = await invoke('media_url', { path: item.path });
+      } catch (err) {
+        /* Left null on purpose. `urlFor` then refuses with a message that says
+           the shell could not help, rather than handing back a URL that fails
+           later with nothing to explain it. */
+        item.url = null;
+      }
+    }));
+    return items;
   }
 
   window.MediaFileSourceTauri = {
@@ -68,7 +82,7 @@
 
     async openFiles() {
       const paths = await invoke('pick_files');
-      return (paths || []).map(toItem);
+      return withUrls((paths || []).map(toItem));
     },
 
     async openFolder() {
@@ -77,7 +91,7 @@
       const paths = await invoke('list_folder', { dir });
       /* Filtered here, with the shared table, so a folder full of documents
          does not produce a run of rows that cannot play. */
-      return (paths || []).filter((p) => isPlayable(baseName(p))).map(toItem);
+      return withUrls((paths || []).filter((p) => isPlayable(baseName(p))).map(toItem));
     },
 
     /* Not implemented on purpose. The desktop shell delivers paths on a
@@ -89,17 +103,21 @@
       if (!item.path) {
         throw new Error('this item has no path and can no longer be played');
       }
-      /* Cached: the player asks repeatedly, and building the URL each time
-         would re-encode a long path on every seek. */
-      if (!item.url) item.url = assetUrl(item.path);
+      /* Set when the item entered the playlist. A row restored from disk is
+         registered during loadState, because a URL written by a previous
+         launch names a port from a previous process. */
+      if (!item.url) {
+        throw new Error('the shell could not give this file a playable URL');
+      }
       return item.url;
     },
 
-    /* Nothing to give back. The asset protocol is the platform's, and the file
-       on disk is the user's. */
-    release(item) {
-      if (item) item.url = null;
-    },
+    /* Nothing to give back, and nothing to clear. What the browser source
+       releases here is a blob: URL it created; this one holds a URL that names
+       a path the shell registered, and it stays valid for as long as the row
+       is in the playlist. That is what lets a clear-undo bring the row
+       straight back without asking the shell for anything again. */
+    release() {},
 
     async fileExists(item) {
       if (!item || !item.path) return false;
@@ -114,7 +132,12 @@
 
     async loadState() {
       try {
-        return await invoke('load_state');
+        const state = await invoke('load_state');
+        /* Re-register every restored row. A URL written by a previous launch
+           names a port from a process that no longer exists, so keeping it
+           would restore a playlist that looks complete and plays nothing. */
+        if (state && Array.isArray(state.items)) await withUrls(state.items);
+        return state;
       } catch (err) {
         console.warn('[tauri] could not read the saved state:', err);
         return null;
@@ -124,6 +147,16 @@
     async saveState(state) {
       const prefs = {};
       for (const key of PERSISTED) prefs[key] = state[key];
+      /* The loopback port and its token are per-process, so a saved URL is
+         dead the moment the app closes. Written, it would be restored as a
+         row that silently cannot play. */
+      if (Array.isArray(prefs.items)) {
+        prefs.items = prefs.items.map((item) => {
+          if (!item || typeof item !== 'object' || !('url' in item)) return item;
+          const { url, ...rest } = item;
+          return rest;
+        });
+      }
       try {
         await invoke('save_state', { state: prefs });
         document.dispatchEvent(new CustomEvent('mediatools:saved'));
@@ -151,10 +184,15 @@
         if (payload.type !== 'drop' || !payload.paths || !payload.paths.length) return;
         pending = pending.concat(payload.paths.map(toItem));
         clearTimeout(timer);
-        timer = setTimeout(() => {
+        timer = setTimeout(async () => {
           const batch = pending;
           pending = [];
           timer = 0;
+          if (stopped) return;
+          /* Registered before the callback, because the app adds these rows to
+             the playlist and starts playing the first one straight away. A row
+             that arrives without a URL would be visible and unplayable. */
+          await withUrls(batch);
           if (!stopped) callback(batch);
         }, 0);
       });
