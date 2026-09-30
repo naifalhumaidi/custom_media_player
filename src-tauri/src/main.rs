@@ -222,12 +222,24 @@ fn main() {
                    the wait: WebKit throttles timers in a page it considers
                    hidden, and a diagnostic that silently never finishes is
                    worse than none. A Rust thread is not throttled. */
-                let script = include_str!("diagnostic.js").to_string();
+                /* The probe needs a real file on disk, because "can this app
+                   play a video" is only answered by loading one the way the app
+                   loads a user's file. Supplied by the caller as an absolute
+                   path; the probe reports clearly when it is absent rather than
+                   quietly testing something else. */
+                let probe = std::env::var("MT_PROBE_FILE").unwrap_or_default();
+                let audio = std::env::var("MT_PROBE_AUDIO").unwrap_or_default();
+                let preamble = format!(
+                    "window.__PROBE_FILE__ = {}; window.__PROBE_MP3__ = {};",
+                    serde_json::to_string(&probe).unwrap_or_else(|_| "\"\"".into()),
+                    serde_json::to_string(&audio).unwrap_or_else(|_| "\"\"".into())
+                );
+                let script = format!("{preamble}\n{}", include_str!("diagnostic.js"));
                 window.eval(&script).ok();
                 let collect = include_str!("diagnostic-collect.js").to_string();
                 let window = window.clone();
                 std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_millis(7000));
+                    std::thread::sleep(std::time::Duration::from_millis(15000));
                     window.eval(&collect).ok();
                 });
             }

@@ -26,3 +26,6 @@ packaging/*.PKGINFO
 packaging/*.MTREE
 src-tauri/target/
 src-tauri/gen/schemas/
+
+# Built binaries handed over for manual testing
+artifacts/

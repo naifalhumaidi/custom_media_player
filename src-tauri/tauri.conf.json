@@ -22,16 +22,23 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: blob: asset: http://asset.localhost; media-src 'self' blob: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'",
+      "csp": "default-src 'self'; img-src 'self' data: blob: asset: http://asset.localhost tauri:; media-src 'self' blob: asset: http://asset.localhost tauri:; style-src 'self' 'unsafe-inline'; script-src 'self'",
       "assetProtocol": {
         "enable": true,
-        "scope": ["**"]
+        "scope": [
+          "**"
+        ]
       }
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["deb", "appimage", "nsis", "msi"],
+    "targets": [
+      "deb",
+      "appimage",
+      "nsis",
+      "msi"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -44,7 +51,10 @@
     "longDescription": "Plays images, video and audio from your own disk. Nothing is uploaded and nothing leaves the machine.",
     "linux": {
       "deb": {
-        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"]
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0"
+        ]
       }
     },
     "windows": {
