@@ -104,40 +104,57 @@ a null sink**, so running the suites never makes a sound.
 
 ## Layout
 
-```
-index.html          markup and the inline SVG icon sprite
-app.js              all application state: playlist, panel, drops, keys, dialogs
-js/media.js         the only file that knows a playback library exists
-js/source.js        picks the file-source adapter
-js/source-web.js    the browser adapter: object URLs, MIME types, persistence
-js/i18n.js          English and Arabic
-js/settings.js      language, logo, brand colour
-styles.css          the chrome
-styles-vidstack.css styles for the library's own controls
-serve.js            the static file server
-vendor/             Vidstack 1.15.6 (MIT) + its licence
-tests/unit/         vitest suites
-tests/e2e/          headless browser suites
-```
+    src/            the application, in TypeScript
+      types.ts      the contracts the three shells all keep to
+      core/         what a file IS
+      source/       browser, tauri, electron, and the selector between them
+      bridge/       the only file that knows a media library exists
+      ui/           translations and settings
+      app.ts        the application
+    js/             generated from src/ by esbuild, and committed
+    shells/
+      electron/     the Electron main process and its preload
+      tauri/        the Rust source lives in src-tauri
+    tests/
+      unit/         vitest, jsdom, the real index.html
+      e2e/          the runner, the Chromium suites, and the walkthrough
+    scripts/        the build, the packaging, the frontend allowlist
+    docs/           this and its translations
+    artifacts/      built binaries (not committed)
 
-`requirements.md` is the specification of record. The rest is in [`docs/`](docs/):
-[analysis](docs/analysis.md), [system design](docs/system-design.md),
-[architecture](docs/architecture.md), and
-[the desktop build](docs/desktop.md).
+js/ is generated and committed. It is the shipped artifact, so a fresh clone can
+open the page with no toolchain at all. `npm run build:web` regenerates it, and
+`npm run typecheck` runs the compiler over src/ without emitting anything - it is
+wired into `pretest`, so every test run type-checks first.
 
-## The desktop app
+The compiled output is one classic script per source file and unbundled, because
+index.html loads plain <script> tags and each file registers a global. A bundle
+would leave the load order implicit, and js/ unreadable in a browser's sources
+panel.
 
-The same code in a native window, with real file paths and a playlist that
-survives a restart.
+## The desktop apps
+
+The same code in a native window, with real file paths, native dialogs, and a
+playlist that survives a restart. Two shells, one application.
 
 ```bash
+# Tauri - the small one. Rust, WebKitGTK on Linux, WebView2 on Windows.
 npm run desktop:dev      # build the web assets, then launch
-npm run desktop:build    # .deb, .appimage, .msi, setup.exe
+npm run desktop:build    # .deb and friends
+
+# Electron - the predictable one. Bundles its own Chromium.
+tests/e2e/electron-run.sh                    # against the installed Electron
+npm run package:electron -- linux win32     # self-contained (~250 MB each)
 ```
 
-See [`docs/desktop.md`](docs/desktop.md) — including how to check whether the
-machine can actually decode H.264, which on Linux is the one thing that silently
-breaks a video player.
+Neither shell is a fork. `src/source/` holds one adapter per environment and
+`src/source/index.ts` picks between them; `app.js` - now `src/app.ts` - contains
+no `if (isTauri)` anywhere and none of the adapters knows the others exist.
+
+Both are tested the same way, by the same walkthrough driving the same journeys
+in a real window. See [`docs/desktop.md`](docs/desktop.md) - including why a
+video player built on WebKitGTK cannot play a local file until the shell serves
+it, and how to check whether a machine can decode H.264 at all.
 
 ## Design notes
 

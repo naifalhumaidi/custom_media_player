@@ -116,7 +116,43 @@ and nothing is heard.
 - how it looks and feels on a real screen, at real window sizes
 - the Windows build, which is cross-compiled and has never been run (§8)
 
-## 3a. Two bugs that were not bugs in this app
+## 3b. How a journey is actually tested
+
+A unit test cannot see a control that is clipped off the edge of a real window,
+because jsdom reports every element as visible whatever the viewport. Nor can it
+see a control that is present and does nothing. Both of those were real bugs
+here, and neither was visible from the code.
+
+So there is a walkthrough: `tests/e2e/walkthrough.js`, run by both desktop
+shells against the real application in a real window.
+
+    ./tests/e2e/desktop.sh --walkthrough        # Tauri
+    ./tests/e2e/electron-desktop.sh --walkthrough   # Electron
+
+It does what a person does:
+
+  1. resize the window to 1600x1000, 1280x800, 1024x640, 800x520 and 520x440,
+     and check every control is inside the viewport and has a size
+  2. drop a real file on the window and check the playlist grows
+  3. play it: is the duration known, is the time advancing, does seek work
+  4. pause
+  5. press `f` and check the window went fullscreen and came back
+  6. check a moved file keeps its row rather than vanishing
+
+One script, both shells, so a journey cannot mean one thing in Tauri and another
+in Electron. It waits for conditions rather than for a length of time - a fixed
+sleep reported a working player as broken on a cold start, which is worse than
+not testing.
+
+**A note on what it cannot check.** It drives the drop through the shell's own
+event, so everything the app owns is covered - the event, the adapter, the URL
+registration - and it stops at the toolkit boundary, because no machine can
+invent a pointer drag. The Chromium suites in tests/e2e cannot catch the layout
+bug at all: the player library sizes itself differently there, so the same CSS
+passes in Electron and fails on WebKitGTK. That asymmetry is the reason a
+walkthrough on the real engine exists at all.
+
+## 3a. Three bugs that were not bugs in this app
 
 Both were reported as "it has bugs". Neither was in the application logic; both
 were platform facts that the shell had to accommodate. They are written down
@@ -157,6 +193,22 @@ Two consequences, both easy to get wrong:
 - **`WEBKIT_GST_ALLOWED_URI_PROTOCOLS` is set before the webview exists.**
   WebKitGTK keeps a hardcoded list of schemes its media stack will open — `blob`,
   `data`, `file`, `http`, `https` — and refuses everything else silently.
+
+### Controls were drawn off screen
+
+The player library writes `--player-width` onto the player element from its own
+measurement, and measures the control bar - whose natural width is what it is
+trying to fit. So the two agree on a number larger than the window and each keeps
+the other there. On an 800px window the player settled at 924px, the stage
+clipped the overflow, and the last four controls were not on screen at all.
+
+Overriding the variable was not enough: the computed width stayed at 924 while
+the variable read 100%, which means the rule producing the used width is not the
+one consuming the variable - and `min-width` is allowed to beat `max-width`. The
+width is now pinned outright.
+
+Compounding it, the window was `resizable: false`, so anything the layout clipped
+was permanently unreachable, and there was no maximize button either.
 
 ### Fullscreen did nothing
 
