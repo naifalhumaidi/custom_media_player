@@ -23,7 +23,25 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const http = require('node:http');
 
-const ROOT = path.resolve(__dirname, '..', '..');
+/* Where the frontend lives.
+
+   Two layouts, and both have to work: in this repository it is `dist/` two
+   directories up, and in a packaged application it sits inside the app
+   directory. Probing for the page itself rather than for a marker is what makes
+   the same code work in both - a packaged app that could only find one of them
+   would be a build nobody tested. */
+function findRoot(start) {
+  for (const candidate of [
+    path.resolve(start, '..', '..'),                 // this repository
+    path.resolve(start, '..'),                       // packaged: app/dist
+    start,
+  ]) {
+    if (fs.existsSync(path.join(candidate, 'dist', 'index.html'))) return candidate;
+  }
+  throw new Error(`cannot find the frontend: no dist/index.html near ${start}`);
+}
+
+const ROOT = findRoot(__dirname);
 
 /* Opt-in tracing. A GUI process that hangs before it prints anything is
    indistinguishable from one that works, and the walkthrough runner needs to be
