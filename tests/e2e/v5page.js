@@ -59,7 +59,8 @@ window.__DONE = (async () => {
     const logoEl = document.querySelector('.logo');
     S('logo: present at boot', !!logoEl && !logoEl.hidden);
     S('logo: loaded at boot', logoEl.complete && logoEl.naturalWidth > 0);
-    S('logo: uses the shipped artwork', (logoEl.getAttribute('src') || '') === 'assets/logo-small.png');
+    /* The built-in wordmark, not the artwork that used to ship here. */
+    S('logo: uses the built-in mark', (logoEl.getAttribute('src') || '') === 'assets/logo-default.svg');
     S('time: placeholder localised', document.querySelector('media-time').textContent);
 
     /* ---- 3. logical button order ---- */
@@ -138,15 +139,13 @@ window.__DONE = (async () => {
     S('settings: button offers the default back', $('set-logo-clear').textContent);
     $('set-logo-clear').click();
     await wait(300);
-    S('settings: clear hides the start logo', document.querySelector('.logo').hidden === true);
-    S('settings: button becomes restore', $('set-logo-clear').textContent);
-    $('set-logo-clear').click();
-    await wait(300);
-    S('settings: restore brings the mark back', document.querySelector('.logo').hidden === false);
-    S('settings: restored src', document.querySelector('.logo').getAttribute('src'));
-    // put the real logo back for the rest of the run
-    document.querySelector('.logo').src = 'assets/logo-small.png';
-    document.querySelector('.logo').hidden = false;
+    /* Removing your mark used to hide the logo entirely and turn the button
+       into "use the default". There is no blank start window any more: it falls
+       back to the built-in wordmark, and the button stays "Remove". */
+    S('settings: clear leaves a mark', document.querySelector('.logo').hidden === false);
+    S('settings: clear falls back to the built-in', document.querySelector('.logo').getAttribute('src'));
+    S('settings: button never offers to restore', $('set-logo-clear').textContent);
+    S('settings: clear is disabled with no mark of your own', $('set-logo-clear').disabled === true);
 
     /* ---- 7. switch to Arabic ---- */
     $('set-lang').value = 'ar';
@@ -164,13 +163,18 @@ window.__DONE = (async () => {
     S('ar: language label', document.querySelector('label[for="set-lang"]').textContent);
     S('ar: colour label', [...document.querySelectorAll('#settings-modal .field label')].map((l) => l.textContent).join(' | '));
     S('ar: select options', [...$('set-lang').options].map((o) => o.textContent).join('/'));
-    S('ar: empty message', $('side-empty').textContent);
+    S('ar: empty message', $('side-empty').textContent.includes('لا شيء هنا'));
+    S('ar: empty message names the buttons', $('empty-add').textContent);
 
     $('settings-close').click(); await wait(250);
     S('ar: settings closed', $('settings-modal').hidden);
     $('help').click(); await wait(400);
     S('ar: help title', $('help-title').textContent);
-    S('ar: help table is arabic', document.querySelector('.keys').textContent.includes('ملء الشاشة'));
+    S('ar: help table is arabic', [...document.querySelectorAll('.keys')].map((k) => k.textContent).join(' ').includes('ملء الشاشة'));
+    S('ar: help says what the app does', document.querySelector('.help-tagline').textContent.length > 60);
+    S('ar: help lists the settings', document.querySelector('.help-defs').textContent.length > 20);
+    /* The control bar is a fixed arrangement, so it must not mirror in Arabic. */
+    S('bar stays left-to-right in arabic', getComputedStyle($('bar')).direction);
     S('ar: help groups', [...document.querySelectorAll('.keys th')].map((t) => t.textContent).join('|'));
     $('help-close').click(); await wait(250);
 

@@ -18,6 +18,7 @@
 
       'app.title': 'Media Tools',
       'app.logoAlt': 'Media Tools',
+      'app.about': 'Gather your images, video and audio into one list, arrange it the way you want, and move through it without hunting for anything. Drop files in, reorder with the mouse or the keyboard, keep your place between visits, and show any of it full screen - all on your own machine, with nothing uploaded anywhere.',
 
       /* --- control bar --- */
       'bar.open': 'Open files',
@@ -57,6 +58,10 @@
       'bar.help': 'Instructions',
       'bar.helpKey': 'Instructions (?)',
       'bar.settings': 'Settings',
+      'bar.openKey': 'Open files (O)',
+      'panel.addKey': 'Add files (O)',
+      'panel.addFolderKey': 'Add a folder (⇧O)',
+      'panel.closeKey': 'Close the playlist (P)',
       'bar.settingsKey': 'Settings',
 
       /* --- playlist panel --- */
@@ -77,10 +82,22 @@
       'notice.blocked': 'Press play to start',
       'notice.dropped': '{n} file(s) cannot be played here',
       'notice.restored': 'Restored {n} items — Shift+Z puts them back within 30s',
-      'panel.empty': 'The playlist is empty. Drop files here to add them.',
+      'panel.emptyTitle': 'Nothing here yet',
+      'panel.emptyAdd': 'Add files',
+      'panel.emptyAddFolder': 'Add a folder',
+      'panel.emptyOr': 'or drop them anywhere on the window',
+      'panel.clearKey': 'Clear the playlist (⇧X)',
+      'panel.clearAria': 'Clear the playlist',
 
       /* --- instructions dialog --- */
       'help.title': 'Instructions',
+      'help.settings': 'Settings',
+      'help.settingsLead': 'Three things you can change. Everything else is already set the way you would want it.',
+      'help.settings.language': 'English or Arabic. The interface follows; the control bar keeps its layout either way.',
+      'help.settings.logo': 'The mark on the start window. Remove yours and the built-in one comes back.',
+      'help.settings.color': 'Highlights, the timeline and the active row. Picked from your mark automatically.',
+      'help.settings.open': 'opens settings',
+      'help.k.open': 'open files / add a folder',
       'help.close': 'Close (Esc)',
       'help.files': 'Files',
       'help.shortcuts': 'Shortcuts',
@@ -122,12 +139,10 @@
       'settings.close': 'Close (Esc)',
       'settings.appearance': 'Appearance',
       'settings.language': 'Language',
-      'settings.languageHint': 'Applies immediately, everywhere in the app.',
       'settings.logo': 'Logo',
       'settings.logoHint': 'Shown on the start window. Remove it to hide the mark.',
       'settings.logoClear': 'Remove',
       'settings.color': 'Brand colour',
-      'settings.colorHint': 'Used for highlights, the timeline fill and the active row.',
       'settings.colorReset': 'Use the logo colour',
       'settings.logoUseDefault': 'Use the default',
       'settings.saveFailed': 'Settings could not be saved: the browser storage is full. The logo may be too large.',
@@ -149,6 +164,7 @@
 
       'app.title': 'ميديا تولز',
       'app.logoAlt': 'ميديا تولز',
+      'app.about': 'اجمع صورك وفيديوك وصوتياتك في قائمة واحدة، ورتّبها كما تريد، وتنقّل بينها دون البحث عن أي شيء. أفلت الملفات، وأعد ترتيبها بالفأرة أو بلوحة المفاتيح، واحتفظ بمكانك بين الزيارات، واعرض أي منها بملء الشاشة - كل ذلك على جهازك وحده، دون رفع أي شيء.',
 
       /* --- شريط التحكم --- */
       'bar.open': 'فتح ملفات',
@@ -188,6 +204,10 @@
       'bar.help': 'التعليمات',
       'bar.helpKey': 'التعليمات (?)',
       'bar.settings': 'الإعدادات',
+      'bar.openKey': 'فتح ملفات (O)',
+      'panel.addKey': 'إضافة ملفات (O)',
+      'panel.addFolderKey': 'إضافة مجلد (⇧O)',
+      'panel.closeKey': 'إغلاق قائمة التشغيل (P)',
       'bar.settingsKey': 'الإعدادات',
 
       /* --- لوحة قائمة التشغيل --- */
@@ -214,10 +234,22 @@
       'notice.blocked': 'اضغط تشغيل للبدء',
       'notice.dropped': '{n} ملف لا يمكن تشغيله هنا',
       'notice.restored': 'تمت استعادة {n} عنصر — Shift+Z يعيدها خلال ٣٠ ثانية',
-      'panel.empty': 'قائمة التشغيل فارغة. أفلت الملفات هنا لإضافتها.',
+      'panel.emptyTitle': 'لا شيء هنا بعد',
+      'panel.emptyAdd': 'إضافة ملفات',
+      'panel.emptyAddFolder': 'إضافة مجلد',
+      'panel.emptyOr': 'أو أفلتها في أي مكان على النافذة',
+      'panel.clearKey': 'مسح قائمة التشغيل (⇧X)',
+      'panel.clearAria': 'مسح قائمة التشغيل',
 
       /* --- نافذة التعليمات --- */
       'help.title': 'التعليمات',
+      'help.settings': 'الإعدادات',
+      'help.settingsLead': 'ثلاثة أمور يمكنك تغييرها. أما ما عداها فهو مضبوط كما تريد أصلًا.',
+      'help.settings.language': 'الإنجليزية أو العربية. تتغير الواجهة، ويبقى ترتيب أزرار التشغيل كما هو.',
+      'help.settings.logo': 'العلامة في نافذة البداية. عند حذف علامتك يعود تلقائيًا إلى العلامة المدمجة.',
+      'help.settings.color': 'التمييز والشريط الزمني والصف النشط. يُختار من علامتك تلقائيًا.',
+      'help.settings.open': 'يفتح الإعدادات',
+      'help.k.open': 'فتح ملفات / إضافة مجلد',
       'help.close': 'إغلاق (Esc)',
       'help.files': 'الملفات',
       'help.shortcuts': 'اختصارات لوحة المفاتيح',
@@ -259,12 +291,10 @@
       'settings.close': 'إغلاق (Esc)',
       'settings.appearance': 'المظهر',
       'settings.language': 'اللغة',
-      'settings.languageHint': 'تُطبَّق فورًا في كل أنحاء التطبيق.',
       'settings.logo': 'الشعار',
       'settings.logoHint': 'يظهر في نافذة البداية. أزله لإخفاء العلامة.',
       'settings.logoClear': 'إزالة',
       'settings.color': 'لون الهوية',
-      'settings.colorHint': 'يُستخدم في التمييز وتعبئة شريط التقدّم والصف النشط.',
       'settings.colorReset': 'استخدام لون الشعار',
       'settings.logoUseDefault': 'استخدام الافتراضي',
       'settings.saveFailed': 'تعذّر حفظ الإعدادات: مساحة التخزين ممتلئة. قد يكون الشعار كبيرًا.',

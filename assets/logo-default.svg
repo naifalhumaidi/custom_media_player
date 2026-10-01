@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 72" role="img" aria-label="Dev Player">
+  <!-- The built-in mark, used whenever there is no logo of your own.
+
+       Deliberately a wordmark rather than artwork: it has to look deliberate at
+       420px wide on the start window and at 190px in the settings dialog, and it
+       has to be readable in both scripts. Text scales; a drawing has to be
+       designed twice.
+
+       It is a separate file rather than a string in the code so that it is one
+       thing to replace later, when there is a real logo to replace it with. -->
+  <text x="120" y="46"
+        text-anchor="middle"
+        font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+        font-size="34"
+        font-weight="600"
+        letter-spacing="1.5"
+        fill="currentColor">Dev Player</text>
+</svg>

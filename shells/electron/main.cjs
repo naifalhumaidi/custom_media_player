@@ -414,7 +414,7 @@ async function createWindow() {
           console.error('[walkthrough] no report:', err && err.message);
           app.exit(1);
         });
-    }, 20000);
+    }, 30000);
   }
 }
 

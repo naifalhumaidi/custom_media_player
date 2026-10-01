@@ -79,7 +79,11 @@ import type { I18nModule, SavedState, SettingsModule } from '../types.js';
   /* The logo shipped in the markup is the default. `undefined` means "use it",
      `null` means the user removed it, a string is a chosen file. Collapsing
      those two cases wiped the default logo on every boot. */
-  let defaultLogo: string | null = null;
+  /* The built-in mark. Always shown when there is no logo of the user's, so the
+     start window is never blank and there is no "use the default" button to
+     explain. */
+  const DEFAULT_MARK = 'assets/logo-default.svg';
+  let defaultLogo: string | null = DEFAULT_MARK;
 
   /* Three states, and the distinction is the whole feature: `undefined` means
      never customised, so the shipped mark shows; `null` means the user removed
@@ -188,16 +192,16 @@ import type { I18nModule, SavedState, SettingsModule } from '../types.js';
       color.value = toHex(getComputedStyle(document.documentElement).getPropertyValue('--gold').trim());
     }
     if (reset) reset.textContent = t('settings.colorReset');
-    /* One button, two jobs: it hides the mark, and when the mark is hidden it
-       puts the shipped one back, so "removed" is never a dead end. */
+    /* One job: remove your own mark. It used to double as "put the default
+       back", which meant the button changed its own label depending on state -
+       and the label was the only thing explaining what pressing it would do. */
     if (logoClear) {
-      const removed = prefs.logo === null;
-      logoClear.textContent = removed ? t('settings.logoUseDefault') : t('settings.logoClear');
-      logoClear.disabled = !removed && !defaultLogo;
+      logoClear.textContent = t('settings.logoClear');
+      logoClear.disabled = prefs.logo === undefined;
     }
 
     if (preview) {
-      const src = prefs.logo === undefined ? defaultLogo : prefs.logo;
+      const src = currentMark();
       if (src) {
         preview.src = src;
         preview.hidden = false;
@@ -211,6 +215,127 @@ import type { I18nModule, SavedState, SettingsModule } from '../types.js';
 
   /* Downscale anything larger than a modest mark, so the stored data URL stays
      well inside the storage quota. */
+  /* The dominant colour of an image, as #rrggbb.
+
+     Scored by saturation and by how far from the mid grey it sits, because a
+     logo is usually one strong colour on a flat background and picking the
+     "average" of it produces mud. Buckets the pixels rather than averaging
+     them, so one bright pixel among a dark background wins - which is what the
+     eye reads as the colour of a logo.
+
+     Averages the bucket rather than taking a sample from it, so an edge or an
+     anti-aliased pixel cannot set the brand colour on its own. */
+  function dominantOf(canvas: HTMLCanvasElement): string | null {
+    const w = 24;
+    const h = Math.max(1, Math.round((canvas.height / canvas.width) * w));
+    const small = document.createElement('canvas');
+    small.width = w;
+    small.height = h;
+    const sctx = small.getContext('2d');
+    if (!sctx) return null;
+    sctx.drawImage(canvas, 0, 0, w, h);
+
+    let data: Uint8ClampedArray;
+    try {
+      data = sctx.getImageData(0, 0, w, h).data;
+    } catch {
+      /* A cross-origin image taints the canvas. Nothing to do here: the caller
+         falls back rather than guessing. */
+      return null;
+    }
+
+    const buckets = new Map<string, { n: number; r: number; g: number; b: number }>();
+    for (let i = 0; i < data.length; i += 4) {
+      const a = data[i + 3];
+      if (a < 128) continue;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const light = (max + min) / 2;
+      /* near-black, near-white and near-grey carry no brand information */
+      if (light < 24 || light > 236 || max - min < 18) continue;
+      const key = `${r >> 4},${g >> 4},${b >> 4}`;
+      const bucket = buckets.get(key) || { n: 0, r: 0, g: 0, b: 0 };
+      bucket.n += 1;
+      bucket.r += r;
+      bucket.g += g;
+      bucket.b += b;
+      buckets.set(key, bucket);
+    }
+    if (!buckets.size) return null;
+
+    let best = '';
+    let bestScore = -1;
+    for (const [key, bucket] of buckets) {
+      const r = bucket.r / bucket.n;
+      const g = bucket.g / bucket.n;
+      const b = bucket.b / bucket.n;
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const sat = max - min;
+      const light = (max + min) / 2;
+      /* vivid, and not so light it disappears against the dark chrome */
+      const score = sat * (light > 200 ? 0.2 : 1);
+      if (score > bestScore) {
+        bestScore = score;
+        best = key;
+      }
+    }
+    const bucket = buckets.get(best);
+    if (!bucket) return null;
+    const hex = (v: number) => Math.round(v / bucket.n).toString(16).padStart(2, '0');
+    return `#${hex(bucket.r)}${hex(bucket.g)}${hex(bucket.b)}`;
+  }
+
+  /* Loads an image and returns its dominant colour, or null. */
+  function colourFromImage(src: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          /* 64px is plenty to find a colour and keeps a huge logo cheap. */
+          canvas.width = 64;
+          canvas.height = Math.max(1, Math.round((img.naturalHeight / img.naturalWidth) * 64));
+          const ctx = canvas.getContext('2d');
+          if (!ctx || !img.naturalWidth) return resolve(null);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(dominantOf(canvas));
+        } catch {
+          resolve(null);
+        }
+      };
+      img.onerror = () => resolve(null);
+      /* A ceiling, so this always settles. Without it a mark that cannot load
+         leaves the promise pending and the button simply does nothing. */
+      setTimeout(() => resolve(null), 2000);
+      img.src = src;
+    });
+  }
+
+  /* The colour button, and picking a new mark, both go through here.
+
+     It used to restore a hardcoded gold, which is why pressing it looked broken:
+     the button said "use the logo colour" and produced a constant. */
+  async function useLogoColour(apply: boolean): Promise<string | null> {
+    const src = currentMark();
+    if (!src) return null;
+    const found = await colourFromImage(src);
+    if (!found) return null;
+    if (apply) {
+      prefs.color = found;
+      setBrandColor(found);
+      syncInputs();
+      notifySave();
+    }
+    return found;
+  }
+
+  /* Which mark is showing right now: the user's, or the built-in one. */
+  const currentMark = (): string | null => (prefs.logo === undefined ? defaultLogo : prefs.logo);
+
   async function shrinkImage(file) {
     try {
       const url = URL.createObjectURL(file);
@@ -261,9 +386,6 @@ import type { I18nModule, SavedState, SettingsModule } from '../types.js';
   document.addEventListener('mediatools:saved', clearSaveError);
 
   function wire(): void {
-    const shipped = document.querySelector<HTMLImageElement>('.logo');
-    if (shipped) defaultLogo = shipped.getAttribute('src') || null;
-
     const langSel = document.getElementById('set-lang') as HTMLSelectElement | null;
     const color = document.getElementById('set-color') as HTMLInputElement | null;
     const reset = document.getElementById('set-color-reset') as HTMLButtonElement | null;
@@ -306,10 +428,15 @@ import type { I18nModule, SavedState, SettingsModule } from '../types.js';
     });
 
     resetBtn.addEventListener('click', () => {
-      prefs.color = null;
-      setBrandColor(DEFAULT_LOGO_GOLD);
-      syncInputs();
-      notifySave();
+      /* Falls back to the built-in gold only when there is nothing to read a
+         colour from, which is not a state the app can normally be in. */
+      useLogoColour(true).then((found) => {
+        if (found) return;
+        prefs.color = null;
+        setBrandColor(DEFAULT_LOGO_GOLD);
+        syncInputs();
+        notifySave();
+      });
     });
 
     logoInput.addEventListener('change', async () => {
@@ -331,24 +458,28 @@ import type { I18nModule, SavedState, SettingsModule } from '../types.js';
         setLogo(prefs.logo);
         syncInputs();
         notifySave();
+        await useLogoColour(true);
         return;
       }
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         prefs.logo = String(reader.result);
         setLogo(prefs.logo);
         syncInputs();
         notifySave();
+        /* A new mark and a brand colour that disagrees with it look like a bug
+           in one of the two, so the colour follows the mark without being
+           asked. */
+        await useLogoColour(true);
       };
       reader.readAsDataURL(file);
     });
 
     logoClearBtn.addEventListener('click', () => {
-      /* Removed -> put the shipped mark back. Anything else -> hide it. The
-         "shipped default" state is not the same as "no logo": treating them as
-         one left the button offering to restore what was already showing, so
-         the mark could never be removed. */
-      prefs.logo = prefs.logo === null ? undefined : null;
+      /* Removes your mark and nothing else. It used to toggle between "gone"
+         and "shipped", which meant a state where the window had no mark at all
+         - and then a button offering to bring back what was already showing. */
+      prefs.logo = undefined;
       setLogo(prefs.logo);
       syncInputs();
       notifySave();

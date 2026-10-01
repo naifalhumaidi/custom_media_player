@@ -246,7 +246,7 @@
       return;
     }
 
-    const before = document.querySelectorAll('.row').length;
+    const before = document.querySelectorAll('#list li').length;
     await invoke('diagnostic_simulate_drop', { paths: [probeFile] });
     /* Until the player knows the file. `duration` is the honest signal: a
        playlist can contain the row while the media has not loaded yet, and
@@ -254,7 +254,7 @@
     await waitFor(() => Number.isFinite(bridge.duration) && bridge.duration > 0, 12000, 'the file to load');
 
     /* Did it reach the playlist? */
-    const rows = document.querySelectorAll('.row').length;
+    const rows = document.querySelectorAll('#list li').length;
     say('walkthrough_drop', `rows before=${before} after=${rows}`);
 
     /* The player's own state, which is the only honest answer to "does it
@@ -321,10 +321,16 @@
   /* ---- 4. fullscreen by keyboard ------------------------------------- */
 
   (async () => {
+    const fsButton = document.getElementById('fs');
     const before = await invoke('is_fullscreen');
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', bubbles: true }));
     await wait(600);
     const during = await invoke('is_fullscreen');
+    /* The button's own class, while fullscreen. Whether it *looks* enabled is a
+       question about CSS, but whether the state reaches the class at all is a
+       question about the app - and only one of those two ever gets checked. */
+    say('walkthrough_fs_button_in_fullscreen',
+      `window=${during} class="${fsButton ? fsButton.className : 'no button'}"`);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', bubbles: true }));
     await wait(600);
     const after = await invoke('is_fullscreen');
@@ -343,9 +349,9 @@
 
   (async () => {
     try {
-      const rowsBefore = document.querySelectorAll('.row').length;
+      const rowsBefore = document.querySelectorAll('#list li').length;
       await wait(400);
-      const rowsAfter = document.querySelectorAll('.row').length;
+      const rowsAfter = document.querySelectorAll('#list li').length;
       const missing = document.querySelectorAll('.row.missing, .row.is-missing, .row[data-missing]').length;
       say('walkthrough_missing_rows',
         `rows ${rowsBefore} -> ${rowsAfter}, ${missing} marked as gone (a moved file keeps its row)`);
@@ -355,8 +361,13 @@
   })();
 
   /* Report once everything has had time, and mark it so a second call knows. */
+  /* Long enough for every journey to finish, including the twelve-second
+     ceiling on a file that never loads. It used to be seven seconds, which was
+     long enough when there were fewer journeys and no longer is - and a report
+     printed early omits sections silently, so a run could pass while a whole
+     journey went unrecorded. */
   (async () => {
-    await wait(7000);
+    await wait(20000);
     const failures = [];
     for (const [key, value] of Object.entries(report)) {
       const text = String(value);

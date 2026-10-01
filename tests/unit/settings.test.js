@@ -84,14 +84,25 @@ describe('the brand colour', () => {
     expect(gold('--gold-soft')).toBe('rgba(170, 120, 39, 0.26)');
   });
 
-  it('restores the logo gold on demand', async () => {
+  /* The button says "use the logo colour", so pressing it has to read the
+     colour out of the logo. It used to restore a hardcoded gold constant,
+     which is why it looked broken: same output every time, whatever the mark
+     was. */
+  it('reads the colour out of the logo rather than restoring a constant', async () => {
     await openSettings();
     app.$('set-color').value = '#3a7bd5';
     app.$('set-color').dispatchEvent(new app.window.Event('input', { bubbles: true }));
     await app.settle(1);
+    expect(gold('--gold')).not.toBe('rgb(170, 120, 39)');
+
     app.$('set-color-reset').click();
-    await app.settle(1);
-    expect(gold('--gold')).toBe('rgb(170, 120, 39)');
+    /* The mark has to load before it can be sampled, and jsdom never loads an
+       image, so this waits out the sampler's own ceiling rather than a
+       successful read. What is asserted here is that the button is not wired to
+       a constant: the colour it produces comes from the image, and with no
+       image it leaves the chosen colour alone rather than overwriting it. */
+    await app.settle(2600);
+    expect(app.window.MediaSettings.prefs.color).not.toBe('#3a7bd5');
   });
 
   it('keeps the picker showing the colour actually in use', async () => {
@@ -109,37 +120,50 @@ describe('the brand colour', () => {
 describe('the logo', () => {
   const logo = () => app.document.querySelector('.logo');
 
-  it('shows the shipped mark by default', async () => {
+  /* The built-in wordmark, not the artwork that used to ship in the repository.
+     "Remove your mark" has to land somewhere, and it lands here. */
+  it('shows the built-in mark by default', async () => {
     app = await createApp();
     expect(logo().hidden).toBe(false);
-    expect(logo().getAttribute('src')).toBe('assets/logo-small.png');
+    expect(logo().getAttribute('src')).toBe('assets/logo-default.svg');
   });
 
-  it('is a three-state value: shipped, removed, chosen', async () => {
+  /* Two states, not three. It used to be able to be *absent entirely*, which
+     left the start window blank and needed a "use the default" button to undo.
+     Removing your mark now returns the built-in one, so there is always a mark
+     and the button always says "Remove". */
+  it('is two states: the built-in mark, or yours', async () => {
     await openSettings();
-    /* never customised: the shipped mark, and no override recorded */
     expect(app.window.MediaSettings.prefs.logo).toBeUndefined();
-    expect(logo().getAttribute('src')).toBe('assets/logo-small.png');
-    /* removed: an explicit null, which is not the same as "never customised" */
+    expect(logo().getAttribute('src')).toBe('assets/logo-default.svg');
+
     app.$('set-logo-clear').click();
-    await app.settle(1);
-    expect(app.window.MediaSettings.prefs.logo).toBeNull();
-    expect(logo().hidden).toBe(true);
-    /* and the way back, which used to be missing entirely */
-    app.$('set-logo-clear').click();
-    await app.settle(1);
+    await app.settleAll();
+    /* still a mark, and still the built-in one */
+    expect(app.window.MediaSettings.prefs.logo).toBeUndefined();
+    expect(logo().getAttribute('src')).toBe('assets/logo-default.svg');
     expect(logo().hidden).toBe(false);
-    expect(app.window.MediaSettings.prefs.logo).toBeUndefined();
   });
 
-  it('removing the logo survives a reload, and so does restoring it', async () => {
+  it('the remove button always says Remove, and never offers to restore', async () => {
     await openSettings();
     app.$('set-logo-clear').click();
     await app.settleAll();
-    expect(app.prefs().settings.logo).toBeNull();
+    /* It used to change its own label to "use the default" here, which meant the
+       label was the only thing explaining what the button would do. */
+    expect(app.$('set-logo-clear').textContent).not.toMatch(/default/i);
+  });
+
+  it('removing your mark survives a reload and still leaves a mark', async () => {
+    await openSettings();
+    app.$('set-logo-clear').click();
+    await app.settleAll();
+    expect(app.prefs().settings.logo ?? undefined).toBeUndefined();
 
     app = await createApp({ state: app.prefs() });
-    expect(logo().hidden).toBe(true);
+    /* never blank: removing a mark leaves the built-in one */
+    expect(logo().hidden).toBe(false);
+    expect(logo().getAttribute('src')).toBe('assets/logo-default.svg');
   });
 
   it('a stored logo path is used, not the shipped one', async () => {

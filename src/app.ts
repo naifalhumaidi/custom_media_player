@@ -444,6 +444,11 @@ function renderEmptyState() {
   const note = $('side-empty');
   if (note) note.hidden = !open;
   list.hidden = open;
+  /* The drop hint appears only once there is a playlist to add to. Shown
+     alongside the empty message it repeated the same instruction twice, in two
+     voices, and neither mentioned the buttons. */
+  const hint = document.querySelector<HTMLElement>('.side-hint');
+  if (hint) hint.hidden = open || !items.length;
 }
 
 /* ---------------- rendering ---------------- */
@@ -620,18 +625,33 @@ $('fs').onclick = () => media.toggleFullscreen();
 $('open').onclick = () => pick(true);
 $('add').onclick = () => pick(false);
 
+/* The clear button, in the panel header. Only where the playlist can actually
+   be kept: in a browser tab everything is lost on reload anyway, so a clear
+   button there is a way to throw work away for nothing. */
+if (source.canPersist()) {
+  const clearButton = $('clear-list');
+  if (clearButton) {
+    clearButton.hidden = false;
+    /* keepUndo, like the keyboard shortcut. The button is easier to hit by
+       accident than a key combination, so the undo is more necessary here, not
+       less. */
+    clearButton.onclick = () => clearAll(true);
+  }
+}
+
 /* A folder is only meaningful where files have real paths, so the control only
    appears when the source offers one. */
 if (typeof source.openFolder === 'function') {
+  const openFolder = async () => {
+    const all = (await source.openFolder?.()) || [];
+    reportUnusable(all);
+    const picked = all.filter((it) => it.kind);
+    if (picked.length) addItems(picked, false);
+  };
   const addFolder = $('add-folder');
   if (addFolder) {
     addFolder.hidden = false;
-    addFolder.onclick = async () => {
-      const all = (await source.openFolder?.()) || [];
-      reportUnusable(all);
-      const picked = all.filter((it) => it.kind);
-      if (picked.length) addItems(picked, false);
-    };
+    addFolder.onclick = openFolder;
   }
 }
 

@@ -66,6 +66,12 @@ else
   echo "electron-desktop: virtual display :$DISPLAY_NUM ready"
 fi
 
+# See tests/e2e/desktop.sh: an empty, isolated configuration directory, so a run
+# does not inherit the last one's playlist.
+export XDG_CONFIG_HOME="${MT_CONFIG_HOME:-/tmp/mt-walkthrough-config-electron}"
+rm -rf "$XDG_CONFIG_HOME"
+mkdir -p "$XDG_CONFIG_HOME"
+
 export DISPLAY=":$DISPLAY_NUM"
 
 # Chromium prefers Wayland whenever WAYLAND_DISPLAY is set, and it does not care

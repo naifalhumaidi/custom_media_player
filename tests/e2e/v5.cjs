@@ -26,7 +26,7 @@ const expect = {
   'icons: none collapsed': 'none',
   'logo: present at boot': true,
   'logo: loaded at boot': true,
-  'logo: uses the shipped artwork': true,
+  'logo: uses the built-in mark': true,
   'time: placeholder localised': '0:00',
   'settings: colour default': '#aa7827',
   'settings: --gold after pick': 'rgb(58, 123, 213)',
@@ -34,17 +34,20 @@ const expect = {
   'settings: logo preview shown': true,
   'settings: logo applied to the start window': true,
   'settings: clear is enabled': true,
-  'settings: clear hides the start logo': true,
+  'settings: clear leaves a mark': true,
   'settings: button offers the default back': 'Remove',
-  'settings: button becomes restore': 'Use the default',
-  'settings: restore brings the mark back': true,
-  'settings: restored src': 'assets/logo-small.png',
+  'settings: clear falls back to the built-in': 'assets/logo-default.svg',
+  'settings: clear is disabled with no mark of your own': true,
+  'ar: empty message names the buttons': 'إضافة ملفات',
+  'bar stays left-to-right in arabic': 'ltr',
   'ar: settings title': 'الإعدادات',
   'ar: help title': 'التعليمات',
   'ar: help table is arabic': true,
   'ar: panel title': 'قائمة التشغيل',
   'ar: side hint': 'أفلت هنا للإضافة — يستمر التشغيل',
-  'ar: empty message': 'قائمة التشغيل فارغة. أفلت الملفات هنا لإضافتها.',
+  'ar: empty message': true,
+  'ar: help says what the app does': true,
+  'ar: help lists the settings': true,
   'ar: loop tooltip': 'تكرار قائمة التشغيل (L)',
   'ar: fs tooltip': 'ملء الشاشة (F)',
   'ar: play tooltip': 'تشغيل / إيقاف (مسافة)',
@@ -112,7 +115,10 @@ async function main() {
   await H.waitForBoot(win);
   const restored = await H.run(win, `({ hidden: document.querySelector('.logo').hidden, src: document.querySelector('.logo').getAttribute('src') })`);
   console.log('  logo default restored: ' + JSON.stringify(restored));
-  if (restored.hidden !== false || restored.src !== 'assets/logo-small.png') { console.log('  FAIL default logo not restored'); bad++; }
+  /* "Never customised" falls back to the built-in wordmark. It used to fall back
+     to the artwork that shipped in the repository, which meant "remove" put the
+     user's own picture straight back. */
+  if (restored.hidden !== false || restored.src !== 'assets/logo-default.svg') { console.log('  FAIL built-in mark not shown'); bad++; }
 
   const grab = async (name, code) => {
     await H.run(win, `(async()=>{const w=ms=>new Promise(r=>setTimeout(r,ms));${code}await w(500);})()`);

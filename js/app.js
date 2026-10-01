@@ -326,6 +326,8 @@ function renderEmptyState() {
   const note = $("side-empty");
   if (note) note.hidden = !open;
   list.hidden = open;
+  const hint = document.querySelector(".side-hint");
+  if (hint) hint.hidden = open || !items.length;
 }
 __name(renderEmptyState, "renderEmptyState");
 function thumbNode(item) {
@@ -464,16 +466,24 @@ for (const key of Object.keys(FITS)) $("fit-" + key).onclick = () => setFit(FITS
 $("fs").onclick = () => media.toggleFullscreen();
 $("open").onclick = () => pick(true);
 $("add").onclick = () => pick(false);
+if (source.canPersist()) {
+  const clearButton = $("clear-list");
+  if (clearButton) {
+    clearButton.hidden = false;
+    clearButton.onclick = () => clearAll(true);
+  }
+}
 if (typeof source.openFolder === "function") {
+  const openFolder = /* @__PURE__ */ __name(async () => {
+    const all = await source.openFolder?.() || [];
+    reportUnusable(all);
+    const picked = all.filter((it) => it.kind);
+    if (picked.length) addItems(picked, false);
+  }, "openFolder");
   const addFolder = $("add-folder");
   if (addFolder) {
     addFolder.hidden = false;
-    addFolder.onclick = async () => {
-      const all = await source.openFolder?.() || [];
-      reportUnusable(all);
-      const picked = all.filter((it) => it.kind);
-      if (picked.length) addItems(picked, false);
-    };
+    addFolder.onclick = openFolder;
   }
 }
 if (typeof source.onExternalDrop === "function") {

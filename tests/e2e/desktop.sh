@@ -60,6 +60,17 @@ fi
 # shellcheck source=tests/e2e/quiet.sh
 . "$ROOT/tests/e2e/quiet.sh"
 
+# The app's saved state, kept out of the real configuration directory.
+#
+# A walkthrough that starts from whatever the last run left behind is not
+# reproducible: rows already in the playlist make "did the drop add a row?" a
+# question about history rather than about behaviour, and a stale row can be the
+# thing that fails to load. Each run gets an empty playlist, which is also the
+# state that exercises the start window.
+export XDG_CONFIG_HOME="${MT_CONFIG_HOME:-/tmp/mt-walkthrough-config}"
+rm -rf "$XDG_CONFIG_HOME"
+mkdir -p "$XDG_CONFIG_HOME"
+
 export DISPLAY=":$DISPLAY_NUM"
 export GDK_BACKEND=x11
 

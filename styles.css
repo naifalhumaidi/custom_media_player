@@ -1,5 +1,14 @@
 * { box-sizing: border-box; }
 
+:root {
+  /* One corner radius for everything that is a control or a surface.
+     Defined here because it is a property of the design rather than of any one
+     element: when each control rounded itself by a different amount, the
+     mismatch was the thing that read as unfinished. */
+  --r: 7px;
+  --r-lg: 14px;
+}
+
 html, body {
   margin: 0;
   height: 100%;
@@ -324,9 +333,11 @@ media-provider > video {
 
 .drop[hidden] { display: none; }
 
-/* With the playlist open there is no room for a big centred mark, so the start
-   window's logo slides to the right of the panel instead of sitting under it. */
-#stage.list .drop { align-items: flex-end; padding-inline-end: 6vw; }
+/* The mark stays centred whether or not the playlist is open. It used to slide
+   aside so the panel would not cover it, which meant opening the panel on an
+   empty library moved the brand - the one thing on screen that should never
+   move. The panel is opaque and narrower than the stage, so there is nothing to
+   avoid. */
 
 /* The start window is just the brand mark, held back in opacity so it reads as
    a watermark behind the control bar rather than as content. */
@@ -345,6 +356,9 @@ media-provider > video {
   width: min(600px, 100%);
   max-height: min(80vh, 660px);
   background: #0d0d0d;
+  /* Rounded, like everything else. A dialog is the largest surface in the app
+     and the most obvious one to look square. */
+  border-radius: calc(var(--r) * 2);
   /* a single flat edge marker instead of a full border, to match the rest of
      the chrome: a box outline here would be the one stray border in the app */
   box-shadow: 0 0 0 1px #1c1c1c, 0 24px 60px rgb(0 0 0 / .6);
@@ -452,7 +466,10 @@ kbd {
   display: inline-block;
   padding: 1px 6px;
   border: 0;
-  border-radius: 4px;
+  /* Same radius as the buttons and the dialogs. Everything else in the chrome is
+     rounded, and a square keycap next to a rounded button reads as a mistake
+     rather than as a different thing. */
+  border-radius: var(--r);
   background: #1c1710;
   box-shadow: inset 0 0 0 1px rgba(170, 120, 39, .45);
   font: inherit;
@@ -618,37 +635,101 @@ media-time { color: inherit; font: inherit; }
   color: #ddd;
   border: 0;
   box-shadow: inset 0 0 0 1px #262626;
-  border-radius: 5px;
+  border-radius: var(--r);
   padding: 6px 9px;
   font: inherit;
   font-size: 13px;
 }
 
-.field select { min-width: 180px; cursor: pointer; }
-.field select option { background: #161616; color: #ddd; }
+/* The language picker, rebuilt.
+
+   A native select styled with only a background reads as a grey slab with a
+   browser arrow in it: no affordance, no focus state, and an option list that
+   ignores the brand entirely. What is here instead is the same control with a
+   chevron of our own, a brand-coloured focus ring, and an option list that
+   matches the surface it drops onto. The element itself is untouched, so the
+   keyboard, the mobile picker and the accessibility all still work. */
+.field select {
+  min-width: 190px;
+  cursor: pointer;
+  /* room for the chevron, drawn in the background so no extra element is needed */
+  padding-inline-end: 30px;
+  background-color: #161616;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--gold-text) 50%),
+    linear-gradient(135deg, var(--gold-text) 50%, transparent 50%);
+  background-position:
+    calc(100% - 16px) calc(50% + 1px),
+    calc(100% - 11px) calc(50% + 1px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  transition: box-shadow .12s ease, border-color .12s ease;
+}
+
+.field select:hover { box-shadow: inset 0 0 0 1px #333; }
+.field select:focus,
+.field select:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--gold), 0 0 0 3px var(--enabled-bg);
+}
+
+.field select option,
+.field select optgroup {
+  background: #161616;
+  color: #ddd;
+}
+.field select option:checked { background: var(--enabled-bg); color: var(--enabled-fg); }
 
 .field input[type="color"] {
   width: 62px;
   height: 32px;
   padding: 3px;
   cursor: pointer;
+  transition: box-shadow .12s ease;
+}
+.field input[type="color"]:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--gold), 0 0 0 3px var(--enabled-bg);
 }
 
 .field input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
 .field input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 3px; }
 
-.field input[type="file"] { padding: 4px; font-size: 12px; }
+/* The native "No file chosen" is hidden rather than restyled: it says nothing
+   once there is a mark on screen next to it, and it is the one piece of browser
+   chrome the user could not get rid of. The button keeps its own colour, so it
+   does not disappear with it. */
+.field input[type="file"] {
+  padding: 4px;
+  font-size: 12px;
+  color: transparent;
+}
 .field input[type="file"]::file-selector-button {
   background: #242424;
   color: #ddd;
   border: 0;
-  border-radius: 4px;
-  padding: 5px 10px;
+  border-radius: var(--r);
+  padding: 6px 12px;
   margin-inline-end: 9px;
   font: inherit;
   font-size: 12px;
+  font-weight: 500;
+  color: #ddd;
   cursor: pointer;
+  transition: background .12s ease, color .12s ease;
 }
+
+/* The same hover and focus the text buttons have. It is the one control in the
+   dialog that was not a `.btn`, so it also did not look like one. */
+.field input[type="file"]::file-selector-button:hover {
+  background: var(--hover-bg);
+  color: var(--hover-fg);
+}
+.field input[type="file"]::file-selector-button:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--gold), 0 0 0 3px var(--enabled-bg);
+}
+.field input[type="file"]:focus-within { border-radius: var(--r); }
 
 /* NOT .sm: that is the icon size modifier (.btn.ic.sm). Reusing the name here
    overrode .btn.ic's `padding: 0`, and the flexed 14px icon then shrank to the
@@ -671,12 +752,105 @@ media-time { color: inherit; font: inherit; }
   object-fit: contain;
   background: #141414;
   padding: 6px;
-  border-radius: 5px;
+  border-radius: var(--r);
 }
 
 .field-preview[hidden] { display: none; }
 
 .about { margin: 0; font-size: 12.5px; color: #8a8a8a; }
+
+/* ---------- instructions page ----------
+   Two columns of cards with a lead line above them. It was three stacked
+   sections in a single scrolling column, which read as a wall of text and made
+   the settings - the part people actually come here for - the hardest to find. */
+
+.help-body { display: block; }
+
+.help-lead {
+  margin: 0 0 16px;
+  padding: 0 2px 14px;
+  border-bottom: 1px solid #1a1a1a;
+}
+
+.help-tagline {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: #cfcfcf;
+  max-width: 62ch;
+}
+
+.help-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.help-card {
+  background: #121212;
+  border-radius: var(--r-lg);
+  padding: 14px 16px 15px;
+  box-shadow: inset 0 0 0 1px #1e1e1e;
+}
+
+.help-card.wide { grid-column: 1 / -1; }
+
+.help-card h3 {
+  margin: 0 0 9px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--gold-text);
+}
+
+.help-card-lead {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #9a9a9a;
+}
+
+.help-defs { margin: 0; font-size: 12.5px; }
+.help-defs dt { color: #dcdcdc; font-weight: 600; margin-top: 9px; }
+.help-defs dt:first-child { margin-top: 0; }
+.help-defs dd { margin: 2px 0 0; color: #949494; line-height: 1.5; }
+
+.help-card-foot {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: #8f8f8f;
+}
+
+.help-keys {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 4px 22px;
+}
+
+.help-card .notes { margin: 0; }
+
+/* ---------- the logo field ---------- */
+
+/* The mark beside its buttons, rather than above them: the question this field
+   answers is "what does my mark look like now", and that is answered by looking
+   at it, not by reading a filename. */
+.logo-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.logo-row .field-preview {
+  margin-top: 0;
+  background: #0f0f0f;
+  box-shadow: inset 0 0 0 1px #232323;
+  flex-shrink: 0;
+}
+
+.logo-row .field-row { flex: 1 1 auto; }
 
 /* ---------- right-to-left (Arabic) ---------- */
 
@@ -685,8 +859,15 @@ media-time { color: inherit; font: inherit; }
    genuinely directional pieces need help. */
 [dir="rtl"] .side-list li,
 [dir="rtl"] .field-row,
-[dir="rtl"] .modal-head,
-[dir="rtl"] .row { direction: rtl; }
+[dir="rtl"] .modal-head { direction: rtl; }
+
+/* The control bar is a fixed arrangement of transport controls, not a sentence:
+   previous is to the left of next in every player ever made, and mirroring it
+   puts "next" where a thumb expects "previous". The bar's own direction is
+   pinned, and so is its icon order, so an Arabic interface still reads the way
+   every other player does. */
+#bar { direction: ltr; }
+#bar .row, #bar .bar-track, #bar .grp { direction: ltr; }
 
 [dir="rtl"] .side-title { letter-spacing: 0; }
 
@@ -701,7 +882,37 @@ media-time { color: inherit; font: inherit; }
 
 /* ---------- empty playlist ---------- */
 
-.side-empty {
+/* One message, with the two buttons that actually do the thing. It used to be
+   two paragraphs saying the same thing in two voices, neither of which mentioned
+   that there are buttons. */
+#side-empty {
+  padding: 18px 16px;
+  text-align: center;
+}
+
+.side-empty-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #d0d0d0;
+}
+
+.side-empty-body {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.side-empty-or {
+  font-size: 12px;
+  color: #7e7e7e;
+}
+
+.side-empty[hidden] { display: none; }
+
+.side-empty-legacy {
   margin: 0;
   padding: 22px 18px;
   color: #8f8f8f;

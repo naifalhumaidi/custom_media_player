@@ -353,7 +353,7 @@ fn main() {
                     /* Long on purpose. The journeys resize the window five
                        times, drop a file and wait for real playback; cutting
                        the wait short reports a timeout as a failure. */
-                    std::thread::sleep(std::time::Duration::from_millis(20000));
+                    std::thread::sleep(std::time::Duration::from_millis(30000));
                     let _ = window.close();
                 });
                 return;

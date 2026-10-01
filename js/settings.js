@@ -51,7 +51,8 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
     return true;
   }
   __name(setBrandColor, "setBrandColor");
-  let defaultLogo = null;
+  const DEFAULT_MARK = "assets/logo-default.svg";
+  let defaultLogo = DEFAULT_MARK;
   function setLogo(url) {
     const img = document.querySelector(".logo");
     if (!img) return;
@@ -131,12 +132,11 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
     }
     if (reset) reset.textContent = t("settings.colorReset");
     if (logoClear) {
-      const removed = prefs.logo === null;
-      logoClear.textContent = removed ? t("settings.logoUseDefault") : t("settings.logoClear");
-      logoClear.disabled = !removed && !defaultLogo;
+      logoClear.textContent = t("settings.logoClear");
+      logoClear.disabled = prefs.logo === void 0;
     }
     if (preview) {
-      const src = prefs.logo === void 0 ? defaultLogo : prefs.logo;
+      const src = currentMark();
       if (src) {
         preview.src = src;
         preview.hidden = false;
@@ -148,6 +148,100 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
     if (logo) logo.value = "";
   }
   __name(syncInputs, "syncInputs");
+  function dominantOf(canvas) {
+    const w = 24;
+    const h = Math.max(1, Math.round(canvas.height / canvas.width * w));
+    const small = document.createElement("canvas");
+    small.width = w;
+    small.height = h;
+    const sctx = small.getContext("2d");
+    if (!sctx) return null;
+    sctx.drawImage(canvas, 0, 0, w, h);
+    let data;
+    try {
+      data = sctx.getImageData(0, 0, w, h).data;
+    } catch {
+      return null;
+    }
+    const buckets = /* @__PURE__ */ new Map();
+    for (let i = 0; i < data.length; i += 4) {
+      const a = data[i + 3];
+      if (a < 128) continue;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const light = (max + min) / 2;
+      if (light < 24 || light > 236 || max - min < 18) continue;
+      const key = `${r >> 4},${g >> 4},${b >> 4}`;
+      const bucket2 = buckets.get(key) || { n: 0, r: 0, g: 0, b: 0 };
+      bucket2.n += 1;
+      bucket2.r += r;
+      bucket2.g += g;
+      bucket2.b += b;
+      buckets.set(key, bucket2);
+    }
+    if (!buckets.size) return null;
+    let best = "";
+    let bestScore = -1;
+    for (const [key, bucket2] of buckets) {
+      const r = bucket2.r / bucket2.n;
+      const g = bucket2.g / bucket2.n;
+      const b = bucket2.b / bucket2.n;
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const sat = max - min;
+      const light = (max + min) / 2;
+      const score = sat * (light > 200 ? 0.2 : 1);
+      if (score > bestScore) {
+        bestScore = score;
+        best = key;
+      }
+    }
+    const bucket = buckets.get(best);
+    if (!bucket) return null;
+    const hex = /* @__PURE__ */ __name((v) => Math.round(v / bucket.n).toString(16).padStart(2, "0"), "hex");
+    return `#${hex(bucket.r)}${hex(bucket.g)}${hex(bucket.b)}`;
+  }
+  __name(dominantOf, "dominantOf");
+  function colourFromImage(src) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = 64;
+          canvas.height = Math.max(1, Math.round(img.naturalHeight / img.naturalWidth * 64));
+          const ctx = canvas.getContext("2d");
+          if (!ctx || !img.naturalWidth) return resolve(null);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(dominantOf(canvas));
+        } catch {
+          resolve(null);
+        }
+      };
+      img.onerror = () => resolve(null);
+      setTimeout(() => resolve(null), 2e3);
+      img.src = src;
+    });
+  }
+  __name(colourFromImage, "colourFromImage");
+  async function useLogoColour(apply2) {
+    const src = currentMark();
+    if (!src) return null;
+    const found = await colourFromImage(src);
+    if (!found) return null;
+    if (apply2) {
+      prefs.color = found;
+      setBrandColor(found);
+      syncInputs();
+      notifySave();
+    }
+    return found;
+  }
+  __name(useLogoColour, "useLogoColour");
+  const currentMark = /* @__PURE__ */ __name(() => prefs.logo === void 0 ? defaultLogo : prefs.logo, "currentMark");
   async function shrinkImage(file) {
     try {
       const url = URL.createObjectURL(file);
@@ -196,8 +290,6 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
   });
   document.addEventListener("mediatools:saved", clearSaveError);
   function wire() {
-    const shipped = document.querySelector(".logo");
-    if (shipped) defaultLogo = shipped.getAttribute("src") || null;
     const langSel = document.getElementById("set-lang");
     const color = document.getElementById("set-color");
     const reset = document.getElementById("set-color-reset");
@@ -233,10 +325,13 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
       notifySave();
     });
     resetBtn.addEventListener("click", () => {
-      prefs.color = null;
-      setBrandColor(DEFAULT_LOGO_GOLD);
-      syncInputs();
-      notifySave();
+      useLogoColour(true).then((found) => {
+        if (found) return;
+        prefs.color = null;
+        setBrandColor(DEFAULT_LOGO_GOLD);
+        syncInputs();
+        notifySave();
+      });
     });
     logoInput.addEventListener("change", async () => {
       const file = logoInput.files && logoInput.files[0];
@@ -252,19 +347,21 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
         setLogo(prefs.logo);
         syncInputs();
         notifySave();
+        await useLogoColour(true);
         return;
       }
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         prefs.logo = String(reader.result);
         setLogo(prefs.logo);
         syncInputs();
         notifySave();
+        await useLogoColour(true);
       };
       reader.readAsDataURL(file);
     });
     logoClearBtn.addEventListener("click", () => {
-      prefs.logo = prefs.logo === null ? void 0 : null;
+      prefs.logo = void 0;
       setLogo(prefs.logo);
       syncInputs();
       notifySave();
