@@ -11,14 +11,21 @@
     "test:e2e": "./tests/e2e/run.sh",
     "test:media": "./tests/e2e/make-media.sh",
     "test:all": "npm test && npm run test:e2e",
-    "build:web": "node scripts/build-frontend.mjs",
+    "build:web": "node scripts/build-ts.mjs",
     "desktop:dev": "npm run build:web && tauri dev",
     "desktop:build": "tauri build",
-    "icon": "tauri icon icon-source.png"
+    "icon": "tauri icon icon-source.png",
+    "build:web:watch": "node scripts/build-ts.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "pretest": "npm run typecheck && npm run build:web",
+    "package:electron": "node scripts/package-electron.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.12.0",
     "jsdom": "^30.1.1",
-    "vitest": "^5.0.2"
+    "vitest": "^5.0.2",
+    "typescript": "^5.9.0",
+    "esbuild": "^0.28.0",
+    "@electron/packager": "^18.0.0"
   }
 }

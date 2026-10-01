@@ -1,295 +1,251 @@
-/* Settings: language, brand colour and the start-window logo.
-   Everything is derived from CSS custom properties, so a colour change is a
-   single style write rather than a re-render of every control.
-
-   Persistence rides on the same saveState/loadState blob the rest of the app
-   already uses, so the desktop shell gets these for free. */
-
+"use strict";
+var __defProp = Object.defineProperty;
+var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 (() => {
-  const { t, num, apply, getLang, setLang, onChange, DEFAULT_LOGO_GOLD } = window.I18n;
-
-  /* Brand colour, derived once from the logo artwork and overridable by the
-     user. Written as CSS custom properties on :root so both stylesheets pick
-     it up without duplicating the value.
-
-     Parsed once per change and reused, so every derived token is guaranteed to
-     come from the same colour. Returns null for anything unusable, and the
-     caller then writes nothing at all - previously an invalid value reached
-     `--gold` while its derivatives silently fell back to the default, which
-     split the palette in two. */
-  /* Accepts #rgb, #rrggbb, and the rgb()/rgba() forms a computed style comes
-     back as. Handling all three matters because the value is read back out of
-     the style, where it is always functional notation. */
+  const { t, apply, getLang, setLang, onChange, DEFAULT_LOGO_GOLD } = window.I18n;
   function parse(value) {
-    const text = String(value == null ? '' : value).trim();
-    const rgb = text.match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i);
-    if (rgb) {
+    const text = String(value == null ? "" : value).trim();
+    const rgb2 = text.match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i);
+    if (rgb2) {
       return {
-        r: Math.round(Number(rgb[1])),
-        g: Math.round(Number(rgb[2])),
-        b: Math.round(Number(rgb[3])),
+        r: Math.round(Number(rgb2[1])),
+        g: Math.round(Number(rgb2[2])),
+        b: Math.round(Number(rgb2[3]))
       };
     }
-    let h = text.replace('#', '');
-    if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+    let h = text.replace("#", "");
+    if (h.length === 3) h = h.split("").map((c) => c + c).join("");
     if (!/^[0-9a-f]{6}$/i.test(h)) return null;
     const n = parseInt(h, 16);
-    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+    return { r: n >> 16 & 255, g: n >> 8 & 255, b: n & 255 };
   }
-
-  const rgb = (p) => 'rgb(' + p.r + ', ' + p.g + ', ' + p.b + ')';
-  /* the picker only accepts #rrggbb, while the setter publishes rgb() */
-  const toHex = (value) => {
+  __name(parse, "parse");
+  const rgb = /* @__PURE__ */ __name((p) => "rgb(" + p.r + ", " + p.g + ", " + p.b + ")", "rgb");
+  const toHex = /* @__PURE__ */ __name((value) => {
     const p = parse(value);
-    if (p) return '#' + [p.r, p.g, p.b].map((c) => c.toString(16).padStart(2, '0')).join('');
+    if (p) return "#" + [p.r, p.g, p.b].map((c) => c.toString(16).padStart(2, "0")).join("");
     return DEFAULT_LOGO_GOLD;
-  };
-  const rgba = (p, a) => 'rgba(' + p.r + ', ' + p.g + ', ' + p.b + ', ' + a + ')';
-  const toward = (p, target, amount) => {
-    const ch = (x, y) => Math.round(x + (y - x) * amount);
+  }, "toHex");
+  const rgba = /* @__PURE__ */ __name((p, a) => "rgba(" + p.r + ", " + p.g + ", " + p.b + ", " + a + ")", "rgba");
+  const toward = /* @__PURE__ */ __name((p, target, amount) => {
+    const ch = /* @__PURE__ */ __name((x, y) => Math.round(x + (y - x) * amount), "ch");
     return { r: ch(p.r, target.r), g: ch(p.g, target.g), b: ch(p.b, target.b) };
-  };
+  }, "toward");
   const WHITE = { r: 255, g: 255, b: 255 };
-
   function setBrandColor(hex) {
     const p = parse(hex);
     if (!p) {
-      console.warn('[settings] ignoring an unusable brand colour:', hex);
+      console.warn("[settings] ignoring an unusable brand colour:", hex);
       return false;
     }
     const root = document.documentElement;
-    root.style.setProperty('--gold', rgb(p));
-    root.style.setProperty('--gold-soft', rgba(p, 0.26));
-    root.style.setProperty('--gold-strong', rgba(p, 0.42));
-    root.style.setProperty('--gold-text', rgb(toward(p, WHITE, 0.55)));
-    root.style.setProperty('--gold-dim', rgba(p, 0.5));
-    /* "on" and "hover" are one colour family by design, so a control that is
-       on and a control under the pointer read the same */
-    root.style.setProperty('--enabled-bg', rgba(p, 0.26));
-    root.style.setProperty('--enabled-fg', rgb(toward(p, WHITE, 0.55)));
-    root.style.setProperty('--hover-bg', rgba(p, 0.2));
-    root.style.setProperty('--hover-fg', rgb(toward(p, WHITE, 0.45)));
+    root.style.setProperty("--gold", rgb(p));
+    root.style.setProperty("--gold-soft", rgba(p, 0.26));
+    root.style.setProperty("--gold-strong", rgba(p, 0.42));
+    root.style.setProperty("--gold-text", rgb(toward(p, WHITE, 0.55)));
+    root.style.setProperty("--gold-dim", rgba(p, 0.5));
+    root.style.setProperty("--enabled-bg", rgba(p, 0.26));
+    root.style.setProperty("--enabled-fg", rgb(toward(p, WHITE, 0.55)));
+    root.style.setProperty("--hover-bg", rgba(p, 0.2));
+    root.style.setProperty("--hover-fg", rgb(toward(p, WHITE, 0.45)));
     return true;
   }
-
-  /* The logo shipped in the markup is the default. `undefined` means "use it",
-     `null` means the user removed it, a string is a chosen file. Collapsing
-     those two cases wiped the default logo on every boot. */
+  __name(setBrandColor, "setBrandColor");
   let defaultLogo = null;
-
   function setLogo(url) {
-    const img = document.querySelector('.logo');
+    const img = document.querySelector(".logo");
     if (!img) return;
-    const src = url === undefined ? defaultLogo : url;
+    const src = url === void 0 ? defaultLogo : url;
     if (src) {
       img.src = src;
       img.hidden = false;
     } else {
-      img.removeAttribute('src');
+      img.removeAttribute("src");
       img.hidden = true;
     }
   }
-
-
-
-
-  /* ---------------- dialog ---------------- */
-
-  const modal = () => document.getElementById('settings-modal');
-
+  __name(setLogo, "setLogo");
+  const modal = /* @__PURE__ */ __name(() => {
+    const found = document.getElementById("settings-modal");
+    if (!found) throw new Error("settings: #settings-modal is not in the page");
+    return found;
+  }, "modal");
   function open() {
     syncInputs();
     modal().hidden = false;
-    const first = modal().querySelector('select, input, button');
-    if (first && typeof first.focus === 'function') first.focus();
+    const first = modal().querySelector("select, input, button");
+    if (first && typeof first.focus === "function") first.focus();
   }
-
+  __name(open, "open");
   function close() {
     modal().hidden = true;
-    const btn = document.getElementById('settings');
-    if (btn && typeof btn.focus === 'function') btn.focus();
+    const btn = document.getElementById("settings");
+    if (btn && typeof btn.focus === "function") btn.focus();
   }
-
-  const isOpen = () => !modal().hidden;
-
-  /* The app owns the (debounced) save, so a settings change announces itself
-     rather than reaching into the persistence layer. Without this a choice was
-     only ever written if something else happened to save first. */
+  __name(close, "close");
+  const isOpen = /* @__PURE__ */ __name(() => !modal().hidden, "isOpen");
   function notifySave() {
-    document.dispatchEvent(new CustomEvent('mediatools:settings', { detail: { ...prefs } }));
+    document.dispatchEvent(new CustomEvent("mediatools:settings", { detail: { ...prefs } }));
   }
-
+  __name(notifySave, "notifySave");
   function toggle() {
     if (isOpen()) close();
     else open();
   }
-
-  /* ---------------- state ---------------- */
-
+  __name(toggle, "toggle");
   const prefs = {
     lang: null,
     color: null,
-    logo: undefined,   // undefined = the markup default; null = removed
+    logo: void 0
+    // undefined = the markup default; null = removed
   };
-
   function applyAll() {
     if (prefs.lang) setLang(prefs.lang);
     if (prefs.color) setBrandColor(prefs.color);
     setLogo(prefs.logo);
-    /* re-render the strings that depend on the language */
     apply();
   }
-
+  __name(applyAll, "applyAll");
   function load(state) {
-    const s = (state && state.settings) || {};
-    prefs.lang = s.lang || null;
-    prefs.color = s.color || null;
-    /* an absent key means "never customised", which is different from an
-       explicit null (the user pressed Remove) */
-    prefs.logo = Object.prototype.hasOwnProperty.call(s, 'logo') ? s.logo : undefined;
+    const s = state && state.settings || {};
+    const asText = /* @__PURE__ */ __name((value) => typeof value === "string" ? value : null, "asText");
+    const asLogo = /* @__PURE__ */ __name((value) => value === null || typeof value === "string" ? value : void 0, "asLogo");
+    prefs.lang = asText(s.lang);
+    prefs.color = asText(s.color);
+    prefs.logo = Object.prototype.hasOwnProperty.call(s, "logo") ? asLogo(s.logo) : void 0;
     if (!prefs.lang) prefs.lang = window.I18n.detect();
     applyAll();
   }
-
-  const save = () => prefs;
-
+  __name(load, "load");
+  const save = /* @__PURE__ */ __name(() => prefs, "save");
   function syncInputs() {
-    const langSel = document.getElementById('set-lang');
-    const color = document.getElementById('set-color');
-    const reset = document.getElementById('set-color-reset');
-    const logo = document.getElementById('set-logo');
-    const logoClear = document.getElementById('set-logo-clear');
-    const preview = document.getElementById('set-logo-preview');
-
+    const langSel = document.getElementById("set-lang");
+    const color = document.getElementById("set-color");
+    const reset = document.getElementById("set-color-reset");
+    const logo = document.getElementById("set-logo");
+    const logoClear = document.getElementById("set-logo-clear");
+    const preview = document.getElementById("set-logo-preview");
     if (langSel) langSel.value = getLang();
     if (color) {
-      /* the picker needs a #rrggbb value, so fall back to the default gold */
-      color.value = toHex(getComputedStyle(document.documentElement).getPropertyValue('--gold').trim());
+      color.value = toHex(getComputedStyle(document.documentElement).getPropertyValue("--gold").trim());
     }
-    if (reset) reset.textContent = t('settings.colorReset');
-    /* One button, two jobs: it hides the mark, and when the mark is hidden it
-       puts the shipped one back, so "removed" is never a dead end. */
+    if (reset) reset.textContent = t("settings.colorReset");
     if (logoClear) {
       const removed = prefs.logo === null;
-      logoClear.textContent = removed ? t('settings.logoUseDefault') : t('settings.logoClear');
+      logoClear.textContent = removed ? t("settings.logoUseDefault") : t("settings.logoClear");
       logoClear.disabled = !removed && !defaultLogo;
     }
-
     if (preview) {
-      const src = prefs.logo === undefined ? defaultLogo : prefs.logo;
+      const src = prefs.logo === void 0 ? defaultLogo : prefs.logo;
       if (src) {
         preview.src = src;
         preview.hidden = false;
       } else {
-        preview.removeAttribute('src');
+        preview.removeAttribute("src");
         preview.hidden = true;
       }
     }
-    if (logo) logo.value = '';
+    if (logo) logo.value = "";
   }
-
-  /* Downscale anything larger than a modest mark, so the stored data URL stays
-     well inside the storage quota. */
+  __name(syncInputs, "syncInputs");
   async function shrinkImage(file) {
     try {
       const url = URL.createObjectURL(file);
       try {
         const img = new Image();
         img.src = url;
-        await (img.decode ? img.decode() : new Promise((r, j) => { img.onload = r; img.onerror = j; }));
+        await (img.decode ? img.decode() : new Promise((r, j) => {
+          img.onload = r;
+          img.onerror = j;
+        }));
         const max = 1200;
         if (!img.naturalWidth) return null;
         const scale = Math.min(1, max / img.naturalWidth);
-        const canvas = document.createElement('canvas');
+        const canvas = document.createElement("canvas");
         canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
         canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        const out = canvas.toDataURL('image/jpeg', 0.85);
-        return out.length > 600_000 ? null : out;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return null;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const out = canvas.toDataURL("image/jpeg", 0.85);
+        return out.length > 6e5 ? null : out;
       } finally {
         URL.revokeObjectURL(url);
       }
     } catch (err) {
-      console.warn('[settings] could not read the chosen logo:', err);
+      console.warn("[settings] could not read the chosen logo:", err);
       return null;
     }
   }
-
-  /* The persistence layer reports a failed write; without this the user is
-     never told their settings are not being kept. */
+  __name(shrinkImage, "shrinkImage");
   function showSaveError(message) {
-    const box = document.getElementById('set-save-error');
+    const box = document.getElementById("set-save-error");
     if (!box) return;
     box.textContent = message;
     box.hidden = false;
   }
+  __name(showSaveError, "showSaveError");
   function clearSaveError() {
-    const box = document.getElementById('set-save-error');
+    const box = document.getElementById("set-save-error");
     if (box) box.hidden = true;
   }
-  document.addEventListener('mediatools:save-error', (e) => {
-    showSaveError(t('settings.saveFailed'));
-    console.warn('[settings] the settings could not be persisted:', e.detail);
+  __name(clearSaveError, "clearSaveError");
+  document.addEventListener("mediatools:save-error", (e) => {
+    showSaveError(t("settings.saveFailed"));
+    console.warn("[settings] the settings could not be persisted:", e.detail);
   });
-  /* A write that got through retires the warning: the user has done something
-     about it, and leaving the red box up would misreport the current state. */
-  document.addEventListener('mediatools:saved', clearSaveError);
-
+  document.addEventListener("mediatools:saved", clearSaveError);
   function wire() {
-    const shipped = document.querySelector('.logo');
-    if (shipped) defaultLogo = shipped.getAttribute('src') || null;
-
-    const langSel = document.getElementById('set-lang');
-    const color = document.getElementById('set-color');
-    const reset = document.getElementById('set-color-reset');
-    const logo = document.getElementById('set-logo');
-    const logoClear = document.getElementById('set-logo-clear');
-    const closeBtn = document.getElementById('settings-close');
-
-    /* Deliberately loud: silently skipping a missing control leaves a dead
-       button with no explanation, and the usual cause is this module running
-       before the dialog markup has been parsed. */
+    const shipped = document.querySelector(".logo");
+    if (shipped) defaultLogo = shipped.getAttribute("src") || null;
+    const langSel = document.getElementById("set-lang");
+    const color = document.getElementById("set-color");
+    const reset = document.getElementById("set-color-reset");
+    const logo = document.getElementById("set-logo");
+    const logoClear = document.getElementById("set-logo-clear");
+    const closeBtn = document.getElementById("settings-close");
     const missing = [
-      ['set-lang', langSel], ['set-color', color], ['set-color-reset', reset],
-      ['set-logo', logo], ['set-logo-clear', logoClear], ['settings-close', closeBtn],
+      ["set-lang", langSel],
+      ["set-color", color],
+      ["set-color-reset", reset],
+      ["set-logo", logo],
+      ["set-logo-clear", logoClear],
+      ["settings-close", closeBtn]
     ].filter(([, el]) => !el).map(([id]) => id);
     if (missing.length) {
-      throw new Error('custom-media-player: settings markup not parsed yet, missing: ' + missing.join(', '));
+      throw new Error("custom-media-player: settings markup not parsed yet, missing: " + missing.join(", "));
     }
-
-    langSel.addEventListener('change', () => {
-      prefs.lang = langSel.value;
+    const langInput = langSel;
+    const colorInput = color;
+    const resetBtn = reset;
+    const logoInput = logo;
+    const logoClearBtn = logoClear;
+    const closeButton = closeBtn;
+    langInput.addEventListener("change", () => {
+      prefs.lang = langInput.value;
       setLang(prefs.lang);
       syncInputs();
       notifySave();
     });
-
-    color.addEventListener('input', () => {
-      prefs.color = color.value;
+    colorInput.addEventListener("input", () => {
+      prefs.color = colorInput.value;
       setBrandColor(prefs.color);
       notifySave();
     });
-
-    reset.addEventListener('click', () => {
+    resetBtn.addEventListener("click", () => {
       prefs.color = null;
       setBrandColor(DEFAULT_LOGO_GOLD);
       syncInputs();
       notifySave();
     });
-
-    logo.addEventListener('change', async () => {
-      const file = logo.files && logo.files[0];
+    logoInput.addEventListener("change", async () => {
+      const file = logoInput.files && logoInput.files[0];
       if (!file) return;
-      /* The logo is stored as a base64 data URL inside the same blob as the
-         language, the colour and the playback position. A big image overruns
-         the storage quota, and the whole write then fails silently - the app
-         looks configured right up until a reload throws it all away. So the
-         image is downscaled to a sane size first. */
-      if (file.size > 4_000_000) {
+      if (file.size > 4e6) {
         const shrunk = await shrinkImage(file);
         if (!shrunk) {
-          showSaveError(t('settings.saveFailed'));
-          logo.value = '';
+          showSaveError(t("settings.saveFailed"));
+          logoInput.value = "";
           return;
         }
         prefs.logo = shrunk;
@@ -307,36 +263,47 @@
       };
       reader.readAsDataURL(file);
     });
-
-    logoClear.addEventListener('click', () => {
-      /* Removed -> put the shipped mark back. Anything else -> hide it. The
-         "shipped default" state is not the same as "no logo": treating them as
-         one left the button offering to restore what was already showing, so
-         the mark could never be removed. */
-      prefs.logo = prefs.logo === null ? undefined : null;
+    logoClearBtn.addEventListener("click", () => {
+      prefs.logo = prefs.logo === null ? void 0 : null;
       setLogo(prefs.logo);
       syncInputs();
       notifySave();
     });
-
-    closeBtn.addEventListener('click', close);
-
+    closeButton.addEventListener("click", close);
     const m = modal();
-    m.addEventListener('pointerdown', (e) => {
+    m.addEventListener("pointerdown", (e) => {
       if (e.target === m) close();
     });
-
-    document.getElementById('settings').addEventListener('click', toggle);
-
-    /* a language change must refresh the settings dialog's own labels */
+    const settingsButton = document.getElementById("settings");
+    if (settingsButton) settingsButton.addEventListener("click", toggle);
     onChange(() => {
       apply();
       syncInputs();
     });
-
-    /* start from the logo gold until the user picks something else */
     setBrandColor(DEFAULT_LOGO_GOLD);
   }
-
-  window.MediaSettings = { load, save, open, close, toggle, isOpen, wire, applyAll, setBrandColor, prefs };
+  __name(wire, "wire");
+  const api = {
+    load,
+    save,
+    open,
+    close,
+    toggle,
+    isOpen,
+    wire,
+    applyAll,
+    setBrandColor,
+    setLang: /* @__PURE__ */ __name((lang) => {
+      prefs.lang = lang;
+      setLang(lang);
+      applyAll();
+    }, "setLang"),
+    setLogo: /* @__PURE__ */ __name((url) => {
+      prefs.logo = url;
+      applyAll();
+    }, "setLogo"),
+    prefs
+  };
+  window.MediaSettings = api;
 })();
+//# sourceMappingURL=settings.js.map

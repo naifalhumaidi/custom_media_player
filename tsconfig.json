@@ -1,0 +1,38 @@
+{
+  "//": [
+    "The application, in TypeScript. Nothing here runs directly: the browser",
+    "cannot execute TypeScript, so `npm run build:web` compiles it into js/ and",
+    "index.html loads that. The compiled js/ is generated, not edited, and is",
+    "committed so the repository can be opened without installing anything -",
+    "which is also why the page has no import map and no module graph: the",
+    "output is one classic script per source file, in the order index.html asks",
+    "for it, exactly as before the port."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    // Off on purpose, and the only strict flag that is. It asks for a type on
+    // every parameter of a 3,000-line codebase, and annotating those
+    // mechanically buys nothing a reader has to read. Everything that catches a
+    // real defect is on: null-safety, property existence, argument counts,
+    // dead code, and fallthrough. Turning this one on later is a mechanical
+    // afternoon.
+    "noImplicitAny": false,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": false,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": false,
+    "noEmit": true,
+    "useDefineForClassFields": false
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "js", "src-tauri", "artifacts", "shells"]
+}

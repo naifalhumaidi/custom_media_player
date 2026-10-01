@@ -41,9 +41,13 @@ describe('the string tables', () => {
     const enBlock = I18N_SRC.slice(I18N_SRC.indexOf('en: {'), I18N_SRC.indexOf('ar: {'));
     const arBlock = I18N_SRC.slice(I18N_SRC.indexOf('ar: {'));
 
+    /* Both quote styles, because the file this reads is compiled output now:
+       esbuild normalises string quotes, and a test that only understood the
+       single-quoted source it used to read reported zero keys rather than
+       failing - which is how it would have quietly stopped testing anything. */
     const keysOf = (block) => {
       const found = new Set();
-      for (const m of block.matchAll(/^\s{6}'([^']+)':/gm)) found.add(m[1]);
+      for (const m of block.matchAll(/^\s{6}["']([^"']+)["']\s*:/gm)) found.add(m[1]);
       return found;
     };
     const en = keysOf(enBlock);
