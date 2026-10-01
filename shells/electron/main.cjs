@@ -383,8 +383,19 @@ async function createWindow() {
     /* The same script the Tauri shell runs, read from one place, so the two
        shells cannot drift apart on what a journey means. */
     const script = fs.readFileSync(path.join(ROOT, 'tests', 'e2e', 'walkthrough.js'), 'utf8');
-    trace('starting the walkthrough');
-    mainWindow.webContents.executeJavaScript(script).catch((err) => {
+
+    /* The same probe file the Tauri shell is given, for the same reason: a
+       walkthrough that cannot ask "does a real file play" is checking the shell
+       and not the application. Without this the playback journey is silently
+       skipped and the run still says PASS, which is the worst kind of pass. */
+    const probeFile = process.env.MT_PROBE_FILE || '';
+    const probeAudio = process.env.MT_PROBE_AUDIO || '';
+    const preamble =
+      `window.__PROBE_FILE__ = ${JSON.stringify(probeFile)};` +
+      ` window.__PROBE_MP3__ = ${JSON.stringify(probeAudio)};`;
+
+    trace(`starting the walkthrough${probeFile ? ' with a probe file' : ' WITHOUT a probe file'}`);
+    mainWindow.webContents.executeJavaScript(`${preamble}\n${script}`).catch((err) => {
       console.error('[walkthrough] could not start:', err && err.message);
     });
     setTimeout(() => {
