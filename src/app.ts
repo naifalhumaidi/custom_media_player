@@ -137,6 +137,9 @@ function drawThumb(el) {
 async function drawImageThumb(url) {
   try {
     const img = new Image();
+    /* Same reason as the video probe: without this the canvas is tainted and
+       `toDataURL` throws, which is the desktop thumbnails failing silently. */
+    img.crossOrigin = 'anonymous';
     img.src = url;
     /* the fallback must be able to FAIL: without an onerror, a corrupt image
        never settles and permanently occupies one of the three probe workers */
@@ -184,6 +187,19 @@ async function probe(item) {
   const el = document.createElement(item.kind === 'audio' ? 'audio' : 'video') as HTMLVideoElement;
   el.muted = true;
   el.playsInline = true;
+  /* Declared as a CORS request, and this is what makes thumbnails work at all
+     on the desktop.
+
+     The shell serves media from a loopback port while the page is served from
+     `tauri://` or `http://localhost`, so they are different origins. Without
+     this the fetch is opaque, the canvas that drawThumb() paints into is
+     tainted, and `toDataURL` throws a SecurityError - silently, inside a
+     promise, leaving every row on its placeholder glyph.
+
+     The server already sends `Access-Control-Allow-Origin: *`, so declaring the
+     request is all that is needed. A browser tab is unaffected: a blob: URL is
+     same-origin either way. */
+  el.crossOrigin = 'anonymous';
   el.preload = 'metadata';
   try {
     el.src = source.urlFor(item);

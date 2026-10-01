@@ -822,4 +822,5 @@ describe('defects the final audit found', () => {
     expect(app.counter()).toBe('26 / 30');
     expect(app.errors).toEqual([]);
   });
+
 });

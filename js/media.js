@@ -10,6 +10,10 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
   let wantPlay = false;
   let currentLoad = 0;
   let sourceReady = true;
+  const SEEK_COALESCE_MS = 40;
+  let pendingSeekTo = null;
+  let seekTimer;
+  let lastSeekAt = 0;
   const el = /* @__PURE__ */ __name(() => {
     if (!player) {
       player = document.getElementById("media");
@@ -224,10 +228,61 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
       if (el().paused) play();
       else pause();
     },
+    /* Seeking is by keyframe, and a burst of seeks becomes one.
+    
+           Assigning `currentTime` asks the decoder for that exact frame, which means
+           decoding from the previous keyframe to reach it. On a long file that is
+           work enough to show as a black frame and a stalled picture - the flash
+           that was reported here.
+    
+           `fastSeek` asks for the nearest keyframe instead: instant, no flash, and
+           accurate to within about a second. For a ten-second skip that is the right
+           trade.
+    
+           A burst is coalesced rather than queued. Holding an arrow key fires a seek
+           on every repeat; each one cancelled the last, so the picture churned and
+           arrived somewhere between the presses rather than where the user was
+           heading. Repeats accumulate onto the pending target instead, so holding
+           the key still travels - it just does it in one jump.
+    
+           The first press of a gesture is applied immediately. Coalescing everything
+           would make a single deliberate press feel broken, which is worse than the
+           problem being solved. */
     seekBy(delta) {
-      const d = el().duration;
+      const media = el();
+      const d = media.duration;
       if (!Number.isFinite(d)) return;
-      el().currentTime = Math.min(Math.max(el().currentTime + delta, 0), d);
+      const now = Date.now();
+      const repeating = seekTimer !== void 0 && now - lastSeekAt < SEEK_COALESCE_MS;
+      const base = repeating && pendingSeekTo !== null ? pendingSeekTo : media.currentTime;
+      const target = Math.min(Math.max(base + delta, 0), d);
+      const apply = /* @__PURE__ */ __name((to) => {
+        try {
+          if (typeof media.fastSeek === "function") media.fastSeek(to);
+          else media.currentTime = to;
+        } catch {
+          try {
+            media.currentTime = to;
+          } catch {
+          }
+        }
+      }, "apply");
+      lastSeekAt = now;
+      if (!repeating) {
+        if (seekTimer !== void 0) clearTimeout(seekTimer);
+        seekTimer = void 0;
+        pendingSeekTo = null;
+        apply(target);
+        return;
+      }
+      pendingSeekTo = target;
+      if (seekTimer !== void 0) clearTimeout(seekTimer);
+      seekTimer = setTimeout(() => {
+        const to = pendingSeekTo;
+        seekTimer = void 0;
+        pendingSeekTo = null;
+        if (to !== null) apply(to);
+      }, SEEK_COALESCE_MS);
     },
     setVolume(v) {
       const next = Math.min(1, Math.max(0, v));

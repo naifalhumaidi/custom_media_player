@@ -93,6 +93,7 @@ __name(drawThumb, "drawThumb");
 async function drawImageThumb(url) {
   try {
     const img = new Image();
+    img.crossOrigin = "anonymous";
     img.src = url;
     await (img.decode ? img.decode() : new Promise((resolve, reject) => {
       img.onload = resolve;
@@ -124,6 +125,7 @@ async function probe(item) {
   const el = document.createElement(item.kind === "audio" ? "audio" : "video");
   el.muted = true;
   el.playsInline = true;
+  el.crossOrigin = "anonymous";
   el.preload = "metadata";
   try {
     el.src = source.urlFor(item);

@@ -35,6 +35,16 @@ import type { BridgeEvents } from '../types.js';
      position. Only this file knows when the old provider is really gone. */
   let sourceReady = true;
 
+  /* How long repeated seeks are collapsed, in ms. Long enough to absorb a key
+     repeat, short enough that a deliberate second press still feels separate. */
+  const SEEK_COALESCE_MS = 40;
+
+  /* One seek in flight, at most: the target waiting to be applied, and the
+     handle that will apply it. */
+  let pendingSeekTo: number | null = null;
+  let seekTimer: ReturnType<typeof setTimeout> | undefined;
+  let lastSeekAt = 0;
+
   /* resolved lazily so the bridge is safe to touch before init() */
   /* The two elements the whole bridge is built on. Both are in index.html, and
      init() runs before anything here is reached, so they are resolved once and
@@ -306,10 +316,66 @@ import type { BridgeEvents } from '../types.js';
       else pause();
     },
 
+    /* Seeking is by keyframe, and a burst of seeks becomes one.
+
+       Assigning `currentTime` asks the decoder for that exact frame, which means
+       decoding from the previous keyframe to reach it. On a long file that is
+       work enough to show as a black frame and a stalled picture - the flash
+       that was reported here.
+
+       `fastSeek` asks for the nearest keyframe instead: instant, no flash, and
+       accurate to within about a second. For a ten-second skip that is the right
+       trade.
+
+       A burst is coalesced rather than queued. Holding an arrow key fires a seek
+       on every repeat; each one cancelled the last, so the picture churned and
+       arrived somewhere between the presses rather than where the user was
+       heading. Repeats accumulate onto the pending target instead, so holding
+       the key still travels - it just does it in one jump.
+
+       The first press of a gesture is applied immediately. Coalescing everything
+       would make a single deliberate press feel broken, which is worse than the
+       problem being solved. */
     seekBy(delta) {
-      const d = el().duration;
+      const media = el() as HTMLVideoElement & { fastSeek?: (time: number) => void };
+      const d = media.duration;
       if (!Number.isFinite(d)) return;
-      el().currentTime = Math.min(Math.max(el().currentTime + delta, 0), d);
+
+      const now = Date.now();
+      const repeating = seekTimer !== undefined && (now - lastSeekAt) < SEEK_COALESCE_MS;
+      /* Repeats build on the target already queued, so holding the key travels
+         the full distance instead of collapsing to a single step. */
+      const base = repeating && pendingSeekTo !== null ? pendingSeekTo : media.currentTime;
+      const target = Math.min(Math.max(base + delta, 0), d);
+
+      const apply = (to: number) => {
+        try {
+          if (typeof media.fastSeek === 'function') media.fastSeek(to);
+          else media.currentTime = to;
+        } catch {
+          /* Some engines refuse fastSeek on a stream; keep the button working. */
+          try { media.currentTime = to; } catch { /* nothing useful left to do */ }
+        }
+      };
+
+      lastSeekAt = now;
+
+      if (!repeating) {
+        if (seekTimer !== undefined) clearTimeout(seekTimer);
+        seekTimer = undefined;
+        pendingSeekTo = null;
+        apply(target);
+        return;
+      }
+
+      pendingSeekTo = target;
+      if (seekTimer !== undefined) clearTimeout(seekTimer);
+      seekTimer = setTimeout(() => {
+        const to = pendingSeekTo;
+        seekTimer = undefined;
+        pendingSeekTo = null;
+        if (to !== null) apply(to);
+      }, SEEK_COALESCE_MS);
     },
 
     setVolume(v) {
