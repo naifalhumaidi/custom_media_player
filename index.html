@@ -87,7 +87,7 @@
             <button id="fit-s" class="btn ic" type="button" title="Stretch (s)" data-i18n-title="bar.fitStretchKey" data-i18n-aria="bar.fitStretch" aria-label="Stretch"><svg viewBox="0 0 24 24"><use href="#i-stretch"/></svg></button>
             <button id="fs" class="btn ic" type="button" title="Fullscreen (f)" data-i18n-title="bar.fullscreenKey" data-i18n-aria="bar.fullscreen" aria-label="Fullscreen"><svg viewBox="0 0 24 24"><use href="#i-fs"/><use href="#i-fs-exit"/></svg></button>
             <button id="help" class="btn ic" type="button" title="Instructions (?)" data-i18n-title="bar.helpKey" data-i18n-aria="bar.help" aria-label="Instructions"><svg viewBox="0 0 24 24"><use href="#i-help"/></svg></button>
-            <button id="settings" class="btn ic" type="button" title="Settings (,)" data-i18n-title="bar.settingsKey" data-i18n-aria="bar.settings" aria-label="Settings"><svg viewBox="0 0 24 24"><use href="#i-settings"/></svg></button>
+            <button id="settings" class="btn ic" type="button" title="Settings" data-i18n-title="bar.settings" data-i18n-aria="bar.settings" aria-label="Settings"><svg viewBox="0 0 24 24"><use href="#i-settings"/></svg></button>
           </div>
         </div>
       </div>
@@ -113,8 +113,8 @@
       <div id="side-empty" class="side-empty" hidden>
         <p class="side-empty-title" data-i18n="panel.emptyTitle">Nothing here yet</p>
         <p class="side-empty-body">
-          <button id="empty-add" class="btn txt" type="button" data-i18n="panel.emptyAdd">Add files</button>
-          <button id="empty-add-folder" class="btn txt" type="button" data-i18n="panel.emptyAddFolder" hidden>Add a folder</button>
+          <button id="empty-add" class="btn txt" type="button" title="Add files (O)" data-i18n-title="panel.addKey" data-i18n="panel.emptyAdd">Add files</button>
+          <button id="empty-add-folder" class="btn txt" type="button" title="Add a folder (⇧O)" data-i18n-title="panel.addFolderKey" data-i18n="panel.emptyAddFolder" hidden>Add a folder</button>
           <span class="side-empty-or" data-i18n="panel.emptyOr">or drop them anywhere on the window</span>
         </p>
       </div>
@@ -254,7 +254,7 @@
               <img id="set-logo-preview" class="field-preview" alt="">
               <div class="field-row">
                 <input id="set-logo" type="file" accept="image/*" data-i18n-aria="settings.logo">
-                <button id="set-logo-clear" class="btn txt" type="button" data-i18n="settings.logoClear">Remove</button>
+                <button id="set-logo-clear" class="btn txt" type="button" title="Remove your mark" data-i18n-title="settings.logoClearTitle" data-i18n="settings.logoClear">Remove</button>
               </div>
             </div>
           </div>
@@ -263,7 +263,7 @@
             <label for="set-color" data-i18n="settings.color">Brand colour</label>
             <div class="field-row">
               <input id="set-color" type="color" value="#aa7827">
-              <button id="set-color-reset" class="btn txt" type="button" data-i18n="settings.colorReset">Use the logo colour</button>
+              <button id="set-color-reset" class="btn txt" type="button" title="Take the colour from your mark" data-i18n-title="settings.colorResetTitle" data-i18n="settings.colorReset">Use the logo colour</button>
             </div>
           </div>
         </section>

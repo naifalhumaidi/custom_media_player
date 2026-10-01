@@ -332,13 +332,21 @@ function renderEmptyState() {
   if (hint) hint.hidden = open || !items.length;
 }
 __name(renderEmptyState, "renderEmptyState");
+const KIND_GLYPH = {
+  video: '<svg viewBox="0 0 24 24"><path d="M7 4.5 20 12 7 19.5z" fill="currentColor"/></svg>',
+  audio: '<svg viewBox="0 0 24 24"><path d="M9 17.5V6.2l10-2v11.1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6.5" cy="17.5" r="2.6" fill="currentColor"/><circle cx="16.5" cy="15.3" r="2.6" fill="currentColor"/></svg>',
+  image: '<svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="m6.5 16.5 3.8-4.2 2.7 2.8 2.4-2.4 2.1 2.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+};
 function thumbNode(item) {
   const box = document.createElement("span");
   box.className = "thumb";
-  const kind = document.createElement("span");
-  kind.className = "kd";
-  kind.textContent = item.kind[0];
-  box.append(kind);
+  if (item.kind) {
+    const badge = document.createElement("span");
+    badge.className = "kd";
+    badge.setAttribute("aria-hidden", "true");
+    badge.innerHTML = KIND_GLYPH[item.kind] || "";
+    box.append(badge);
+  }
   if (item.thumb) {
     const img = document.createElement("img");
     img.src = item.thumb;
@@ -465,9 +473,26 @@ $("prev").onclick = () => step(-1);
 $("loop").onclick = toggleLoop;
 $("autoplay").onclick = toggleAutoStart;
 for (const key of Object.keys(FITS)) $("fit-" + key).onclick = () => setFit(FITS[key]);
-$("fs").onclick = () => media.toggleFullscreen();
-$("open").onclick = () => pick(true);
-$("add").onclick = () => pick(false);
+$("fs").onclick = () => {
+  Promise.resolve(media.toggleFullscreen()).then(() => syncIcons());
+};
+function openFiles() {
+  return pick(true);
+}
+__name(openFiles, "openFiles");
+function addFiles() {
+  return pick(false);
+}
+__name(addFiles, "addFiles");
+async function addFolder() {
+  const all = await source.openFolder?.() || [];
+  reportUnusable(all);
+  const picked = all.filter((it) => it.kind);
+  if (picked.length) addItems(picked, false);
+}
+__name(addFolder, "addFolder");
+$("open").onclick = () => openFiles();
+$("add").onclick = () => addFiles();
 if (source.canPersist()) {
   const clearButton = $("clear-list");
   if (clearButton) {
@@ -476,16 +501,10 @@ if (source.canPersist()) {
   }
 }
 if (typeof source.openFolder === "function") {
-  const openFolder = /* @__PURE__ */ __name(async () => {
-    const all = await source.openFolder?.() || [];
-    reportUnusable(all);
-    const picked = all.filter((it) => it.kind);
-    if (picked.length) addItems(picked, false);
-  }, "openFolder");
-  const addFolder = $("add-folder");
-  if (addFolder) {
-    addFolder.hidden = false;
-    addFolder.onclick = openFolder;
+  const addFolderButton = $("add-folder");
+  if (addFolderButton) {
+    addFolderButton.hidden = false;
+    addFolderButton.onclick = addFolder;
   }
 }
 if (typeof source.onExternalDrop === "function") {
@@ -765,6 +784,8 @@ document.addEventListener("keydown", (e) => {
   if (k === "a") return toggleAutoStart();
   if (k === "x" && e.shiftKey) return clearAll(true);
   if (k === "z" && e.shiftKey) return restoreCleared();
+  if (k === "o" && e.shiftKey) return addFolder();
+  if (k === "o") return openFiles();
   if (k === "m") return media.toggleMute();
   if (k === "f") return media.toggleFullscreen();
   if (k === " " || k === "enter" || k === "k") {

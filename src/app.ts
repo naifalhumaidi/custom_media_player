@@ -469,13 +469,28 @@ function renderEmptyState() {
 
 /* ---------------- rendering ---------------- */
 
+/* Small shapes, drawn inline rather than pulled from the sprite: the sprite is
+   for controls, and these are labels inside a 32px box. */
+const KIND_GLYPH = {
+  video: '<svg viewBox="0 0 24 24"><path d="M7 4.5 20 12 7 19.5z" fill="currentColor"/></svg>',
+  audio: '<svg viewBox="0 0 24 24"><path d="M9 17.5V6.2l10-2v11.1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6.5" cy="17.5" r="2.6" fill="currentColor"/><circle cx="16.5" cy="15.3" r="2.6" fill="currentColor"/></svg>',
+  image: '<svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="m6.5 16.5 3.8-4.2 2.7 2.8 2.4-2.4 2.1 2.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+} as const;
+
 function thumbNode(item) {
   const box = document.createElement('span');
   box.className = 'thumb';
-  const kind = document.createElement('span');
-  kind.className = 'kd';
-  kind.textContent = item.kind[0];
-  box.append(kind);
+  /* A type badge, as a glyph rather than a letter. It used to be the first
+     character of the kind - "V", "A", "I" - in a corner badge, which read as a
+     stray character rather than as a label. A shape is understood at 12px; a
+     single capital letter is not. */
+  if (item.kind) {
+    const badge = document.createElement('span');
+    badge.className = 'kd';
+    badge.setAttribute('aria-hidden', 'true');
+    badge.innerHTML = KIND_GLYPH[item.kind] || '';
+    box.append(badge);
+  }
   if (item.thumb) {
     const img = document.createElement('img');
     img.src = item.thumb;
@@ -637,9 +652,27 @@ $('prev').onclick = () => step(-1);
 $('loop').onclick = toggleLoop;
 $('autoplay').onclick = toggleAutoStart;
 for (const key of Object.keys(FITS)) $('fit-' + key).onclick = () => setFit(FITS[key]);
-$('fs').onclick = () => media.toggleFullscreen();
-$('open').onclick = () => pick(true);
-$('add').onclick = () => pick(false);
+/* Refreshed after the toggle as well as on the change event. The event is the
+   right mechanism - it also covers the window leaving fullscreen by a window
+   manager shortcut, which this cannot - but the button must not wait on a
+   notification that a shell might deliver a frame late, or it reads as a dead
+   control. Both, because they fail differently. */
+$('fs').onclick = () => { Promise.resolve(media.toggleFullscreen()).then(() => syncIcons()); };
+/* Named, because the keyboard reaches the same two actions as the buttons. Two
+   implementations of "add files" would drift, and the one on the keyboard would
+   be the one nobody tests. */
+function openFiles() { return pick(true); }
+function addFiles() { return pick(false); }
+
+async function addFolder() {
+  const all = (await source.openFolder?.()) || [];
+  reportUnusable(all);
+  const picked = all.filter((it) => it.kind);
+  if (picked.length) addItems(picked, false);
+}
+
+$('open').onclick = () => openFiles();
+$('add').onclick = () => addFiles();
 
 /* The clear button, in the panel header. Only where the playlist can actually
    be kept: in a browser tab everything is lost on reload anyway, so a clear
@@ -658,16 +691,10 @@ if (source.canPersist()) {
 /* A folder is only meaningful where files have real paths, so the control only
    appears when the source offers one. */
 if (typeof source.openFolder === 'function') {
-  const openFolder = async () => {
-    const all = (await source.openFolder?.()) || [];
-    reportUnusable(all);
-    const picked = all.filter((it) => it.kind);
-    if (picked.length) addItems(picked, false);
-  };
-  const addFolder = $('add-folder');
-  if (addFolder) {
-    addFolder.hidden = false;
-    addFolder.onclick = openFolder;
+  const addFolderButton = $('add-folder');
+  if (addFolderButton) {
+    addFolderButton.hidden = false;
+    addFolderButton.onclick = addFolder;
   }
 }
 
@@ -1097,6 +1124,12 @@ document.addEventListener('keydown', (e) => {
   if (k === 'a') return toggleAutoStart();
   if (k === 'x' && e.shiftKey) return clearAll(true);
   if (k === 'z' && e.shiftKey) return restoreCleared();
+  /* O and Shift+O, so the two tooltips that name them are true. They were
+     written first and the keys never bound, which is worse than no shortcut
+     claim at all: a tooltip promising a key that does nothing teaches the user
+     the tooltips are unreliable. */
+  if (k === 'o' && e.shiftKey) return addFolder();
+  if (k === 'o') return openFiles();
   if (k === 'm') return media.toggleMute();
   if (k === 'f') return media.toggleFullscreen();
 

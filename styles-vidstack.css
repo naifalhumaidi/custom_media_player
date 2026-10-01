@@ -67,6 +67,16 @@ media-provider > video {
 
 .btn.on { background: var(--enabled-bg); color: var(--enabled-fg); }
 
+/* Fullscreen is a state rather than a preference, and the two look different
+   on purpose: a mode you are in, not a setting you have turned on. The bar
+   stays put and the button is filled, so it reads even at a glance. */
+#fs.on {
+  background: var(--gold);
+  color: #14100a;
+  box-shadow: 0 0 0 1px var(--gold-strong);
+}
+#fs.on:hover { background: var(--gold); color: #14100a; }
+
 /* Focus follows the brief: a flat background plus a 2px INSET edge, never a
    detached 1px outline (which reads as a stray border) and never a ring too
    dark to see. `outline: none` appears only so the UA ring cannot double up
