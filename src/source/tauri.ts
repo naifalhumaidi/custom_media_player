@@ -267,7 +267,7 @@ import type { FileSource, FullscreenHook, MediaItem, SavedState } from '../types
       /* A real variable, not a property of `pending`. Storing the timer on the
          array loses it on the next concat, so the debounce never had anything
          to clear and a fifty-file drop arrived as fifty separate additions. */
-      let timer = 0;
+      let timer: ReturnType<typeof setTimeout> | undefined;
       let stopped = false;
 
       /* The unlisten arrives as a promise, not a function, so it is held and
@@ -282,7 +282,9 @@ import type { FileSource, FullscreenHook, MediaItem, SavedState } from '../types
         timer = setTimeout(async () => {
           const batch = pending;
           pending = [];
-          timer = 0;
+          /* Released, not zeroed: clearTimeout already ran, and "no timer" is
+             the truth here - a 0 would read as a live handle. */
+          timer = undefined;
           if (stopped) return;
           /* Registered before the callback, because the app adds these rows to
              the playlist and starts playing the first one straight away. A row

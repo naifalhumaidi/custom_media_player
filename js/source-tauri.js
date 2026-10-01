@@ -172,7 +172,7 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
       if (!tauri.event || typeof tauri.event.listen !== "function") return () => {
       };
       let pending = [];
-      let timer = 0;
+      let timer;
       let stopped = false;
       let unlisten = null;
       tauri.event.listen("tauri://drag-drop", (event) => {
@@ -183,7 +183,7 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
         timer = setTimeout(async () => {
           const batch = pending;
           pending = [];
-          timer = 0;
+          timer = void 0;
           if (stopped) return;
           await withUrls(batch);
           if (!stopped) callback(batch);

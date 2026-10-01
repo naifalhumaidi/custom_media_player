@@ -15,7 +15,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   return found as unknown as T;
 };
 const noticeEl = $('notice');
-let noticeTimer = 0;
+let noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
 /* A message the user actually sees. Every failure used to be silent, which is
    indistinguishable from the app having hung.
@@ -63,7 +63,7 @@ let items: MediaItem[] = [];
 let index = 0;
 let loop = false;
 let autoStart = true;
-let saveTimer = 0;
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
 /* The row currently being reordered, or null. Declared with the rest of the
    state because renderList() reads it, and renderList() can run before the
    reorder section is reached. */
@@ -82,7 +82,7 @@ let queued: Array<{ items: MediaItem[]; play: boolean }> | null = null;
    source cannot re-resolve files, so recovery has to happen before the release.
    The File handles are kept until the next change replaces them. */
 let undo: { items: MediaItem[]; index: number } | null = null;
-let undoTimer = 0;
+let undoTimer: ReturnType<typeof setTimeout> | undefined;
 
 const mod = (n, m) => ((n % m) + m) % m;
 
@@ -827,7 +827,7 @@ syncIcons();
 
 /* drop: window = add + play, sidebar = add only */
 
-let dragTimer = 0;
+let dragTimer: ReturnType<typeof setTimeout> | undefined;
 
 function clearDragHint() {
   clearTimeout(dragTimer);

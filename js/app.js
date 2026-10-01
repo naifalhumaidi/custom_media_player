@@ -7,7 +7,7 @@ const $ = /* @__PURE__ */ __name((id) => {
   return found;
 }, "$");
 const noticeEl = $("notice");
-let noticeTimer = 0;
+let noticeTimer;
 function notice(text, { sticky = false, ms = 4e3 } = {}) {
   if (!noticeEl || !text) return;
   noticeEl.textContent = text;
@@ -44,13 +44,13 @@ let items = [];
 let index = 0;
 let loop = false;
 let autoStart = true;
-let saveTimer = 0;
+let saveTimer;
 let dragNode = null;
 let erroredIndex = -1;
 let ready = false;
 let queued = null;
 let undo = null;
-let undoTimer = 0;
+let undoTimer;
 const mod = /* @__PURE__ */ __name((n, m) => (n % m + m) % m, "mod");
 function fmt(s) {
   if (!Number.isFinite(s) || s < 0) s = 0;
@@ -595,7 +595,7 @@ media.on("play", syncIconsFromEvent);
 media.on("pause", syncIconsFromEvent);
 media.onFullscreenChange(syncIconsFromEvent);
 syncIcons();
-let dragTimer = 0;
+let dragTimer;
 function clearDragHint() {
   clearTimeout(dragTimer);
   stage.classList.remove("over");
