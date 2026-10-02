@@ -622,6 +622,70 @@
     }
   });
 
+  /* ---- settings, and the colour taken from the mark ------------------ */
+
+  journey('walkthrough_settings', async () => {
+    const press = (k) => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+
+    press('s');
+    await wait(500);
+    const modal = document.getElementById('settings-modal');
+    say('walkthrough_settings_opens', `open=${!!modal && !modal.hidden}`);
+
+    /* The logo field is a button now, and the input behind it is off screen but
+       still a real input - hidden with display:none it would leave the tab
+       order and the accessibility tree. */
+    const label = document.querySelector('label.btn.txt[for="set-logo"]');
+    const input = document.getElementById('set-logo');
+    const box = input ? input.getBoundingClientRect() : { width: -1, height: -1 };
+    const cs2 = input ? getComputedStyle(input) : null;
+    say('walkthrough_logo_button',
+      `label=${!!label} text=${label ? JSON.stringify(label.textContent.trim()) : 'none'} ` +
+      `inputType=${input ? input.type : 'none'} ` +
+      /* Clipped, not display:none. A display:none input is out of the tab order
+         and out of the accessibility tree, and this one still has to report the
+         chosen file to a screen reader. The clip is the thing that makes it
+         invisible: the user agent keeps a file input at 8x8 whatever size is
+         asked of it, so the box is not the evidence - the clip is. */
+      `box=${Math.round(box.width)}x${Math.round(box.height)} ` +
+      `clipped=${cs2 ? cs2.clipPath : 'n/a'} ` +
+      `hidden=${input ? input.hidden : 'n/a'} tabIndex=${input ? input.tabIndex : 'n/a'}`);
+
+    /* The language picker: one arrow, and a dark popup.
+       Two carets is what a custom chevron drawn over a native one looks like,
+       and the two count because the native arrow is a background image of its
+       own. */
+    const select = document.getElementById('set-lang');
+    const cs = select ? getComputedStyle(select) : null;
+    say('walkthrough_select',
+      select
+        ? `appearance=${cs.appearance} layers=${(cs.backgroundImage.match(/gradient/g) || []).length} ` +
+          `colourScheme=${cs.colorScheme}`
+        : 'no select');
+
+    /* The colour button, against the mark that actually ships. Read as a
+       saturation check rather than an exact value: the question is whether a
+       colour came back at all, and whether it is a colour. */
+    const before = getComputedStyle(document.documentElement).getPropertyValue('--gold').trim();
+    const button = document.getElementById('set-color-reset');
+    if (button) {
+      button.click();
+      await wait(2500);
+      const after = getComputedStyle(document.documentElement).getPropertyValue('--gold').trim();
+      const m = /rgb\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/.exec(after);
+      const sat = m ? Math.max(+m[1], +m[2], +m[3]) - Math.min(+m[1], +m[2], +m[3]) : -1;
+      say('walkthrough_logo_colour',
+        `${before} -> ${after} saturation=${sat} ` +
+        `${sat > 0 ? 'a colour came back' : 'NOTHING CAME BACK'}`);
+    } else {
+      say('walkthrough_logo_colour', 'no button');
+    }
+
+    press('escape');
+    await wait(400);
+    say('walkthrough_settings_closes', `closed=${!!modal && modal.hidden}`);
+  });
+
   /* ---- 5. a file that has moved keeps its row ------------------------- */
 
   /* registered, so the verdict cannot be taken before it has finished */

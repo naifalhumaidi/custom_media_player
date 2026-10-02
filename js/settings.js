@@ -149,80 +149,107 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
   }
   __name(syncInputs, "syncInputs");
   function dominantOf(canvas) {
-    const w = 24;
-    const h = Math.max(1, Math.round(canvas.height / canvas.width * w));
+    const W = 64;
+    const H = Math.max(1, Math.round(canvas.height / canvas.width * W));
+    let src = canvas;
+    let sw = canvas.width;
+    let sh = canvas.height;
+    while (sw > W * 2 && sh > H * 2) {
+      const half = document.createElement("canvas");
+      half.width = Math.max(W, Math.round(sw / 2));
+      half.height = Math.max(H, Math.round(sh / 2));
+      const hctx = half.getContext("2d");
+      if (!hctx) break;
+      hctx.drawImage(src, 0, 0, half.width, half.height);
+      src = half;
+      sw = half.width;
+      sh = half.height;
+    }
     const small = document.createElement("canvas");
-    small.width = w;
-    small.height = h;
+    small.width = W;
+    small.height = H;
     const sctx = small.getContext("2d");
     if (!sctx) return null;
-    sctx.drawImage(canvas, 0, 0, w, h);
+    sctx.drawImage(src, 0, 0, W, H);
     let data;
     try {
-      data = sctx.getImageData(0, 0, w, h).data;
+      data = sctx.getImageData(0, 0, W, H).data;
     } catch {
       return null;
     }
-    const buckets = /* @__PURE__ */ new Map();
-    for (let i = 0; i < data.length; i += 4) {
-      const a = data[i + 3];
-      if (a < 128) continue;
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      const max = Math.max(r, g, b);
-      const min = Math.min(r, g, b);
-      const light = (max + min) / 2;
-      if (light < 24 || light > 236 || max - min < 18) continue;
-      const key = `${r >> 4},${g >> 4},${b >> 4}`;
-      const bucket2 = buckets.get(key) || { n: 0, r: 0, g: 0, b: 0 };
-      bucket2.n += 1;
-      bucket2.r += r;
-      bucket2.g += g;
-      bucket2.b += b;
-      buckets.set(key, bucket2);
-    }
-    if (!buckets.size) return null;
-    let best = "";
-    let bestScore = -1;
-    for (const [key, bucket2] of buckets) {
-      const r = bucket2.r / bucket2.n;
-      const g = bucket2.g / bucket2.n;
-      const b = bucket2.b / bucket2.n;
-      const max = Math.max(r, g, b);
-      const min = Math.min(r, g, b);
-      const sat = max - min;
-      const light = (max + min) / 2;
-      const score = sat * (light > 200 ? 0.2 : 1);
-      if (score > bestScore) {
-        bestScore = score;
-        best = key;
+    const collect = /* @__PURE__ */ __name((floor) => {
+      const buckets = /* @__PURE__ */ new Map();
+      for (let i = 0; i < data.length; i += 4) {
+        const a = data[i + 3];
+        if (a < 128) continue;
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const light = (max + min) / 2;
+        if (light < floor.light || light > 236 || max - min < floor.sat) continue;
+        const key = `${r >> 4},${g >> 4},${b >> 4}`;
+        const bucket = buckets.get(key) || { n: 0, r: 0, g: 0, b: 0 };
+        bucket.n += 1;
+        bucket.r += r;
+        bucket.g += g;
+        bucket.b += b;
+        buckets.set(key, bucket);
       }
-    }
-    const bucket = buckets.get(best);
-    if (!bucket) return null;
-    const hex = /* @__PURE__ */ __name((v) => Math.round(v / bucket.n).toString(16).padStart(2, "0"), "hex");
-    return `#${hex(bucket.r)}${hex(bucket.g)}${hex(bucket.b)}`;
+      return buckets;
+    }, "collect");
+    const bestOf = /* @__PURE__ */ __name((buckets) => {
+      if (!buckets.size) return null;
+      let bestKey = "";
+      let bestScore = -1;
+      for (const [key, bucket2] of buckets) {
+        const r = bucket2.r / bucket2.n;
+        const g = bucket2.g / bucket2.n;
+        const b = bucket2.b / bucket2.n;
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const score = (max - min) * (lightness(r, g, b) > 200 ? 0.2 : 1);
+        if (score > bestScore) {
+          bestScore = score;
+          bestKey = key;
+        }
+      }
+      const bucket = buckets.get(bestKey);
+      if (!bucket) return null;
+      const hex = /* @__PURE__ */ __name((v) => Math.round(v / bucket.n).toString(16).padStart(2, "0"), "hex");
+      return `#${hex(bucket.r)}${hex(bucket.g)}${hex(bucket.b)}`;
+    }, "bestOf");
+    return bestOf(collect({ light: 24, sat: 18 })) || bestOf(collect({ light: 8, sat: 0 }));
   }
   __name(dominantOf, "dominantOf");
+  const lightness = /* @__PURE__ */ __name((r, g, b) => (Math.max(r, g, b) + Math.min(r, g, b)) / 2, "lightness");
   function colourFromImage(src) {
     return new Promise((resolve) => {
       const img = new Image();
+      img.crossOrigin = "anonymous";
+      let settled = false;
+      const finish = /* @__PURE__ */ __name((value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(ceiling);
+        resolve(value);
+      }, "finish");
+      const ceiling = setTimeout(() => finish(null), 1e4);
       img.onload = () => {
         try {
           const canvas = document.createElement("canvas");
           canvas.width = 64;
           canvas.height = Math.max(1, Math.round(img.naturalHeight / img.naturalWidth * 64));
           const ctx = canvas.getContext("2d");
-          if (!ctx || !img.naturalWidth) return resolve(null);
+          if (!ctx || !img.naturalWidth) return finish(null);
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          resolve(dominantOf(canvas));
+          finish(dominantOf(canvas));
         } catch {
-          resolve(null);
+          finish(null);
         }
       };
-      img.onerror = () => resolve(null);
-      setTimeout(() => resolve(null), 2e3);
+      img.onerror = () => finish(null);
       img.src = src;
     });
   }

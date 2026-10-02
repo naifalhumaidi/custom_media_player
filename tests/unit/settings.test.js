@@ -101,13 +101,22 @@ describe('the brand colour', () => {
     expect(gold('--gold')).not.toBe('rgb(170, 120, 39)');
 
     app.$('set-color-reset').click();
-    /* The mark has to load before it can be sampled, and jsdom never loads an
-       image, so this waits out the sampler's own ceiling rather than a
-       successful read. What is asserted here is that the button is not wired to
-       a constant: the colour it produces comes from the image, and with no
-       image it leaves the chosen colour alone rather than overwriting it. */
-    await app.settle(2600);
-    expect(app.window.MediaSettings.prefs.color).not.toBe('#3a7bd5');
+    /* jsdom never loads an image, so the sampler sits waiting for one that will
+       never arrive. What is asserted is that the button is not wired to a
+       constant: it does not stamp a colour over the chosen one while it waits.
+
+       The wait is short on purpose. This used to sit out the sampler's own
+       timeout, which meant the test broke - and then quietly stopped testing
+       anything - every time that timeout was changed, including once when it
+       was raised because it was firing before a large mark had finished
+       decoding. A test that depends on a duration inside the code is a test
+       about the duration.
+
+       That a real mark really does produce its own colour is checked where an
+       image can load: `walkthrough_logo_colour` in the desktop walkthrough. */
+    await app.settle(250);
+    expect(app.window.MediaSettings.prefs.color).toBe('#3a7bd5');
+    expect(gold('--gold')).toBe('rgb(58, 123, 213)');
   });
 
   it('keeps the picker showing the colour actually in use', async () => {

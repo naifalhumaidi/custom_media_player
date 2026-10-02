@@ -229,74 +229,138 @@ import type { I18nModule, SavedState, SettingsModule } from '../types.js';
 
      Averages the bucket rather than taking a sample from it, so an edge or an
      anti-aliased pixel cannot set the brand colour on its own. */
+  /* A brand colour out of an image, or null if there is not one to be had.
+
+     Two things made this unreliable, and both showed up as the button doing
+     nothing at all rather than as a wrong colour.
+
+     The first was the sample. One drawImage from a 1200px wordmark down to 24px
+     takes one sample per output pixel from wherever the filter happens to land,
+     and for thin strokes on a transparent background most of those land on
+     nothing. The average came out a pale grey, the grey filter below threw it
+     away, and the function returned nothing. So the image is halved repeatedly
+     until it is small, which averages every pixel of the original into the
+     result instead of a sixteenth of them.
+
+     The second was the thresholds. A mark that is genuinely monochrome has no
+     saturated pixel, and the function returned nothing for it. So when nothing
+     qualifies, the filters are relaxed once and the best of what is left is
+     used - a grey brand colour is a real answer, and a wrong-but-close one the
+     user can adjust beats a button that does nothing. */
   function dominantOf(canvas: HTMLCanvasElement): string | null {
-    const w = 24;
-    const h = Math.max(1, Math.round((canvas.height / canvas.width) * w));
+    const W = 64;
+    const H = Math.max(1, Math.round((canvas.height / canvas.width) * W));
+
+    let src = canvas;
+    let sw = canvas.width;
+    let sh = canvas.height;
+    while (sw > W * 2 && sh > H * 2) {
+      const half = document.createElement('canvas');
+      half.width = Math.max(W, Math.round(sw / 2));
+      half.height = Math.max(H, Math.round(sh / 2));
+      const hctx = half.getContext('2d');
+      if (!hctx) break;
+      hctx.drawImage(src, 0, 0, half.width, half.height);
+      src = half;
+      sw = half.width;
+      sh = half.height;
+    }
+
     const small = document.createElement('canvas');
-    small.width = w;
-    small.height = h;
+    small.width = W;
+    small.height = H;
     const sctx = small.getContext('2d');
     if (!sctx) return null;
-    sctx.drawImage(canvas, 0, 0, w, h);
+    sctx.drawImage(src, 0, 0, W, H);
 
     let data: Uint8ClampedArray;
     try {
-      data = sctx.getImageData(0, 0, w, h).data;
+      data = sctx.getImageData(0, 0, W, H).data;
     } catch {
       /* A cross-origin image taints the canvas. Nothing to do here: the caller
          falls back rather than guessing. */
       return null;
     }
 
-    const buckets = new Map<string, { n: number; r: number; g: number; b: number }>();
-    for (let i = 0; i < data.length; i += 4) {
-      const a = data[i + 3];
-      if (a < 128) continue;
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      const max = Math.max(r, g, b);
-      const min = Math.min(r, g, b);
-      const light = (max + min) / 2;
-      /* near-black, near-white and near-grey carry no brand information */
-      if (light < 24 || light > 236 || max - min < 18) continue;
-      const key = `${r >> 4},${g >> 4},${b >> 4}`;
-      const bucket = buckets.get(key) || { n: 0, r: 0, g: 0, b: 0 };
-      bucket.n += 1;
-      bucket.r += r;
-      bucket.g += g;
-      bucket.b += b;
-      buckets.set(key, bucket);
-    }
-    if (!buckets.size) return null;
+    type Bucket = { n: number; r: number; g: number; b: number };
 
-    let best = '';
-    let bestScore = -1;
-    for (const [key, bucket] of buckets) {
-      const r = bucket.r / bucket.n;
-      const g = bucket.g / bucket.n;
-      const b = bucket.b / bucket.n;
-      const max = Math.max(r, g, b);
-      const min = Math.min(r, g, b);
-      const sat = max - min;
-      const light = (max + min) / 2;
-      /* vivid, and not so light it disappears against the dark chrome */
-      const score = sat * (light > 200 ? 0.2 : 1);
-      if (score > bestScore) {
-        bestScore = score;
-        best = key;
+    /* `floor` decides which pixels are too dull or too pale to be a brand
+       colour. The first pass is strict; if it finds nothing, the second is not. */
+    const collect = (floor: { light: number; sat: number }): Map<string, Bucket> => {
+      const buckets = new Map<string, Bucket>();
+      for (let i = 0; i < data.length; i += 4) {
+        const a = data[i + 3];
+        if (a < 128) continue;
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const light = (max + min) / 2;
+        if (light < floor.light || light > 236 || max - min < floor.sat) continue;
+        const key = `${r >> 4},${g >> 4},${b >> 4}`;
+        const bucket = buckets.get(key) || { n: 0, r: 0, g: 0, b: 0 };
+        bucket.n += 1;
+        bucket.r += r;
+        bucket.g += g;
+        bucket.b += b;
+        buckets.set(key, bucket);
       }
-    }
-    const bucket = buckets.get(best);
-    if (!bucket) return null;
-    const hex = (v: number) => Math.round(v / bucket.n).toString(16).padStart(2, '0');
-    return `#${hex(bucket.r)}${hex(bucket.g)}${hex(bucket.b)}`;
+      return buckets;
+    };
+
+    const bestOf = (buckets: Map<string, Bucket>): string | null => {
+      if (!buckets.size) return null;
+      let bestKey = '';
+      let bestScore = -1;
+      for (const [key, bucket] of buckets) {
+        const r = bucket.r / bucket.n;
+        const g = bucket.g / bucket.n;
+        const b = bucket.b / bucket.n;
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        /* Vivid, and not so light it disappears against the dark chrome. The
+           light end is discounted rather than dropped: a pale brand colour is
+           still the brand colour. */
+        const score = (max - min) * (lightness(r, g, b) > 200 ? 0.2 : 1);
+        if (score > bestScore) {
+          bestScore = score;
+          bestKey = key;
+        }
+      }
+      const bucket = buckets.get(bestKey);
+      if (!bucket) return null;
+      const hex = (v: number) => Math.round(v / bucket.n).toString(16).padStart(2, '0');
+      return `#${hex(bucket.r)}${hex(bucket.g)}${hex(bucket.b)}`;
+    };
+
+    return bestOf(collect({ light: 24, sat: 18 })) || bestOf(collect({ light: 8, sat: 0 }));
   }
+
+  const lightness = (r: number, g: number, b: number): number =>
+    (Math.max(r, g, b) + Math.min(r, g, b)) / 2;
 
   /* Loads an image and returns its dominant colour, or null. */
   function colourFromImage(src: string): Promise<string | null> {
     return new Promise((resolve) => {
       const img = new Image();
+      /* Without this a mark served from another origin taints the canvas and
+         getImageData throws, which is a null answer and a button that does
+         nothing. Same-origin and blob: URLs are unaffected. */
+      img.crossOrigin = 'anonymous';
+      let settled = false;
+      const finish = (value: string | null) => {
+        /* A promise settles once, but the ceiling has to be disarmed or it fires
+           into a load that has already answered - and, worse, it fired FIRST on
+           any mark slow enough to decode, which is a null answer for a logo
+           that was perfectly readable. */
+        if (settled) return;
+        settled = true;
+        clearTimeout(ceiling);
+        resolve(value);
+      };
+      const ceiling = setTimeout(() => finish(null), 10000);
+
       img.onload = () => {
         try {
           const canvas = document.createElement('canvas');
@@ -304,17 +368,14 @@ import type { I18nModule, SavedState, SettingsModule } from '../types.js';
           canvas.width = 64;
           canvas.height = Math.max(1, Math.round((img.naturalHeight / img.naturalWidth) * 64));
           const ctx = canvas.getContext('2d');
-          if (!ctx || !img.naturalWidth) return resolve(null);
+          if (!ctx || !img.naturalWidth) return finish(null);
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          resolve(dominantOf(canvas));
+          finish(dominantOf(canvas));
         } catch {
-          resolve(null);
+          finish(null);
         }
       };
-      img.onerror = () => resolve(null);
-      /* A ceiling, so this always settles. Without it a mark that cannot load
-         leaves the promise pending and the button simply does nothing. */
-      setTimeout(() => resolve(null), 2000);
+      img.onerror = () => finish(null);
       img.src = src;
     });
   }

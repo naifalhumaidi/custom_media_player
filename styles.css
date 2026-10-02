@@ -743,10 +743,20 @@ media-time { color: inherit; font: inherit; }
   position: absolute;
   width: 1px;
   height: 1px;
+  /* min-* as well, since a file input has a minimum size in the user agent's own
+     stylesheet. It does not get the box all the way to 1px - the input ends up
+     8x8 whatever is asked of it - so the clip below is doing the real work and
+     these are here to keep it out of the layout. */
+  min-width: 0;
+  min-height: 0;
   margin: -1px;
   padding: 0;
   border: 0;
   overflow: hidden;
+  /* The clip is what makes it invisible. The 1px box is a best effort that the
+     user agent does not honour for this element; the clip works whatever the
+     box measures, which is why the probe checks the clip and not the size. */
+  clip: rect(0 0 0 0);
   clip-path: inset(50%);
   white-space: nowrap;
 }
