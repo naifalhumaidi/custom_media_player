@@ -765,44 +765,38 @@ media-time { color: inherit; font: inherit; }
 .about { margin: 0; font-size: 12.5px; color: #8a8a8a; }
 
 /* ---------- instructions page ----------
-   Two columns of cards with a lead line above them. It was three stacked
-   sections in a single scrolling column, which read as a wall of text and made
-   the settings - the part people actually come here for - the hardest to find. */
+   One column, scrolled. A grid of cards looked tidy and read badly: four short
+   blocks side by side, and the eye had to decide where to start. Stacked, in a
+   fixed order, with a measure narrow enough to read comfortably, it is read top
+   to bottom like a page. */
 
-.help-body { display: block; }
+.help-body {
+  display: block;
+  columns: 1;
+  max-width: 62ch;
+  margin-inline: auto;
+}
 
 .help-lead {
-  margin: 0 0 16px;
-  padding: 0 2px 14px;
+  margin: 0 0 22px;
+  padding: 0 2px 18px;
   border-bottom: 1px solid #1a1a1a;
 }
 
 .help-tagline {
   margin: 0;
-  font-size: 14.5px;
-  line-height: 1.55;
-  color: #cfcfcf;
-  max-width: 62ch;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #c8c8c8;
 }
 
-.help-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 12px;
-  align-items: start;
-}
+/* Sections are separated by space, not by boxes. A card per section made the
+   page look like a dashboard rather than something to read through. */
+.help-body > section { margin: 0 0 26px; }
+.help-body > section:last-child { margin-bottom: 4px; }
 
-.help-card {
-  background: #121212;
-  border-radius: var(--r-lg);
-  padding: 14px 16px 15px;
-  box-shadow: inset 0 0 0 1px #1e1e1e;
-}
-
-.help-card.wide { grid-column: 1 / -1; }
-
-.help-card h3 {
-  margin: 0 0 9px;
+.help-body h3 {
+  margin: 0 0 10px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: .09em;
@@ -810,31 +804,33 @@ media-time { color: inherit; font: inherit; }
   color: var(--gold-text);
 }
 
-.help-card-lead {
+.help-lead-text {
   margin: 0 0 10px;
   font-size: 12.5px;
-  line-height: 1.5;
-  color: #9a9a9a;
+  line-height: 1.55;
+  color: #949494;
 }
 
 .help-defs { margin: 0; font-size: 12.5px; }
-.help-defs dt { color: #dcdcdc; font-weight: 600; margin-top: 9px; }
+.help-defs dt { color: #dcdcdc; font-weight: 600; margin-top: 10px; }
 .help-defs dt:first-child { margin-top: 0; }
-.help-defs dd { margin: 2px 0 0; color: #949494; line-height: 1.5; }
+.help-defs dd { margin: 2px 0 0; color: #8f8f8f; line-height: 1.55; }
 
-.help-card-foot {
+.help-foot {
   margin: 12px 0 0;
   font-size: 12px;
   color: #8f8f8f;
 }
 
-.help-keys {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 4px 22px;
-}
+.help-body .notes { margin: 0; padding-inline-start: 18px; }
+.help-body .notes li { margin: 6px 0; line-height: 1.55; }
 
-.help-card .notes { margin: 0; }
+/* The three key tables in one column, with the group headings carrying the
+   division. Stacked they read as one list rather than three fragments. */
+.help-body .keys + .keys { margin-top: 6px; }
+.help-body .keys th { padding: 14px 0 4px; }
+.help-body .keys tr:first-child th { padding-top: 0; }
+.help-body .keys td { padding: 4px 0; }
 
 /* ---------- the logo field ---------- */
 

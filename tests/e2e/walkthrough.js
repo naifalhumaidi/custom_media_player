@@ -25,6 +25,28 @@
   const say = (key, value) => { report[key] = value; };
   window.__DIAG__ = report;
 
+  /* The console, kept.
+
+     A journey can fail without throwing - the row arrives, the file does not
+     load, and every line the walkthrough writes describes a symptom rather than
+     a cause. The reason is nearly always one line in here, and it was being
+     thrown away. Only errors and warnings are kept, because an app that logs
+     freely would otherwise bury the run in its own chatter. */
+  const consoleLines = [];
+  for (const level of ['error', 'warn']) {
+    const original = console[level].bind(console);
+    console[level] = (...args) => {
+      try {
+        consoleLines.push(`${level}: ` + args.map((a) => {
+          if (a && a.stack) return String(a.stack).split('\n').slice(0, 3).join(' <- ');
+          if (typeof a === 'object') { try { return JSON.stringify(a); } catch { return String(a); } }
+          return String(a);
+        }).join(' '));
+      } catch { /* an unprintable value must not break the run */ }
+      original(...args);
+    };
+  }
+
   /* One walkthrough, both shells. The Tauri build has a command channel; the
      Electron build offers the same handful of operations under its own names.
      Resolving through here rather than in the tests means a journey is written
@@ -42,6 +64,69 @@
       if (cmd === 'diagnostic_simulate_drop') return walk.simulateDrop(args.paths);
       return Promise.reject(new Error('this shell cannot ' + cmd));
     };
+
+  /* A real drop, by whichever route the shell under test actually has.
+
+     The Tauri build has a command for it. The Electron build has an IPC handler
+     of the same name that only returns the array length and does nothing at all,
+     because Electron delivers drops to the page as a DOM event - so asking it to
+     drop meant nothing was ever dropped. The run then reported
+     "rows before=0 after=0", "NONE in the page" and "the file never loaded",
+     and still finished PASS, because the verdict only asked whether each
+     journey threw.
+
+     The path is queued for the preload to hand back and a real DragEvent is
+     dispatched at the stage, which is the same code path a user's drop takes. */
+  const dropAFileOnto = async (path) => {
+    if (tauri) return invoke('diagnostic_simulate_drop', { paths: [path] });
+
+    const shell = window.MediaShell;
+    const stage = document.getElementById('stage');
+    if (!shell || !stage) return { dispatched: false, why: 'no shell or no stage' };
+
+    shell.dropFilesForTest([path]);
+
+    /* One File per path. The object is a stand-in - its bytes are never read,
+       because the adapter asks the preload for the path and the preload answers
+       from the queue. What the adapter needs from the File is only that there is
+       one, so the drop is recognised as files rather than as nothing. */
+    const dt = new DataTransfer();
+    for (const p of Array.isArray(path) ? path : [path]) {
+      dt.items.add(new File([new Uint8Array([0])], p.split('/').pop() || 'probe'));
+    }
+
+    const options = { bubbles: true, cancelable: true, dataTransfer: dt };
+    stage.dispatchEvent(new DragEvent('dragover', options));
+    stage.dispatchEvent(new DragEvent('drop', options));
+    return { dispatched: true, files: dt.files.length };
+  };
+
+  /* The journeys, one after another.
+
+     They used to be started together and left to interleave, which sounds
+     cheaper and is not: one of them resizes the window through five sizes while
+     another is waiting for a video to start playing, so the playback journey was
+     measuring a player being dragged around underneath it, and the layout
+     journey was measuring a viewport the other one kept changing. Each has its
+     own ceiling, so running them in turn still ends a broken run - it just ends
+     it with answers that are about the thing being asked. */
+  const journeys = [];
+  let queue = Promise.resolve();
+
+  /* `fn` is called for its rejections, not by the caller. A journey that throws
+     before it has written anything would otherwise leave its own line absent,
+     and an absent line is what the verdict reads as "it passed". */
+  const journey = (key, fn) => {
+    queue = queue.then(() => Promise.resolve().then(fn).catch((err) => {
+      if (err && err.__walkthroughReported) return;
+      err = err || new Error('rejected with nothing');
+      /* Marked so the journey's own catch, which is more specific and has
+         already recorded what it was doing, does not overwrite it. */
+      try { err.__walkthroughReported = true; } catch { /* frozen */ }
+      say(key, 'threw: ' + (err.message || String(err)));
+    }));
+    journeys.push(queue);
+  };
 
   const channel = tauri;
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -98,7 +183,8 @@
 
   /* ---- 1. every control reachable, at each size ----------------------- */
 
-  (async () => {
+  /* registered, so the verdict cannot be taken before it has finished */
+  journey('layout_worst', async () => {
     let worst = null;
 
     for (const [w, h, label] of SIZES) {
@@ -219,7 +305,13 @@
     await invoke('diagnostic_set_size', { width: before - 120, height: 600 });
     await wait(200);
     const after = document.documentElement.clientWidth;
-    say('window_resizable', after !== before ? 'yes' : 'NO - the window ignores a resize');
+    /* The numbers go in the line. "NO" on its own cannot be told apart from a
+       window manager that would not let the test resize the window, from a
+       window that genuinely cannot be resized, and from a viewport that did not
+       follow the window - three different things and one word. */
+    say('window_resizable', after !== before
+      ? `yes (${before} -> ${after})`
+      : `NO - asked for ${before - 120} wide, viewport stayed ${before}`);
 
     await invoke('diagnostic_set_size', { width: 1280, height: 800 });
     await wait(200);
@@ -231,11 +323,12 @@
         : '';
       return el.tagName.toLowerCase() + id + cls;
     }
-  })().catch((err) => say('layout_worst', 'threw: ' + err));
+  });   /* rejections are caught inside journey() */
 
   /* ---- 2, 3. drop a file and play it --------------------------------- */
 
-  (async () => {
+  /* registered, so the verdict cannot be taken before it has finished */
+  journey('walkthrough_play', async () => {
     if (!probeFile) {
       say('walkthrough_play', 'no probe file supplied');
       return;
@@ -247,7 +340,7 @@
     }
 
     const before = document.querySelectorAll('#list li').length;
-    await invoke('diagnostic_simulate_drop', { paths: [probeFile] });
+    await dropAFileOnto(probeFile);
     /* Until the player knows the file. `duration` is the honest signal: a
        playlist can contain the row while the media has not loaded yet, and
        treating that as "loaded" is how a real failure gets missed. */
@@ -291,11 +384,29 @@
       say('walkthrough_media_src', String(video.currentSrc || video.src || '') || 'EMPTY');
     }
 
+    /* Rewound first, and this matters more than it looks.
+
+       The probe clip is eight seconds long, and the journeys before this one -
+       resizing the window through five sizes - take longer than that. The clip
+       had already ended, so `playing` was false because the media had *finished*,
+       and the report said "NO - the player is paused" on a player that had done
+       exactly what it was told. Measuring a paused player and calling it broken
+       is the same mistake as the one that got a whole run to say PASS. */
+    if (Number.isFinite(bridge.duration) && bridge.duration > 1) {
+      await bridge.seekBy(-bridge.duration);
+      await wait(300);
+    }
+
+    await bridge.play();
+    await waitFor(() => bridge.playing, 6000, 'playback to start after the rewind');
+
     const t1 = bridge.currentTime;
     await wait(1500);
     const t2 = bridge.currentTime;
 
-    say('walkthrough_playing', bridge.playing ? 'yes' : 'NO - the player is paused');
+    say('walkthrough_playing', bridge.playing
+      ? 'yes'
+      : `NO - paused at ${t2.toFixed(2)}s of ${bridge.duration}s`);
     say('walkthrough_duration', String(Math.round(bridge.duration || 0)) +
       (Number.isFinite(bridge.duration) ? '' : ' (not a number - metadata never arrived)'));
     say('walkthrough_time_advancing', t2 > t1
@@ -316,11 +427,12 @@
     await bridge.pause();
     await wait(200);
     say('walkthrough_pause', bridge.playing ? 'NO - still playing' : 'ok');
-  })().catch((err) => say('walkthrough_play', 'threw: ' + err));
+  });   /* rejections are caught inside journey() */
 
   /* ---- 4. fullscreen by keyboard ------------------------------------- */
 
-  (async () => {
+  /* registered, so the verdict cannot be taken before it has finished */
+  journey('walkthrough_fullscreen', async () => {
     const fsButton = document.getElementById('fs');
     const before = await invoke('is_fullscreen');
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', bubbles: true }));
@@ -343,11 +455,12 @@
     const hook = window.MediaFullscreen;
     say('walkthrough_fullscreen_button_state',
       hook ? String(hook.active === (during && !after)) : 'no shell hook');
-  })().catch((err) => say('walkthrough_fullscreen', 'threw: ' + err));
+  });   /* rejections are caught inside journey() */
 
   /* ---- 5. a file that has moved keeps its row ------------------------- */
 
-  (async () => {
+  /* registered, so the verdict cannot be taken before it has finished */
+  journey('walkthrough_missing_rows', async () => {
     try {
       const rowsBefore = document.querySelectorAll('#list li').length;
       await wait(400);
@@ -358,23 +471,57 @@
     } catch (err) {
       say('walkthrough_missing_rows', 'threw: ' + err);
     }
-  })();
+  });
 
-  /* Report once everything has had time, and mark it so a second call knows. */
-  /* Long enough for every journey to finish, including the twelve-second
-     ceiling on a file that never loads. It used to be seven seconds, which was
-     long enough when there were fewer journeys and no longer is - and a report
-     printed early omits sections silently, so a run could pass while a whole
-     journey went unrecorded. */
+  /* The verdict, once every journey has finished writing.
+
+     It used to sleep for a fixed time and then read the report, which is a race
+     dressed up as a wait: the playback journey can spend twelve seconds waiting
+     for a file to load and eight more waiting for it to play, and it writes as
+     it goes - so a report read on a timer is read *before* the journey that
+     matters has said anything.
+
+     And the patterns below are matched against the report's own words, so they
+     have to include the ways a failure is actually phrased. They did not. An
+     Electron run printed "rows before=0 after=0", "NONE in the page", "stuck at
+     0.00" and "the file never loaded" - every one of those is a dead player -
+     and the verdict said PASS, because none of those sentences contains a word
+     the old pattern list knew about. */
   (async () => {
-    await wait(20000);
+    await Promise.allSettled(journeys);
+
     const failures = [];
-    for (const [key, value] of Object.entries(report)) {
-      const text = String(value);
-      if (/\bNO\b|BROKEN|threw:|outside the window|no size|too small/.test(text)) {
-        failures.push(key);
-      }
+
+    /* Every journey that must have run, and therefore must have written a line.
+       A journey that returns early - no probe file, no bridge - leaves no line,
+       and its absence used to be invisible. */
+    const expected = [
+      'layout_worst', 'walkthrough_drop', 'walkthrough_media_elements',
+      'walkthrough_playing', 'walkthrough_duration', 'walkthrough_seek',
+      'walkthrough_pause', 'walkthrough_fullscreen', 'walkthrough_missing_rows',
+    ];
+    for (const key of expected) {
+      if (!(key in report)) failures.push(key + ' (never reported)');
     }
+
+    /* The honest failure phrasings, in one list. */
+    const broken = [
+      /\bNO\b/, /\bNONE\b/, /\bEMPTY\b/, /\bBROKEN\b/,
+      /threw:/, /never loaded/, /never started/, /gave up waiting/,
+      /stuck at 0/, /not tested/, /after=0\b/, /dispatched: false/,
+      /outside the window/, /no size/, /too small/,
+    ];
+
+    for (const [key, value] of Object.entries(report)) {
+      if (broken.some((re) => re.test(String(value)))) failures.push(key);
+    }
+
+    /* The console, into the report, so a run that fails says why rather than
+       only what it saw. */
+    if (consoleLines.length) {
+      say('walkthrough_console', consoleLines.slice(0, 12).join(' || '));
+    }
+
     say('walkthrough_verdict', failures.length
       ? `FAIL - ${failures.length} problem(s): ${failures.join(', ')}`
       : 'PASS - every journey worked');

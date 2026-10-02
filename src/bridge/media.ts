@@ -249,6 +249,19 @@ import type { BridgeEvents } from '../types.js';
       if (autoplay) el().paused = false;
     },
 
+    /* Clearing the playlist.
+
+       The per-load listeners are dropped, as they are between loads, but the
+       ones that describe the *element* rather than a load are put straight back.
+       Dropping them permanently is what made the volume and mute controls die
+       after the clear button was pressed: they still rendered, still took
+       clicks, and no longer changed anything, because nothing was listening to
+       the media element any more.
+
+       The timeline is repainted at zero for the same reason. It is the only
+       piece of state on screen that does not belong to any file, and left alone
+       it sits at the last position played, which reads as a real position on a
+       timeline that no longer has one. */
     clear() {
       dropLive();
       currentLoad = ++loadSeq;
@@ -260,6 +273,8 @@ import type { BridgeEvents } from '../types.js';
       el().autoPlay = false;
       img().hidden = false;
       img().removeAttribute('src');
+      paintBar('time', 0);
+      paintBar('volume', el().muted ? 0 : el().volume);
     },
 
     /* The library's own sliders keep correct state and ARIA values, but their

@@ -29,7 +29,8 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
       if (!item || !item.path) return;
       try {
         item.url = await shell.mediaUrl(item.path);
-      } catch {
+      } catch (err) {
+        console.warn("[app] no playable URL for", item.path, err);
         item.url = null;
       }
     }));
@@ -56,7 +57,18 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
     
            A file with no path - a folder, a virtual item - is refused rather than
            added as a row that can never play. */
-    dropItems(event) {
+    /* A drop is the one route into the playlist that did not ask the shell for a
+           URL for what it got.
+    
+           `openFiles` and `openFolder` both run their results through `withUrls`;
+           this one returned the bare items, so a dropped file reached the playlist
+           with `url` still null. The row appeared - which is why the bug looked like
+           a player that would not start rather than a drop that did not work - and
+           `urlFor` then refused it, every time, for as long as the row lived.
+    
+           The row survived a restart with the same hole, because the state is saved
+           by path and re-resolved through this same function. */
+    async dropItems(event) {
       const list = event && event.dataTransfer ? event.dataTransfer.files : null;
       if (!list || !list.length) return [];
       const items = [];
@@ -64,7 +76,7 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
         const path = shell.pathForFile(file);
         if (path) items.push(toItem(path));
       }
-      return items;
+      return withUrls(items);
     },
     urlFor(item) {
       if (!item.path) {

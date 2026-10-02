@@ -57,6 +57,11 @@ contextBridge.exposeInMainWorld('MediaShell', {
      file object. Returns '' for anything that is not a real file, which the
      adapter treats as "no path" rather than as a row that cannot play. */
   pathForFile: (file) => {
+    /* A queued test path is handed out first. This was declared and never read,
+       so the walkthrough's drop queued a path that nothing ever consumed - which
+       is why the Electron run reported "rows before=0 after=0" and looked like
+       the drop was broken when the hook was. */
+    if (pendingDrop && pendingDrop.length) return pendingDrop.shift();
     try {
       return webUtils.getPathForFile(file);
     } catch {

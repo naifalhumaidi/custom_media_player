@@ -34,10 +34,32 @@ if [ ! -f "$ROOT/dist/index.html" ]; then
   (cd "$ROOT" && npm run build:web) || exit 1
 fi
 
-# An *empty* WAYLAND_DISPLAY still counts as set, and Chromium then tries it,
-# fails, and exits rather than falling back to X11. Unset rather than blanked.
-if [ -z "${WAYLAND_DISPLAY:-}" ]; then
-  unset WAYLAND_DISPLAY
+# Chromium prefers Wayland whenever WAYLAND_DISPLAY is set, and it does not care
+# that DISPLAY points at a framebuffer. This script used to unset WAYLAND_DISPLAY
+# only when it was *empty* - which is backwards. The variable is either absent or
+# it names a real compositor, and on this machine it names the user's own Plasma
+# session, so every run that went through here opened its window on their desktop
+# rather than on the Xvfb display the run had been given. Unset it outright, and
+# say so to Chromium as well, because unsetting alone is a promise and the switch
+# is the fact.
+unset WAYLAND_DISPLAY
+unset QT_QAYLAND_DISPLAY 2>/dev/null || true
+unset GDK_BACKEND 2>/dev/null || true
+
+# A walkthrough must start from an empty playlist. Without this the saved state
+# from the previous run is restored before the first journey looks, and every row
+# count in the report is off by however many tracks the last run left behind.
+if [ -n "${MT_WALKTHROUGH:-}" ] || [ -n "${MT_STATE_DIR:-}" ]; then
+  if [ -n "${MT_STATE_DIR:-}" ]; then
+    # A directory the caller named is theirs: created if absent, never deleted.
+    mkdir -p "$MT_STATE_DIR"
+  else
+    MT_STATE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/mt-walkthrough.XXXXXX")"
+    # Only the one this script made. Someone who set MT_KEEP_STATE wants to read
+    # the state afterwards.
+    [ -z "${MT_KEEP_STATE:-}" ] && trap 'rm -rf "$MT_STATE_DIR"' EXIT
+  fi
+  export MT_STATE_DIR
 fi
 
-exec "$ELECTRON" "$ROOT/shells/electron" "$@"
+exec "$ELECTRON" --ozone-platform=x11 --disable-features=WaylandWindowDecorations "$ROOT/shells/electron" "$@"

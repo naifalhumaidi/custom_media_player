@@ -73,7 +73,11 @@ export interface FileSource {
   saveState(state: SavedState | Record<string, unknown>): Promise<void>;
 
   openFolder?(): Promise<MediaItem[]>;
-  dropItems?(event: DragEvent): MediaItem[];
+  /* May be async, and the app awaits it. A desktop adapter has to ask its shell
+     for a playable URL per item, and that is an IPC round trip - so a sync
+     signature here is a trap: an adapter that resolves a URL and is typed as
+     sync type-checks, then hands the app a bare item that cannot play. */
+  dropItems?(event: DragEvent): MediaItem[] | Promise<MediaItem[]>;
   fileExists?(item: MediaItem): Promise<boolean>;
   /** Desktop shells that deliver drops outside the DOM subscribe here. */
   onExternalDrop?(callback: (items: MediaItem[]) => void): () => void;

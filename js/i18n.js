@@ -8,7 +8,7 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
       locale: "en",
       "app.title": "Media Tools",
       "app.logoAlt": "Media Tools",
-      "app.about": "Gather your images, video and audio into one list, arrange it the way you want, and move through it without hunting for anything. Drop files in, reorder with the mouse or the keyboard, keep your place between visits, and show any of it full screen - all on your own machine, with nothing uploaded anywhere.",
+      "app.about": "Gather your images, video and audio into one list, and arrange it the way you want. Move between them without looking for anything. Drop files in, reorder them with the mouse or the keyboard, and keep your place between visits - all on your own machine, with nothing uploaded anywhere.",
       /* --- control bar --- */
       "bar.open": "Open files",
       "bar.previous": "Previous",

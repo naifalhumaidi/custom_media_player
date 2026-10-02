@@ -32,6 +32,12 @@
       <g id="i-plus"><path d="M12 5v14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></g>
       <g id="i-help"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .9-1 1.6v.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="16.6" r="1.1" fill="currentColor"/></g>
       <g id="i-settings"><circle cx="12" cy="12" r="3.1" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M19.1 14.2a1.5 1.5 0 0 0 .3 1.65l.06.06a1.8 1.8 0 1 1-2.55 2.55l-.06-.06a1.5 1.5 0 0 0-1.65-.3 1.5 1.5 0 0 0-.9 1.37v.17a1.8 1.8 0 1 1-3.6 0v-.09a1.5 1.5 0 0 0-.98-1.37 1.5 1.5 0 0 0-1.65.3l-.06.06A1.8 1.8 0 1 1 4.96 16.1l.06-.06a1.5 1.5 0 0 0 .3-1.65 1.5 1.5 0 0 0-1.37-.9h-.17a1.8 1.8 0 1 1 0-3.6h.09a1.5 1.5 0 0 0 1.37-.98 1.5 1.5 0 0 0-.3-1.65l-.06-.06A1.8 1.8 0 1 1 7.43 4.75l.06.06a1.5 1.5 0 0 0 1.65.3h.07a1.5 1.5 0 0 0 .9-1.37v-.17a1.8 1.8 0 1 1 3.6 0v.09a1.5 1.5 0 0 0 .9 1.37 1.5 1.5 0 0 0 1.65-.3l.06-.06a1.8 1.8 0 1 1 2.55 2.55l-.06.06a1.5 1.5 0 0 0-.3 1.65v.07a1.5 1.5 0 0 0 1.37.9h.17a1.8 1.8 0 1 1 0 3.6h-.09a1.5 1.5 0 0 0-1.37.9z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></g>
+      <!-- Panel actions. i-folder and i-trash were referenced by the buttons
+           but never drawn, so "add a folder" and "clear" rendered as empty
+           squares. -->
+      <g id="i-folder"><path d="M3.5 6.5a1.5 1.5 0 0 1 1.5-1.5h4.3l2 2.2h7.7a1.5 1.5 0 0 1 1.5 1.5v8.8a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></g>
+      <g id="i-files"><path d="M2.5 8.2V6.5a1.5 1.5 0 0 1 1.5-1.5h3.4l1.7 1.9h6.4a1.5 1.5 0 0 1 1.5 1.5v7.6a1.5 1.5 0 0 1-1.5 1.5H4a1.5 1.5 0 0 1-1.5-1.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M19.5 11.5v5.2M16.9 14.1h5.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></g>
+      <g id="i-trash"><path d="M4.8 6.8h14.4M9.4 6.8V5.4a1.2 1.2 0 0 1 1.2-1.2h2.8a1.2 1.2 0 0 1 1.2 1.2v1.4M6.6 6.8l.9 11.9a1.5 1.5 0 0 0 1.5 1.4h6a1.5 1.5 0 0 0 1.5-1.4l.9-11.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></g>
       <g id="i-open"><path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h3.6l1.8 2H19a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 19 18H5a1.5 1.5 0 0 1-1.5-1.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 10.5v5M9.5 13h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></g>
     </defs>
   </svg>
@@ -99,7 +105,7 @@
       <div class="side-head">
         <span class="side-title" data-i18n="panel.title">Playlist</span>
         <span id="total" class="total"></span>
-        <button id="add" class="btn ic sm" type="button" title="Add files (O)" data-i18n-title="panel.addKey" data-i18n-aria="panel.add" aria-label="Add files"><svg viewBox="0 0 24 24"><use href="#i-open"/></svg></button>
+        <button id="add" class="btn ic sm" type="button" title="Add files (O)" data-i18n-title="panel.addKey" data-i18n-aria="panel.add" aria-label="Add files"><svg viewBox="0 0 24 24"><use href="#i-files"/></svg></button>
         <button id="add-folder" class="btn ic sm" type="button" title="Add a folder (⇧O)" data-i18n-title="panel.addFolderKey" data-i18n-aria="panel.addFolderAria" aria-label="Add a folder" hidden><svg viewBox="0 0 24 24"><use href="#i-folder"/></svg></button>
         <!-- only offered by the desktop builds, and only when they can actually
              restore a playlist: a clear button in a tab that forgets everything
@@ -140,88 +146,85 @@
         <button id="help-close" class="btn ic" type="button" title="Close (Esc)" data-i18n-title="help.close" data-i18n-aria="common.close" aria-label="Close"><svg viewBox="0 0 24 24"><use href="#i-close"/></svg></button>
       </header>
 
+      <!-- One column, scrolled. It was a grid of cards, which looked good and
+           read badly: four things side by side, each one short enough that the
+           eye jumped between them, and the eye has to choose where to start. A
+           single column with a clear order - what this is, then settings, then
+           files, then keys - is read top to bottom and scrolled like a page. -->
       <div class="modal-body help-body">
 
-        <!-- What it is, first. It used to live in Settings, where nobody looks
-             for it, and it described a limitation ("playlists live in memory")
-             rather than a capability. -->
         <section class="help-lead">
           <p class="help-tagline" data-i18n="app.about"></p>
         </section>
 
-        <div class="help-grid">
+        <section>
+          <h3 data-i18n="help.settings">Settings</h3>
+          <p class="help-lead-text" data-i18n="help.settingsLead"></p>
+          <dl class="help-defs">
+            <dt data-i18n="settings.language">Language</dt>
+            <dd data-i18n="help.settings.language"></dd>
+            <dt data-i18n="settings.logo">Mark on the start window</dt>
+            <dd data-i18n="help.settings.logo"></dd>
+            <dt data-i18n="settings.color">Brand colour</dt>
+            <dd data-i18n="help.settings.color"></dd>
+          </dl>
+          <p class="help-foot"><kbd>,</kbd> <span data-i18n="help.settings.open"></span></p>
+        </section>
 
-          <section class="help-card">
-            <h3 data-i18n="help.settings">Settings</h3>
-            <p class="help-card-lead" data-i18n="help.settingsLead"></p>
-            <dl class="help-defs">
-              <dt data-i18n="settings.language">Language</dt>
-              <dd data-i18n="help.settings.language"></dd>
-              <dt data-i18n="settings.logo">Mark on the start window</dt>
-              <dd data-i18n="help.settings.logo"></dd>
-              <dt data-i18n="settings.color">Brand colour</dt>
-              <dd data-i18n="help.settings.color"></dd>
-            </dl>
-            <p class="help-card-foot"><kbd>,</kbd> <span data-i18n="help.settings.open"></span></p>
-          </section>
+        <section>
+          <h3 data-i18n="help.files">Files</h3>
+          <ul class="notes">
+            <li data-i18n="help.files.1"></li>
+            <li data-i18n="help.files.2"></li>
+            <li data-i18n="help.files.3"></li>
+            <li><b data-i18n="help.files.4a">Click</b> <span data-i18n="help.files.4b"></span> <b data-i18n="help.files.4c">Double-click</b> <span data-i18n="help.files.4d"></span></li>
+            <li><span data-i18n="help.files.5a"></span> <b>&#10005;</b> <span data-i18n="help.files.5b"></span></li>
+          </ul>
+        </section>
 
-          <section class="help-card">
-            <h3 data-i18n="help.files">Files</h3>
-            <ul class="notes">
-              <li data-i18n="help.files.1"></li>
-              <li data-i18n="help.files.2"></li>
-              <li data-i18n="help.files.3"></li>
-              <li><b data-i18n="help.files.4a">Click</b> <span data-i18n="help.files.4b"></span> <b data-i18n="help.files.4c">Double-click</b> <span data-i18n="help.files.4d"></span></li>
-              <li><span data-i18n="help.files.5a"></span> <b>&#10005;</b> <span data-i18n="help.files.5b"></span></li>
-            </ul>
-          </section>
+        <section>
+          <h3 data-i18n="help.shortcuts">Shortcuts</h3>
+          <table class="keys">
+            <tbody>
+              <tr><th colspan="2" data-i18n="help.group.playback">Playback</th></tr>
+              <tr><td><kbd>Space</kbd> <kbd>K</kbd></td><td data-i18n="help.k.playpause"></td></tr>
+              <tr><td><kbd>&larr;</kbd> <kbd>&rarr;</kbd></td><td data-i18n="help.k.seek"></td></tr>
+              <tr><td><kbd>,</kbd> <kbd>.</kbd></td><td data-i18n="help.k.prevnext"></td></tr>
+              <tr><td><kbd>L</kbd></td><td data-i18n="help.k.loop"></td></tr>
+              <tr><td><kbd>A</kbd></td><td data-i18n="help.k.autoplay"></td></tr>
+              <tr><td><kbd>M</kbd></td><td data-i18n="help.k.mute"></td></tr>
+              <tr><td><kbd>&uarr;</kbd> <kbd>&darr;</kbd></td><td data-i18n="help.k.volume"></td></tr>
+            </tbody>
+          </table>
+          <table class="keys">
+            <tbody>
+              <tr><th colspan="2" data-i18n="help.group.view">View</th></tr>
+              <tr><td><kbd>H</kbd></td><td data-i18n="help.k.controls"></td></tr>
+              <tr><td><kbd>P</kbd></td><td data-i18n="help.k.panel"></td></tr>
+              <tr><td><kbd>D</kbd> <kbd>C</kbd> <kbd>S</kbd></td><td data-i18n="help.k.fit"></td></tr>
+              <tr><td><kbd>F</kbd></td><td data-i18n="help.k.fullscreen"></td></tr>
+            </tbody>
+          </table>
+          <table class="keys">
+            <tbody>
+              <tr><th colspan="2" data-i18n="help.group.playlist">Playlist</th></tr>
+              <tr><td><kbd>O</kbd> <kbd>&#8679;</kbd><kbd>O</kbd></td><td data-i18n="help.k.open"></td></tr>
+              <tr><td><kbd>&#8679;</kbd><kbd>X</kbd></td><td data-i18n="help.k.clear"></td></tr>
+              <tr><td><kbd>Esc</kbd></td><td data-i18n="help.k.esc"></td></tr>
+              <tr><td><kbd>?</kbd> <kbd>I</kbd></td><td data-i18n="help.k.help"></td></tr>
+            </tbody>
+          </table>
+        </section>
 
-          <section class="help-card wide">
-            <h3 data-i18n="help.shortcuts">Shortcuts</h3>
-            <div class="help-keys">
-              <table class="keys">
-                <tbody>
-                  <tr><th colspan="2" data-i18n="help.group.playback">Playback</th></tr>
-                  <tr><td><kbd>Space</kbd> <kbd>K</kbd></td><td data-i18n="help.k.playpause"></td></tr>
-                  <tr><td><kbd>&larr;</kbd> <kbd>&rarr;</kbd></td><td data-i18n="help.k.seek"></td></tr>
-                  <tr><td><kbd>,</kbd> <kbd>.</kbd></td><td data-i18n="help.k.prevnext"></td></tr>
-                  <tr><td><kbd>L</kbd></td><td data-i18n="help.k.loop"></td></tr>
-                  <tr><td><kbd>A</kbd></td><td data-i18n="help.k.autoplay"></td></tr>
-                  <tr><td><kbd>M</kbd></td><td data-i18n="help.k.mute"></td></tr>
-                  <tr><td><kbd>&uarr;</kbd> <kbd>&darr;</kbd></td><td data-i18n="help.k.volume"></td></tr>
-                </tbody>
-              </table>
-              <table class="keys">
-                <tbody>
-                  <tr><th colspan="2" data-i18n="help.group.view">View</th></tr>
-                  <tr><td><kbd>H</kbd></td><td data-i18n="help.k.controls"></td></tr>
-                  <tr><td><kbd>P</kbd></td><td data-i18n="help.k.panel"></td></tr>
-                  <tr><td><kbd>D</kbd> <kbd>C</kbd> <kbd>S</kbd></td><td data-i18n="help.k.fit"></td></tr>
-                  <tr><td><kbd>F</kbd></td><td data-i18n="help.k.fullscreen"></td></tr>
-                </tbody>
-              </table>
-              <table class="keys">
-                <tbody>
-                  <tr><th colspan="2" data-i18n="help.group.playlist">Playlist</th></tr>
-                  <tr><td><kbd>O</kbd> <kbd>&#8679;</kbd><kbd>O</kbd></td><td data-i18n="help.k.open"></td></tr>
-                  <tr><td><kbd>&#8679;</kbd><kbd>X</kbd></td><td data-i18n="help.k.clear"></td></tr>
-                  <tr><td><kbd>Esc</kbd></td><td data-i18n="help.k.esc"></td></tr>
-                  <tr><td><kbd>?</kbd> <kbd>I</kbd></td><td data-i18n="help.k.help"></td></tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
+        <section>
+          <h3 data-i18n="help.notes">Notes</h3>
+          <ul class="notes">
+            <li><span data-i18n="help.notes.1a"></span> <kbd>Space</kbd> <span data-i18n="help.notes.1b"></span> <kbd>&rarr;</kbd> <span data-i18n="help.notes.1c"></span></li>
+            <li data-i18n="help.notes.2"></li>
+            <li data-i18n="help.notes.3"></li>
+          </ul>
+        </section>
 
-          <section class="help-card wide">
-            <h3 data-i18n="help.notes">Notes</h3>
-            <ul class="notes">
-              <li><span data-i18n="help.notes.1a"></span> <kbd>Space</kbd> <span data-i18n="help.notes.1b"></span> <kbd>&rarr;</kbd> <span data-i18n="help.notes.1c"></span></li>
-              <li data-i18n="help.notes.2"></li>
-              <li data-i18n="help.notes.3"></li>
-            </ul>
-          </section>
-
-        </div>
       </div>
     </div>
   </div>

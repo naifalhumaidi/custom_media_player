@@ -947,12 +947,16 @@ side.addEventListener('drop', async (e) => {
   addItems(await pickedFrom(e), false);
 });
 
-/* A desktop source resolves paths over IPC, so dropItems may be async. Awaiting
-   and tolerating a non-array keeps a future adapter from turning the drop
-   zones into silent dead zones. */
+/* A desktop source resolves paths over IPC, so dropItems may be async.
+
+   The await is the point. This used to take the result, ask whether it was an
+   array, and use it if so - which is right for a promise exactly never, because
+   a pending promise is not an array. The check ran before the value existed, the
+   result was discarded as not-an-array, and the drop added nothing. It was
+   written as though the await were still ahead of it, one line down. */
 async function pickedFrom(e) {
   try {
-    const res = source.dropItems?.(e) || [];
+    const res = (await source.dropItems?.(e)) || [];
     const all = Array.isArray(res) ? res : [];
     reportUnusable(all);
     return all.filter((it) => it && it.kind);

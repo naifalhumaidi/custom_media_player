@@ -52,10 +52,16 @@ import type { FileSource, FullscreenHook, MediaItem, SavedState } from '../types
       if (!item || !item.path) return;
       try {
         item.url = await shell.mediaUrl(item.path);
-      } catch {
+      } catch (err) {
         /* Left null on purpose: `urlFor` then refuses with a message that says
            the shell could not help, rather than handing back a URL that fails
-           later with nothing to explain it. */
+           later with nothing to explain it.
+
+           The reason is logged, because "the shell could not give this file a
+           playable URL" is a symptom and was the only thing on screen. Swallowing
+           the cause here cost an afternoon: the walkthrough reported a player
+           that would not start, and nothing said the IPC call had thrown. */
+        console.warn('[app] no playable URL for', item.path, err);
         item.url = null;
       }
     }));
@@ -87,7 +93,18 @@ import type { FileSource, FullscreenHook, MediaItem, SavedState } from '../types
 
        A file with no path - a folder, a virtual item - is refused rather than
        added as a row that can never play. */
-    dropItems(event) {
+    /* A drop is the one route into the playlist that did not ask the shell for a
+       URL for what it got.
+
+       `openFiles` and `openFolder` both run their results through `withUrls`;
+       this one returned the bare items, so a dropped file reached the playlist
+       with `url` still null. The row appeared - which is why the bug looked like
+       a player that would not start rather than a drop that did not work - and
+       `urlFor` then refused it, every time, for as long as the row lived.
+
+       The row survived a restart with the same hole, because the state is saved
+       by path and re-resolved through this same function. */
+    async dropItems(event) {
       const list = event && event.dataTransfer ? event.dataTransfer.files : null;
       if (!list || !list.length) return [];
       const items: MediaItem[] = [];
@@ -95,7 +112,7 @@ import type { FileSource, FullscreenHook, MediaItem, SavedState } from '../types
         const path = shell.pathForFile(file);
         if (path) items.push(toItem(path));
       }
-      return items;
+      return withUrls(items);
     },
 
     urlFor(item) {

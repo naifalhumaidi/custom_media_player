@@ -227,7 +227,18 @@ function startServer() {
 /* saved state                                                         */
 /* ------------------------------------------------------------------ */
 
-const statePath = () => path.join(app.getPath('userData'), 'state.json');
+/* Where the playlist and preferences live.
+
+   A walkthrough has to start from nothing, or "how many rows are there now" is
+   answered by whatever the last run left behind: the playback journey counted
+   zero rows, added one, and the run before it had already put three back, so the
+   report said four and every later row count was off by the same amount. The
+   Tauri runner isolates its config for the same reason and the two shells must
+   not disagree about what a clean run means. */
+const statePath = () => {
+  const dir = (process.env.MT_STATE_DIR || '').trim();
+  return dir ? path.join(dir, 'state.json') : path.join(app.getPath('userData'), 'state.json');
+};
 
 ipcMain.handle('load-state', async () => {
   try {

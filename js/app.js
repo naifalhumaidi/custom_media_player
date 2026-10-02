@@ -673,7 +673,7 @@ side.addEventListener("drop", async (e) => {
 });
 async function pickedFrom(e) {
   try {
-    const res = source.dropItems?.(e) || [];
+    const res = await source.dropItems?.(e) || [];
     const all = Array.isArray(res) ? res : [];
     reportUnusable(all);
     return all.filter((it) => it && it.kind);
