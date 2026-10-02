@@ -79,10 +79,14 @@ import type { I18nModule, SavedState, SettingsModule } from '../types.js';
   /* The logo shipped in the markup is the default. `undefined` means "use it",
      `null` means the user removed it, a string is a chosen file. Collapsing
      those two cases wiped the default logo on every boot. */
-  /* The built-in mark. Always shown when there is no logo of the user's, so the
-     start window is never blank and there is no "use the default" button to
-     explain. */
-  const DEFAULT_MARK = 'assets/logo-default.svg';
+  /* The mark that ships, which is the one in the markup.
+
+     It was the wordmark instead, and that is two bugs in one: the app no longer
+     looked like the client's own on first launch, and the file in index.html
+     was the real default and was being overwritten on every boot by a constant
+     that had drifted away from it. One source of truth: whatever the markup
+     says the default is. */
+  const DEFAULT_MARK = 'assets/logo-small.png';
   let defaultLogo: string | null = DEFAULT_MARK;
 
   /* Three states, and the distinction is the whole feature: `undefined` means

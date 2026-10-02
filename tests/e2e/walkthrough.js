@@ -384,6 +384,36 @@
       say('walkthrough_media_src', String(video.currentSrc || video.src || '') || 'EMPTY');
     }
 
+    /* Volume and mute, with something loaded, answered on the element.
+
+       The other journey checks these with an empty playlist, and can only check
+       the bridge's own state there - there is no media for a setting to reach.
+       This is the half that says the setting is not merely remembered: it lands
+       on the video. Both halves, or the pair proves nothing between them. */
+    {
+      const video2 = document.querySelector('video, audio');
+      const vol2 = document.getElementById('volume');
+      const mute2 = document.getElementById('mute');
+      if (video2 && vol2 && mute2) {
+        vol2.value = '0.35';
+        vol2.dispatchEvent(new Event('input', { bubbles: true }));
+        await wait(300);
+        const mutedBefore = video2.muted;
+        mute2.click();
+        await wait(300);
+        say('walkthrough_volume_and_mute_with_media',
+          `element volume=${video2.volume.toFixed(2)} (asked 0.35) ` +
+          `muted ${mutedBefore} -> ${video2.muted}`);
+        /* Put the volume back, so the runs are comparable with each other. */
+        vol2.value = '1';
+        vol2.dispatchEvent(new Event('input', { bubbles: true }));
+        await wait(200);
+      } else {
+        say('walkthrough_volume_and_mute_with_media',
+          `video=${!!video2} volume=${!!vol2} mute=${!!mute2}`);
+      }
+    }
+
     /* Rewound first, and this matters more than it looks.
 
        The probe clip is eight seconds long, and the journeys before this one -
@@ -457,6 +487,119 @@
       hook ? String(hook.active === (during && !after)) : 'no shell hook');
   });   /* rejections are caught inside journey() */
 
+  /* ---- 5. the controls with nothing loaded ---------------------------- */
+
+  /* A separate journey, and not part of the playback one, because it needs the
+     opposite state: the playlist emptied. Reported from the desktop build as
+     "I can't adjust the volume or mute it" once the list had been cleared, and
+     "the progress bar is still where the last one was".
+
+     Each control is asked directly and the answer is read off the media element
+     rather than off a class name, so "the button ignored me", "the element
+     refused" and "the button is not there" stay distinguishable instead of all
+     arriving as "muting did not work". */
+  journey('walkthrough_empty_controls', async () => {
+    /* Which adapter answered, and what it says it can do. A control that is
+       hidden is only meaningful next to the answer to "why" - the alternative is
+       a report saying a button is missing, and no way to tell a build that
+       genuinely lacks it from a wiring mistake. */
+    say('walkthrough_source',
+      `shell=${(window.MediaShell && window.MediaShell.shell) || 'none'} ` +
+      `canPersist=${!!(window.MediaFileSource && window.MediaFileSource.canPersist && window.MediaFileSource.canPersist())} ` +
+      `addFolder=${!!(window.MediaFileSource && window.MediaFileSource.openFolder)} ` +
+      `clearHidden=${document.getElementById('clear-list') ? document.getElementById('clear-list').hidden : 'no button'} ` +
+      `addFolderHidden=${document.getElementById('add-folder') ? document.getElementById('add-folder').hidden : 'no button'}` +
+      ` addHidden=${document.getElementById('add') ? document.getElementById('add').hidden : 'no button'}` +
+      ` addWired=${!!(document.getElementById('add') && document.getElementById('add').onclick)}` +
+      ` clearWired=${!!(document.getElementById('clear-list') && document.getElementById('clear-list').onclick)}` +
+      ` scripts=${Array.from(document.scripts).map((x) => x.src.split('/').pop()).join(',')}` +
+      ` isElectron=${window.MediaFileSource === window.MediaFileSourceElectron}` +
+      ` isWeb=${window.MediaFileSource === window.MediaFileSourceWeb}` +
+      ` hasElectron=${!!window.MediaFileSourceElectron}` +
+      ` appJs=${(document.querySelector('script[src*="app.js"]') || {}).src}`);
+
+    const clearButton = document.getElementById('clear-list');
+    if (!clearButton || clearButton.hidden) {
+      say('walkthrough_empty_controls', 'no clear button in this build - see walkthrough_source');
+      return;
+    }
+    const bridge = window.MediaBridge;
+    const mediaEl = document.querySelector('video, audio');
+
+    clearButton.click();
+    await waitFor(() => document.querySelectorAll('#list li').length === 0, 4000,
+      'the playlist to empty');
+
+    say('walkthrough_empty_state',
+      `rows=${document.querySelectorAll('#list li').length} ` +
+      `bar=${getComputedStyle(document.getElementById('bar')).display} ` +
+      `duration=${bridge ? bridge.duration : 'no bridge'}`);
+
+    /* Mute and volume are asked of the bridge, not of the <video>.
+
+       That is the correction. The bridge writes to the player element and the
+       player holds the setting; there is no media for it to apply the setting
+       to, which is the entire situation under test. Asking the <video> asks a
+       question that has no right answer here - it would read 1.00 and unmuted
+       whatever the user set, and would call a working control broken. The
+       journey that has media loaded is the one that checks the <video>. */
+    const muteButton = document.getElementById('mute');
+    if (muteButton) {
+      const wasMuted = bridge.muted;
+      muteButton.click();
+      await wait(350);
+      say('walkthrough_mute_when_empty',
+        `bridge muted ${wasMuted} -> ${bridge.muted} ` +
+        `(button says muted=${muteButton.classList.contains('muted')} ` +
+        `pressed=${muteButton.getAttribute('aria-pressed')}) ` +
+        `${bridge.muted !== wasMuted ? 'it answered' : 'IGNORED'}`);
+
+      /* And back, so the journeys that follow are not looking at a muted app. */
+      muteButton.click();
+      await wait(250);
+    } else {
+      say('walkthrough_mute_when_empty', 'no #mute button');
+    }
+
+    if (mediaEl) {
+
+      const volume = document.getElementById('volume');
+      if (volume) {
+        const box = volume.getBoundingClientRect();
+        /* A pointer at 20% along the slider: down, move, up. The library drags
+           from the pointer, so a bare click does not move it. */
+        /* A native range input is driven by its value, so it is asked the way a
+           user asks it - the keyboard, which is also the route that has to work
+           for somebody who cannot drag. */
+        const before = bridge.volume;
+        volume.value = '0.2';
+        volume.dispatchEvent(new Event('input', { bubbles: true }));
+        await wait(350);
+        say('walkthrough_volume_when_empty',
+          `bridge volume ${before.toFixed(2)} -> ${bridge.volume.toFixed(2)} ` +
+          `(asked for 0.20, slider shows ${volume.value}, ` +
+          `fill=${getComputedStyle(volume).getPropertyValue('--mt-fill').trim() || 'unset'}) ` +
+          `${Math.abs(bridge.volume - 0.2) < 0.02 ? 'it answered' : 'IGNORED'}`);
+      } else {
+        say('walkthrough_volume_when_empty', 'no volume slider in the page');
+      }
+    } else {
+      say('walkthrough_empty_controls', 'no media element to ask');
+    }
+
+    /* The timeline. Left showing the last position played, it reads as a real
+       position on a timeline that no longer has one. */
+    const time = document.querySelector('media-time-slider');
+    if (time) {
+      const progress = time.querySelector('.vds-track-progress, .vds-track-fill');
+      say('walkthrough_timeline_when_empty',
+        `slider value=${time.getAttribute('aria-valuenow') || '(none)'} ` +
+        `fill=${progress ? getComputedStyle(progress).width : 'no fill element'}`);
+    } else {
+      say('walkthrough_timeline_when_empty', 'no time slider in the page');
+    }
+  });
+
   /* ---- 5. a file that has moved keeps its row ------------------------- */
 
   /* registered, so the verdict cannot be taken before it has finished */
@@ -510,6 +653,12 @@
       /threw:/, /never loaded/, /never started/, /gave up waiting/,
       /stuck at 0/, /not tested/, /after=0\b/, /dispatched: false/,
       /outside the window/, /no size/, /too small/,
+      /* The words the empty-playlist journey uses when a control is on screen,
+         takes a click, and does nothing. Those are the whole point of that
+         journey, so a control that ignored it is the failure it exists to find
+         - and a verdict that does not read them will pass a player whose volume
+         and mute are dead. */
+      /IGNORED/, /did not (move|change|answer)/,
     ];
 
     for (const [key, value] of Object.entries(report)) {

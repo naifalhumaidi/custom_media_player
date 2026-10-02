@@ -51,7 +51,7 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
     return true;
   }
   __name(setBrandColor, "setBrandColor");
-  const DEFAULT_MARK = "assets/logo-default.svg";
+  const DEFAULT_MARK = "assets/logo-small.png";
   let defaultLogo = DEFAULT_MARK;
   function setLogo(url) {
     const img = document.querySelector(".logo");

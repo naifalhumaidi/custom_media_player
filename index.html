@@ -79,13 +79,22 @@
             <span id="counter" class="counter"></span>
           </div>
 
+          <!-- Mute and volume are the app's own, not the library's.
+               <media-mute-button> and <media-volume-slider> are bound to the
+               player, and the player has no media to bind to once the playlist is
+               empty: the button was on screen, took the click, and changed
+               nothing. Reported as "I can't adjust the volume or mute it" after
+               using the clear button.
+
+               Neither is a property of a file. Both are how the listener wants
+               to hear the next thing, so the app owns them, keeps them across a
+               clear, and hands them to whatever loads next. A native range input
+               rather than a hand-built one, so dragging, the arrow keys, Home,
+               End and the screen reader all come with it. -->
           <div class="grp">
-            <media-mute-button id="mute" class="btn ic" title="Mute (m)" data-i18n-title="bar.muteKey" data-i18n-aria="bar.mute" aria-label="Mute"><svg viewBox="0 0 24 24"><use href="#i-sound"/><use href="#i-mute"/></svg></media-mute-button>
-            <media-volume-slider class="vds-slider vds-volume" data-i18n-aria="bar.volume" aria-label="Volume">
-              <div class="vds-track"></div>
-              <div class="vds-track-fill"></div>
-              <div class="vds-thumb"></div>
-            </media-volume-slider>
+            <button id="mute" class="btn ic" type="button" title="Mute (m)" data-i18n-title="bar.muteKey" data-i18n-aria="bar.mute" aria-label="Mute" aria-pressed="false"><svg viewBox="0 0 24 24"><use href="#i-sound"/><use href="#i-mute"/></svg></button>
+            <input id="volume" class="vds-slider vds-volume" type="range" min="0" max="1" step="0.01" value="1"
+                   data-i18n-aria="bar.volume" aria-label="Volume">
             <button id="loop" class="btn ic" type="button" title="Loop playlist (l)" data-i18n-title="bar.loopKey" data-i18n-aria="bar.loop" aria-label="Loop"><svg viewBox="0 0 24 24"><use href="#i-loop"/></svg></button>
             <button id="autoplay" class="btn ic on" type="button" title="Auto-start on track change (a)" data-i18n-title="bar.autoplayKey" data-i18n-aria="bar.autoplay" aria-label="Auto-start"><svg viewBox="0 0 24 24"><use href="#i-auto"/><use href="#i-auto-off"/></svg></button>
             <button id="fit-d" class="btn ic" type="button" title="Default / fit (d)" data-i18n-title="bar.fitDefaultKey" data-i18n-aria="bar.fitDefault" aria-label="Default view"><svg viewBox="0 0 24 24"><use href="#i-fit"/></svg></button>
@@ -285,6 +294,9 @@
   <script src="js/media.js"></script>
   <script src="js/i18n.js"></script>
   <script src="js/settings.js"></script>
-  <script src="app.js"></script>
+  <!-- js/app.js, like every other script here: the compiler writes into js/, and the
+       page asked for app.js at the root - a path that only a stale hand-written
+       file from before the port ever occupied. -->
+  <script src="js/app.js"></script>
 </body>
 </html>

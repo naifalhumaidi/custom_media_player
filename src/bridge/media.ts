@@ -130,11 +130,54 @@ import type { BridgeEvents } from '../types.js';
     }
   }
 
+  /* ---------- volume and mute, held here rather than delegated ----------
+
+     Neither of these is a property of a file. Both are how the listener wants
+     to hear whatever comes next, so they belong to the app and are handed to
+     each media as it loads.
+
+     They cannot simply be written to the player, which is what they used to do.
+     The player proxies `volume` and `muted` onto the media it currently holds,
+     and with the playlist emptied it holds none - so writing them was accepted,
+     stored nowhere the app could read back, and thrown away. The controls were
+     on screen, took the click, and changed nothing: reported as "I can't adjust
+     the volume or mute it" from the moment the clear button was pressed.
+
+     The app is now the only writer - the library's own controls are gone and its
+     keyboard shortcuts are cleared - so holding the value here cannot go stale
+     behind the app's back. */
+  let heldVolume: number | null = null;
+  let heldMuted: boolean | null = null;
+
+  /* The real media element, when there is one. It is created once by the player
+     and outlives a cleared playlist, so this returns the same element every
+     time rather than a fresh one per load. */
+  const liveEl = (): any => document.querySelector('video, audio');
+
+  /* Push both settings at whatever is loaded. Called after every source change,
+     because a new media element - or the same one with a new source - starts at
+     the browser's defaults and would otherwise start at full volume, unmuted,
+     however the listener left it. */
+  function applyHeld() {
+    for (const target of [el(), liveEl()]) {
+      if (!target) continue;
+      if (heldVolume !== null) target.volume = heldVolume;
+      if (heldMuted !== null) target.muted = heldMuted;
+    }
+  }
+
+  /* The volume control is a native range input, so its fill is a gradient
+     stopped at --mt-fill rather than a child element's width. The time slider
+     is still the library's, and still has a fill element. */
   const paintBar = (which, ratio) => {
-    const node = document.querySelector(
-      which === 'time' ? 'media-time-slider' : 'media-volume-slider',
-    );
-    if (node) (node as HTMLElement).style.setProperty('--mt-fill', (ratio * 100).toFixed(2) + '%');
+    const pct = (ratio * 100).toFixed(2) + '%';
+    if (which === 'volume') {
+      const input = document.getElementById('volume') as HTMLInputElement | null;
+      if (input) input.style.setProperty('--mt-fill', pct);
+      return;
+    }
+    const node = document.querySelector('media-time-slider');
+    if (node) (node as HTMLElement).style.setProperty('--mt-fill', pct);
   };
 
   function init() {
@@ -227,6 +270,10 @@ import type { BridgeEvents } from '../types.js';
         return;
       }
 
+      /* Before the first metadata event, so a video starts at the volume the
+         listener chose rather than snapping to full one frame in. */
+      applyHeld();
+
       /* installed BEFORE the source is attached, so the very first metadata
          event is caught rather than the next one */
       onSuperseded(['loaded-metadata', 'can-play'], () => {
@@ -274,7 +321,11 @@ import type { BridgeEvents } from '../types.js';
       img().hidden = false;
       img().removeAttribute('src');
       paintBar('time', 0);
-      paintBar('volume', el().muted ? 0 : el().volume);
+      /* The settings are deliberately NOT forgotten: they describe the listener,
+         not the playlist. Re-painting them here is what stops the controls
+         resetting to full volume and unmuted every time the list is emptied. */
+      applyHeld();
+      paintBar('volume', this.muted ? 0 : this.volume);
     },
 
     /* The library's own sliders keep correct state and ARIA values, but their
@@ -319,8 +370,8 @@ import type { BridgeEvents } from '../types.js';
     get playing() { return !el().paused; },
     get currentTime() { return el().currentTime || 0; },
     get duration() { return el().duration; },
-    get volume() { return el().volume; },
-    get muted() { return el().muted; },
+    get volume() { return heldVolume !== null ? heldVolume : el().volume; },
+    get muted() { return heldMuted !== null ? heldMuted : el().muted; },
     get loop() { return el().loop; },
 
     play,
@@ -395,12 +446,18 @@ import type { BridgeEvents } from '../types.js';
 
     setVolume(v) {
       const next = Math.min(1, Math.max(0, v));
-      el().volume = next;
-      if (next > 0) el().muted = false;
+      heldVolume = next;
+      /* Raising the volume is how a listener unmutes, which is what every
+         player does and what the arrow keys have always done here. */
+      if (next > 0) heldMuted = false;
+      applyHeld();
+      emit('volume', { volume: next });
     },
 
     toggleMute() {
-      el().muted = !el().muted;
+      heldMuted = !this.muted;
+      applyHeld();
+      emit('volume', { volume: this.volume });
     },
 
     setLoop(on) {

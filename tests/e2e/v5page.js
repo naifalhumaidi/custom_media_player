@@ -59,12 +59,28 @@ window.__DONE = (async () => {
     const logoEl = document.querySelector('.logo');
     S('logo: present at boot', !!logoEl && !logoEl.hidden);
     S('logo: loaded at boot', logoEl.complete && logoEl.naturalWidth > 0);
-    /* The built-in wordmark, not the artwork that used to ship here. */
-    S('logo: uses the built-in mark', (logoEl.getAttribute('src') || '') === 'assets/logo-default.svg');
+    /* The mark the app chose, against the mark the page ships.
+
+       Read out of index.html rather than written here. Naming the file in the
+       test is a second place to say what the default is, and a second place to
+       say it wrongly: the constant in js/settings.js drifted to the wordmark
+       while the artwork was still in the markup, and this assertion was
+       comparing the app against the copy in the test - so it passed, and the
+       app was showing something else. */
+    const shipped = await fetch('/index.html')
+      .then((r) => r.text())
+      .then((html) => (/<img class="logo" src="([^"]+)"/.exec(html) || [])[1] || '');
+    S('logo: uses the built-in mark',
+      (logoEl.getAttribute('src') || '') === shipped && !!shipped);
     S('time: placeholder localised', document.querySelector('media-time').textContent);
 
     /* ---- 3. logical button order ---- */
-    const order = [...stage.querySelectorAll('.row .btn, .row media-mute-button, .row media-play-button, .row media-seek-button, .row media-volume-slider')]
+    /* The controls the bar actually contains. Mute and volume used to be
+       <media-mute-button> and <media-volume-slider> and are now the app's own
+       elements, so they are named here: a probe that lists element types stops
+       finding the controls the day they stop being library components, and
+       reports a short order rather than a wrong one. */
+    const order = [...stage.querySelectorAll('.row .btn, .row #volume, .row media-play-button, .row media-seek-button')]
       .map((e) => e.id || e.className.split(' ')[0]);
     S('bar: order', order.join(' '));
 

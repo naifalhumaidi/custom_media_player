@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 
 const ROOT = '/home/user/Data/Mine/0Projects/Mine/Dev/Web_Dev/Latest/my_local_repo/new-projects/almenber/almenber-tools/custom_media_player/';
-const SCRIPTS = ['js/source-web.js', 'js/source.js', 'js/media.js', 'js/i18n.js', 'js/settings.js', 'app.js'];
+const SCRIPTS = ['js/source-web.js', 'js/source.js', 'js/media.js', 'js/i18n.js', 'js/settings.js', 'js/app.js'];
 
 /* ---------------- DOM stub ---------------- */
 

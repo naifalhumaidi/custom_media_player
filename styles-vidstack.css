@@ -140,12 +140,79 @@ media-time-slider {
 
 media-time-slider .vds-slider { max-width: 100%; }
 
-media-volume-slider {
-  display: block;
-  flex: 0 0 64px;
-  width: 64px;
-  min-width: 64px;
+/* The volume control is <input type="range" id="volume">: the app's, not the
+   library's, so it answers with no media loaded. Styled to the same hairline as
+   the time slider - track, fill, thumb - with the native parts removed rather
+   than hidden, because a range input that keeps its own track shows two tracks
+   at once in every browser.
+
+   The fill is a gradient on the track, stopped at --mt-fill, which the app
+   writes. `appearance: none` on the input is what allows a gradient to show
+   through as the track at all. */
+#volume {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  height: 22px;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
 }
+
+#volume::-webkit-slider-runnable-track {
+  height: 7px;
+  border-radius: 4px;
+  background:
+    linear-gradient(to right, var(--media-brand) 0 var(--mt-fill, 0%), transparent var(--mt-fill, 0%)),
+    rgb(255 255 255 / .16);
+}
+
+#volume::-moz-range-track {
+  height: 7px;
+  border-radius: 4px;
+  background:
+    linear-gradient(to right, var(--media-brand) 0 var(--mt-fill, 0%), transparent var(--mt-fill, 0%)),
+    rgb(255 255 255 / .16);
+}
+
+#volume::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  margin-top: -4px;
+  border: 0;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgb(255 255 255 / .18);
+  transition: opacity .15s ease-in;
+  opacity: 0;
+}
+
+#volume::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border: 0;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgb(255 255 255 / .18);
+  opacity: 0;
+}
+
+#volume:hover::-webkit-slider-thumb,
+#volume:focus-visible::-webkit-slider-thumb,
+#volume:active::-webkit-slider-thumb { opacity: 1; }
+#volume:hover::-moz-range-thumb,
+#volume:focus-visible::-moz-range-thumb,
+#volume:active::-moz-range-thumb { opacity: 1; }
+
+/* The focus ring, on the track, matching the time slider's. */
+#volume:focus-visible { box-shadow: none; }
+#volume:focus-visible::-webkit-slider-runnable-track { box-shadow: inset 0 0 0 2px var(--gold); }
+#volume:focus-visible::-moz-range-track { box-shadow: inset 0 0 0 2px var(--gold); }
+
+[dir="rtl"] #volume { direction: rtl; }
 
 .vds-slider {
   display: inline-flex;
@@ -305,6 +372,19 @@ media-player[data-preview] media-captions { opacity: 0; visibility: hidden; }
    <use> per state and app.js picks which by toggling a class. */
 
 #play use, #mute use, #autoplay use, #fs use { display: none; }
+
+/* Muted is an ON state, not an off one: the user has chosen silence, and the
+   control should look chosen the way the fullscreen and loop controls do when
+   they are on. It read as "this control is unavailable" before, which is the
+   opposite of what pressing it did.
+
+   Its own rule, and deliberately not tucked into the selector list below. A
+   declaration block in the middle of a comma-separated list is not a syntax
+   error - the parser ends the list there and hands the rest of it nowhere - so
+   it took `display: block` away from the play glyph and left the play button
+   with no visible icon at all. It looked fine in the source. */
+#mute.muted { background: var(--enabled-bg); color: var(--enabled-fg); }
+
 #play:not(.playing) use[href="#i-play"],
 #mute:not(.muted) use[href="#i-sound"],
 #autoplay:not(.off) use[href="#i-auto"],

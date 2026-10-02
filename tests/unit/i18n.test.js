@@ -71,7 +71,7 @@ describe('the string tables', () => {
       ...[...MARKUP.matchAll(/data-i18n(?:-title|-aria|-alt)?="([^"]+)"/g)].map((m) => m[1]),
     ]);
     /* keys the app builds in JS */
-    for (const file of ['app.js', 'js/settings.js', 'js/i18n.js']) {
+    for (const file of ['js/app.js', 'js/settings.js', 'js/i18n.js']) {
       const src = fs.readFileSync(path.join(ROOT, file), 'utf8');
       for (const m of src.matchAll(/\bt\('([^']+)'/g)) referenced.add(m[1]);
     }

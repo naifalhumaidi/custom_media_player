@@ -784,13 +784,39 @@ media.on('error', () => {
    under it. The player sits there claiming to be playing otherwise. */
 media.on('blocked', () => notice(t('notice.blocked')));
 
-media.on('volume', () => {
+/* Mute and volume, wired here rather than left to the library.
+
+   The library's own controls are bound to the player, and the player has no
+   media to bind to once the playlist is empty - so with nothing loaded they were
+   on screen, took the click, and changed nothing. The bridge writes straight to
+   the media element, which always exists, so these two always answer. */
+
+$('mute').onclick = () => media.toggleMute();
+
+const volumeInput = $<HTMLInputElement>('volume');
+/* `input` rather than `change`, so the fill follows the pointer instead of
+   appearing when the button is let go. `change` is still what a keyboard user
+   produces, and it also fires `input`, so there is nothing to add. */
+volumeInput.addEventListener('input', () => media.setVolume(Number(volumeInput.value)));
+
+/* The element is the source of truth, not the input: the keyboard shortcuts and
+   a restored setting both change the volume without touching the control, and a
+   slider left showing the old number is a lie. Written only when they differ,
+   because assigning `value` to a range input the pointer is currently dragging
+   fights the drag. */
+const showVolume = () => {
+  const wanted = media.muted ? 0 : media.volume;
+  if (document.activeElement !== volumeInput) volumeInput.value = String(wanted);
   media.paintVolume(media.volume);
+};
+
+media.on('volume', () => {
+  showVolume();
   /* syncIcons owns the mute class and the control's name, so muting used to
      leave the button still labelled "Mute" while it was already muted */
   syncIcons();
 });
-media.paintVolume(media.volume);
+showVolume();
 
 /* The class is the single source of truth the CSS keys off: "playing" present
    means the pause glyph shows. An argument lets the caller state the intent
@@ -800,7 +826,11 @@ function syncIcons(playing?: boolean) {
   const isPlaying = playing === undefined ? media.playing : !!playing;
   const muted = media.muted || media.volume === 0;
   $('play').classList.toggle('playing', isPlaying);
+  /* `.muted` is what the icon swap and the gold "this is on" background both key
+     off, so the two can never disagree. `aria-pressed` says the same thing to a
+     screen reader, which cannot see a class. */
   $('mute').classList.toggle('muted', muted);
+  $('mute').setAttribute('aria-pressed', String(muted));
   const inFs = media.fullscreen;
   $('fs').classList.toggle('on', inFs);
   $('fs').title = inFs ? t('bar.fullscreenExitKey') : t('bar.fullscreenKey');

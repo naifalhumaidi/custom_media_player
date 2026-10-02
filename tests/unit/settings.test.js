@@ -2,8 +2,13 @@
    Everything runs against the real index.html through the shared harness, so
    the ids and attributes under test are the shipped ones. */
 
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect, afterEach } from 'vitest';
 import { createApp } from '../helpers/app-harness.js';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 let app;
 afterEach(() => app?.close());
@@ -120,13 +125,30 @@ describe('the brand colour', () => {
 describe('the logo', () => {
   const logo = () => app.document.querySelector('.logo');
 
-  /* The built-in wordmark, not the artwork that used to ship in the repository.
-     "Remove your mark" has to land somewhere, and it lands here. */
+  /* The mark that ships, read out of index.html rather than written here.
+
+     These tests used to name the file themselves, which is how the default came
+     to be one thing in the markup and a different thing in js/settings.js: the
+     constant had drifted to the wordmark, the artwork was still in the markup,
+     and every assertion below still passed because it was asserting against the
+     copy in the test. The same shape of bug as the build reading a stale app.js -
+     a second place to say the same thing, and no check that the two agree. */
+  const SHIPPED = /<img class="logo" src="([^"]+)"/.exec(
+    fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8'),
+  )[1];
+
   it('shows the built-in mark by default', async () => {
     app = await createApp();
     expect(logo().hidden).toBe(false);
-    expect(logo().getAttribute('src')).toBe('assets/logo-default.svg');
+    expect(logo().getAttribute('src')).toBe(SHIPPED);
   });
+
+  /* The one above is also the check that settings.js does not override the
+     markup on boot, which is the other half of the same drift: it used to name
+     a different file, and asserting against a copy written in this file could
+     not see that. Asserted on the booted app rather than on the source text, so
+     it is a statement about what a first launch shows and not about how the
+     file happens to be written. */
 
   /* Two states, not three. It used to be able to be *absent entirely*, which
      left the start window blank and needed a "use the default" button to undo.
@@ -135,13 +157,13 @@ describe('the logo', () => {
   it('is two states: the built-in mark, or yours', async () => {
     await openSettings();
     expect(app.window.MediaSettings.prefs.logo).toBeUndefined();
-    expect(logo().getAttribute('src')).toBe('assets/logo-default.svg');
+    expect(logo().getAttribute('src')).toBe(SHIPPED);
 
     app.$('set-logo-clear').click();
     await app.settleAll();
     /* still a mark, and still the built-in one */
     expect(app.window.MediaSettings.prefs.logo).toBeUndefined();
-    expect(logo().getAttribute('src')).toBe('assets/logo-default.svg');
+    expect(logo().getAttribute('src')).toBe(SHIPPED);
     expect(logo().hidden).toBe(false);
   });
 
@@ -163,7 +185,7 @@ describe('the logo', () => {
     app = await createApp({ state: app.prefs() });
     /* never blank: removing a mark leaves the built-in one */
     expect(logo().hidden).toBe(false);
-    expect(logo().getAttribute('src')).toBe('assets/logo-default.svg');
+    expect(logo().getAttribute('src')).toBe(SHIPPED);
   });
 
   it('a stored logo path is used, not the shipped one', async () => {

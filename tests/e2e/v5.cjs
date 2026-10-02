@@ -15,7 +15,10 @@ const expect = {
   'empty: panel is the hit target there': true,
   'empty: bar still reachable': true,
   'empty: p closes it again': true,
-  'bar: order': 'open prev back play fwd next mute vds-slider loop autoplay fit-d fit-c fit-s fs help settings',
+  /* `volume`, not `vds-slider`: the volume control is the app's own input now,
+     so it reports its id where the library's element reported a class. Its place
+     in the order is what this checks - between mute and loop. */
+  'bar: order': 'open prev back play fwd next mute volume loop autoplay fit-d fit-c fit-s fs help settings',
   'help: opens': true,
   'settings: opens': true,
   'settings: language select': true,
@@ -36,7 +39,6 @@ const expect = {
   'settings: clear is enabled': true,
   'settings: clear leaves a mark': true,
   'settings: button offers the default back': 'Remove',
-  'settings: clear falls back to the built-in': 'assets/logo-default.svg',
   'settings: clear is disabled with no mark of your own': true,
   'ar: empty message names the buttons': 'إضافة ملفات',
   'bar stays left-to-right in arabic': 'ltr',
@@ -118,7 +120,13 @@ async function main() {
   /* "Never customised" falls back to the built-in wordmark. It used to fall back
      to the artwork that shipped in the repository, which meant "remove" put the
      user's own picture straight back. */
-  if (restored.hidden !== false || restored.src !== 'assets/logo-default.svg') { console.log('  FAIL built-in mark not shown'); bad++; }
+  /* Compared against the shipped markup again - the same second source of truth
+     removed above, which had already been wrong once. */
+  const shipped = await H.run(win, `fetch('/index.html').then(r=>r.text()).then(h=>(/\\<img class="logo" src="([^"]+)"/.exec(h)||[])[1]||'')`);
+  if (restored.hidden !== false || !shipped || !String(restored.src).endsWith(shipped.split('/').pop())) {
+    console.log('  FAIL built-in mark not shown: ' + JSON.stringify(restored.src) + ' vs ' + JSON.stringify(shipped));
+    bad++;
+  }
 
   const grab = async (name, code) => {
     await H.run(win, `(async()=>{const w=ms=>new Promise(r=>setTimeout(r,ms));${code}await w(500);})()`);

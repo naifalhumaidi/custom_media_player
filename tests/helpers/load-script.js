@@ -18,7 +18,7 @@ export const SCRIPTS = [
   'js/media.js',
   'js/i18n.js',
   'js/settings.js',
-  'app.js',
+  'js/app.js',
 ];
 
 export function readSource(file) {

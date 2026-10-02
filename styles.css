@@ -539,7 +539,11 @@ kbd {
    the library sizes this element with a percentage, and a percentage contributes
    nothing to a flex group's intrinsic width, which pushed the last button in the
    group out of the window. */
-.vds-volume { flex: 0 0 auto; width: 64px; max-width: 64px; }
+/* The volume control is a native range input now (see styles-vidstack.css for
+   why). A range input is a replaced-ish element with a default width, so the
+   width has to be stated the same way it was for the library's element - or it
+   lays out at 129px and the bar grows. */
+.vds-volume { flex: 0 0 64px; width: 64px; min-width: 64px; max-width: 64px; }
 
 /* time + name + counter share one shrinking, clipping block so nothing
    can overlap, whatever the window width */

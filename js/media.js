@@ -81,11 +81,26 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
     }
   }
   __name(onSuperseded, "onSuperseded");
+  let heldVolume = null;
+  let heldMuted = null;
+  const liveEl = /* @__PURE__ */ __name(() => document.querySelector("video, audio"), "liveEl");
+  function applyHeld() {
+    for (const target of [el(), liveEl()]) {
+      if (!target) continue;
+      if (heldVolume !== null) target.volume = heldVolume;
+      if (heldMuted !== null) target.muted = heldMuted;
+    }
+  }
+  __name(applyHeld, "applyHeld");
   const paintBar = /* @__PURE__ */ __name((which, ratio) => {
-    const node = document.querySelector(
-      which === "time" ? "media-time-slider" : "media-volume-slider"
-    );
-    if (node) node.style.setProperty("--mt-fill", (ratio * 100).toFixed(2) + "%");
+    const pct = (ratio * 100).toFixed(2) + "%";
+    if (which === "volume") {
+      const input = document.getElementById("volume");
+      if (input) input.style.setProperty("--mt-fill", pct);
+      return;
+    }
+    const node = document.querySelector("media-time-slider");
+    if (node) node.style.setProperty("--mt-fill", pct);
   }, "paintBar");
   function init() {
     if (inited) return;
@@ -137,6 +152,7 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
         img().src = item.url;
         return;
       }
+      applyHeld();
       onSuperseded(["loaded-metadata", "can-play"], () => {
         sourceReady = true;
         if (pendingSeek > 0) {
@@ -176,7 +192,8 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
       img().hidden = false;
       img().removeAttribute("src");
       paintBar("time", 0);
-      paintBar("volume", el().muted ? 0 : el().volume);
+      applyHeld();
+      paintBar("volume", this.muted ? 0 : this.volume);
     },
     /* The library's own sliders keep correct state and ARIA values, but their
        fill property stays at 0% in v1.15.6, so the app paints them. Locating
@@ -229,10 +246,10 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
       return el().duration;
     },
     get volume() {
-      return el().volume;
+      return heldVolume !== null ? heldVolume : el().volume;
     },
     get muted() {
-      return el().muted;
+      return heldMuted !== null ? heldMuted : el().muted;
     },
     get loop() {
       return el().loop;
@@ -301,11 +318,15 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
     },
     setVolume(v) {
       const next = Math.min(1, Math.max(0, v));
-      el().volume = next;
-      if (next > 0) el().muted = false;
+      heldVolume = next;
+      if (next > 0) heldMuted = false;
+      applyHeld();
+      emit("volume", { volume: next });
     },
     toggleMute() {
-      el().muted = !el().muted;
+      heldMuted = !this.muted;
+      applyHeld();
+      emit("volume", { volume: this.volume });
     },
     setLoop(on2) {
       el().loop = !!on2;

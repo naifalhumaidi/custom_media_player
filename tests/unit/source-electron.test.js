@@ -149,25 +149,40 @@ describe('the Electron source', () => {
     expect(items.map((i) => i.name)).toEqual(['clip.mp4']);
   });
 
-  it('reads a DOM drop, which is the one thing it does that Tauri cannot', () => {
+  /* Awaited, and the await is the assertion as much as the result is.
+
+     A dropped file has to be given a playable URL, and that is an IPC round
+     trip, so dropItems is a promise. These tests asserted on a bare array, which
+     is the shape the adapter had while it was broken: it returned the items
+     without asking for a URL, the row appeared, and it could never play. A test
+     written against the broken shape passes on the broken code. */
+  it('reads a DOM drop, which is the one thing it does that Tauri cannot', async () => {
     load({});
-    const items = SRC.dropItems(dropEvent([{ path: '/media/dropped.mp4' }, { path: '/media/song.mp3' }]));
+    const items = await SRC.dropItems(dropEvent([{ path: '/media/dropped.mp4' }, { path: '/media/song.mp3' }]));
     expect(items.map((i) => i.name)).toEqual(['dropped.mp4', 'song.mp3']);
   });
 
-  /* File.path no longer exists on Electron, and webUtils.getPathForFile is the
-     replacement. When it cannot produce one, a row would be added that can never
-     play - so it is refused. */
-  it('refuses a dropped file with no recoverable path', () => {
-    load({ realDrop: false });
-    expect(SRC.dropItems(dropEvent([{ name: 'mystery.mp4' }]))).toEqual([]);
+  /* The regression the await above allowed through: a drop that resolves a URL,
+     because a drop that does not is a row that appears and can never play. */
+  it('gives every dropped file a URL, not just the ones opened from a dialog', async () => {
+    load({});
+    const [item] = await SRC.dropItems(dropEvent([{ path: '/media/dropped.mp4' }]));
+    expect(item.url).toBeTruthy();
+    expect(() => SRC.urlFor(item)).not.toThrow();
   });
 
-  it('has nothing to read in a drop with no files', () => {
+  /* A drop the shell cannot resolve a path for leaves a row that can never
+     play, so it is refused - the same rule as openFiles, which already had it. */
+  it('refuses a dropped file with no recoverable path', async () => {
+    load({ realDrop: false });
+    expect(await SRC.dropItems(dropEvent([{ name: 'mystery.mp4' }]))).toEqual([]);
+  });
+
+  it('has nothing to read in a drop with no files', async () => {
     load({});
-    expect(SRC.dropItems(dropEvent([]))).toEqual([]);
-    expect(SRC.dropItems({})).toEqual([]);
-    expect(SRC.dropItems(null)).toEqual([]);
+    expect(await SRC.dropItems(dropEvent([]))).toEqual([]);
+    expect(await SRC.dropItems({})).toEqual([]);
+    expect(await SRC.dropItems(null)).toEqual([]);
   });
 
   it('re-registers restored rows instead of trusting a saved URL', async () => {

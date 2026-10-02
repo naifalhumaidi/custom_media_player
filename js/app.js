@@ -558,16 +558,25 @@ media.on("error", () => {
   scheduleSave();
 });
 media.on("blocked", () => notice(t("notice.blocked")));
-media.on("volume", () => {
+$("mute").onclick = () => media.toggleMute();
+const volumeInput = $("volume");
+volumeInput.addEventListener("input", () => media.setVolume(Number(volumeInput.value)));
+const showVolume = /* @__PURE__ */ __name(() => {
+  const wanted = media.muted ? 0 : media.volume;
+  if (document.activeElement !== volumeInput) volumeInput.value = String(wanted);
   media.paintVolume(media.volume);
+}, "showVolume");
+media.on("volume", () => {
+  showVolume();
   syncIcons();
 });
-media.paintVolume(media.volume);
+showVolume();
 function syncIcons(playing) {
   const isPlaying = playing === void 0 ? media.playing : !!playing;
   const muted = media.muted || media.volume === 0;
   $("play").classList.toggle("playing", isPlaying);
   $("mute").classList.toggle("muted", muted);
+  $("mute").setAttribute("aria-pressed", String(muted));
   const inFs = media.fullscreen;
   $("fs").classList.toggle("on", inFs);
   $("fs").title = inFs ? t("bar.fullscreenExitKey") : t("bar.fullscreenKey");
