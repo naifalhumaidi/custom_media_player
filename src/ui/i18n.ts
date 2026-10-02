@@ -47,7 +47,7 @@
       'bar.fitCrop': 'Crop',
       'bar.fitCropKey': 'Crop (C)',
       'bar.fitStretch': 'Stretch',
-      'bar.fitStretchKey': 'Stretch (S)',
+      'bar.fitStretchKey': 'Stretch (E)',
       'bar.fullscreen': 'Fullscreen',
       'bar.fullscreenKey': 'Fullscreen (F)',
       'bar.fullscreenExit': 'Leave fullscreen',
@@ -58,11 +58,11 @@
       'bar.help': 'Instructions',
       'bar.helpKey': 'Instructions (?)',
       'bar.settings': 'Settings',
+      'bar.settingsKey': 'Settings (S)',
       'bar.openKey': 'Open files (O)',
       'panel.addKey': 'Add files (O)',
       'panel.addFolderKey': 'Add a folder (⇧O)',
       'panel.closeKey': 'Close the playlist (P)',
-      'bar.settingsKey': 'Settings',
 
       /* --- playlist panel --- */
       'panel.title': 'Playlist',
@@ -128,6 +128,7 @@
       'help.k.esc': 'close this dialog, or the playlist',
       'help.k.clear': 'clear the playlist',
       'help.k.help': 'open / close these instructions',
+      'help.k.settings': 'Settings',
       'help.notes.1a': 'On an image,',
       'help.notes.1b': 'and',
       'help.notes.1c': 'move to the next item instead.',
@@ -139,12 +140,13 @@
       'settings.close': 'Close (Esc)',
       'settings.appearance': 'Appearance',
       'settings.language': 'Language',
-      'settings.logo': 'Logo',
+      'settings.logo': 'Logo on the start window',
+      'settings.logoChange': 'Change logo',
       'settings.logoHint': 'Shown on the start window. Remove it to hide the mark.',
       'settings.logoClear': 'Remove',
       'settings.logoClearTitle': 'Remove your mark',
       'settings.color': 'Brand colour',
-      'settings.colorReset': 'Use the logo colour',
+      'settings.colorReset': 'Use logo color',
       'settings.colorResetTitle': 'Take the colour from your mark',
       'settings.logoUseDefault': 'Use the default',
       'settings.saveFailed': 'Settings could not be saved: the browser storage is full. The logo may be too large.',
@@ -155,6 +157,10 @@
 
       /* --- shared --- */
       'common.close': 'Close',
+      'clear.title': 'Clear the playlist?',
+      'clear.body': 'Every file will be taken off the list. The files themselves are not deleted.',
+      'clear.ok': 'Clear it',
+      'clear.cancel': 'Cancel',
     },
 
     ar: {
@@ -195,7 +201,7 @@
       'bar.fitCrop': 'اقتصاص',
       'bar.fitCropKey': 'اقتصاص (C)',
       'bar.fitStretch': 'تمديد',
-      'bar.fitStretchKey': 'تمديد (S)',
+      'bar.fitStretchKey': 'تمديد (E)',
       'bar.fullscreen': 'ملء الشاشة',
       'bar.fullscreenKey': 'ملء الشاشة (F)',
       'bar.fullscreenExit': 'الخروج من ملء الشاشة',
@@ -206,11 +212,11 @@
       'bar.help': 'التعليمات',
       'bar.helpKey': 'التعليمات (?)',
       'bar.settings': 'الإعدادات',
+      'bar.settingsKey': 'الإعدادات (S)',
       'bar.openKey': 'فتح ملفات (O)',
       'panel.addKey': 'إضافة ملفات (O)',
       'panel.addFolderKey': 'إضافة مجلد (⇧O)',
       'panel.closeKey': 'إغلاق قائمة التشغيل (P)',
-      'bar.settingsKey': 'الإعدادات',
 
       /* --- لوحة قائمة التشغيل --- */
       'panel.title': 'قائمة التشغيل',
@@ -282,6 +288,7 @@
       'help.k.esc': 'إغلاق هذه النافذة أو قائمة التشغيل',
       'help.k.clear': 'مسح قائمة التشغيل',
       'help.k.help': 'فتح / إغلاق هذه التعليمات',
+      'help.k.settings': 'الإعدادات',
       'help.notes.1a': 'عند عرض صورة, تعمل',
       'help.notes.1b': 'و',
       'help.notes.1c': 'للانتقال إلى العنصر التالي.',
@@ -293,7 +300,8 @@
       'settings.close': 'إغلاق (Esc)',
       'settings.appearance': 'المظهر',
       'settings.language': 'اللغة',
-      'settings.logo': 'الشعار',
+      'settings.logo': 'الشعار في نافذة البداية',
+      'settings.logoChange': 'تغيير الشعار',
       'settings.logoHint': 'يظهر في نافذة البداية. أزله لإخفاء العلامة.',
       'settings.logoClear': 'إزالة',
       'settings.logoClearTitle': 'إزالة علامتك',
@@ -309,6 +317,10 @@
 
       /* --- مشترك --- */
       'common.close': 'إغلاق',
+      'clear.title': 'إفراغ قائمة التشغيل؟',
+      'clear.body': 'سيُزال كل ملف من القائمة. أما الملفات نفسها فلن تُحذف.',
+      'clear.ok': 'أفرغها',
+      'clear.cancel': 'إلغاء',
     },
   };
 

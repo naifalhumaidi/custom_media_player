@@ -59,6 +59,8 @@ describe('load sequencing', () => {
     app = await createApp();
     await dropOnStage([VIDEO()]);
     app.key('x', { shiftKey: true });
+    await app.settle(1);
+    app.answerClear('ok');
     await app.settle(5);
     expect(app.player.src).toEqual([]);
     /* nothing left to play, and nothing that wakes up later */
@@ -180,6 +182,7 @@ describe('the object URL lifetime', () => {
     const created = [...app.urls.created];
     expect(created.length).toBeGreaterThan(1);
     app.key('x', { shiftKey: true });
+    app.answerClear('ok');
     await app.settle(1);
     expect(app.urls.created.every((u) => u.revoked)).toBe(true);
   });

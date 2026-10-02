@@ -372,7 +372,30 @@ media-provider > video {
 /* the settings form is narrow and single column, so it must not inherit the
    two-column instructions layout */
 .modal-card.narrow { width: min(460px, 100%); }
+/* A question, not a form. Narrower than the settings dialog so it reads as an
+   interruption rather than as somewhere new to go. */
+.modal-card.tiny { width: min(400px, 100%); }
 .modal-body.single { columns: 1; }
+
+/* ---------- the clear confirmation ---------- */
+
+.confirm-body {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #b4b4b4;
+}
+
+/* Cancel first in the source, so it is first in the tab order and first under
+   the focus ring. The action is on the right, where the hand expects it, and is
+   not the default - a Return keypress that arrives unread should not empty
+   anything. */
+.confirm-row {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
 
 .modal {
   position: fixed;
@@ -614,13 +637,22 @@ media-time { color: inherit; font: inherit; }
 
 /* ---------- settings form ---------- */
 
-.field { margin-bottom: 20px; }
-.field:last-child { margin-bottom: 4px; }
+/* One rhythm, and fewer numbers.
+
+   The form used 20px under every field, 6px under every label, 10px between
+   everything in a row and 14px around the whole group - four unrelated values
+   for what is one idea, so the gaps read as arbitrary rather than as a scale.
+   Now: 24px between fields, 7px between a label and its control, 10px between
+   controls in a row, and the last field's margin goes to nothing so the dialog
+   does not end on a stray gap. */
+.field { margin-bottom: 24px; }
+.field:last-child { margin-bottom: 0; }
 
 .field label {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: 7px;
   font-size: 12px;
+  line-height: 1.4;
   color: #cfcfcf;
 }
 
@@ -661,6 +693,17 @@ media-time { color: inherit; font: inherit; }
 .field select {
   min-width: 190px;
   cursor: pointer;
+  /* Two arrows, because the native one was never turned off. A custom chevron
+     is drawn in the background below, and `appearance: auto` draws the browser's
+     on top of it - so the control showed two carets pointing the same way. The
+     element is untouched otherwise: the keyboard, the mobile picker and the
+     accessibility all still work, because it is still a real <select>. */
+  appearance: none;
+  -webkit-appearance: none;
+  /* And the option list was the browser's own light-blue theme, which is where
+     the blue on hover came from - no stylesheet can reach a native popup, but
+     this asks the popup to be dark like the rest of the app. */
+  color-scheme: dark;
   /* room for the chevron, drawn in the background so no extra element is needed */
   padding-inline-end: 30px;
   background-color: #161616;
@@ -688,6 +731,33 @@ media-time { color: inherit; font: inherit; }
   color: #ddd;
 }
 .field select option:checked { background: var(--enabled-bg); color: var(--enabled-fg); }
+
+/* The file input behind the "Change logo" button.
+
+   Moved off screen rather than hidden with `display: none`, which would take it
+   out of the tab order and out of the accessibility tree entirely. The button is
+   a <label> for this input, so clicking it opens the file dialog and the browser
+   reports the chosen file's name to screen readers on the input, as it always
+   did. */
+.offscreen-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* A label standing in for a button. It has to look like every other .btn.txt and
+   behave like one, including the pointer and the pressed state. */
+label.btn.txt { cursor: pointer; user-select: none; }
+label.btn.txt:active { transform: translateY(1px); }
+/* The file dialog is modal, so focus stays where it was; showing the ring on
+   focus-visible is what tells a keyboard user the control is there at all. */
+label.btn.txt:focus-within { color: var(--enabled-fg); }
 
 .field input[type="color"] {
   width: 62px;

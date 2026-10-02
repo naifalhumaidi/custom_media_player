@@ -57,7 +57,14 @@ const still = $('still');
 const SEEK_STEP = 10;
 const VOL_STEP = 0.05;
 const THUMB_W = 160;
-const FITS = { d: 'contain', c: 'cover', s: 'stretch' };
+/* S is the settings dialog, on request - it is the control that had no shortcut
+   at all while claiming one in the instructions.
+
+   That letter was already the stretch fit, so stretch moved to E rather than
+   being dropped: the three fit keys are a set, and losing one would have left
+   two controls on the bar with no key while the third had two meanings. The
+   buttons, the tooltips and the instructions all moved together. */
+const FITS = { d: 'contain', c: 'cover', e: 'stretch' };
 
 let items: MediaItem[] = [];
 let index = 0;
@@ -671,8 +678,77 @@ async function addFolder() {
   if (picked.length) addItems(picked, false);
 }
 
+/* One function object per action, handed to every button that offers it.
+
+   Writing `() => addFiles()` at each site gives each button its own arrow, and
+   two arrows calling the same function are equal in behaviour and unequal by
+   identity - so nothing can check that the two copies still agree, and a change
+   to one of them would be silent. Naming the handler once makes "the panel's
+   Add files is the same action as the header's" a thing a test can assert. */
+const addFilesAction = () => addFiles();
+
 $('open').onclick = () => openFiles();
-$('add').onclick = () => addFiles();
+$('add').onclick = addFilesAction;
+
+/* The same two actions again, inside the empty panel.
+
+   They were in the markup from the start and had no handler at all, so the only
+   place a user could add anything to an empty playlist was a button that did
+   nothing. */
+$('empty-add').onclick = addFilesAction;
+
+/* ---------- clearing, with a confirmation ---------- */
+
+/* A playlist can be an hour of arranging, and the clear control is a trash can
+   sitting beside the add button. One mis-click and it is gone. So both ways in
+   - the button and Shift+X - ask first.
+
+   The question is not ceremony. The undo already exists and is generous, thirty
+   seconds and the whole list back in order, and it is still not enough: a person
+   who clears by accident and does not notice for half a minute has already
+   moved on, and nothing would bring the list back at that point. Asking first is
+   the only version of this that is actually safe.
+
+   Escape cancels, Enter cancels (Cancel holds the focus), and the dialog takes
+   the keyboard while it is up, exactly as the settings dialog does. */
+const clearModal = $('clear-modal');
+
+function askToClear() {
+  if (clearModal.hidden) clearModal.hidden = false;
+  /* Cancel first, deliberately: a Return keypress that arrives without the
+     dialog being read should not empty anything. */
+  $('clear-cancel').focus();
+}
+
+function dismissClear() {
+  clearModal.hidden = true;
+}
+
+/* Whatever had focus goes back, so closing a dialog does not strand the
+   keyboard at the top of the document. */
+let clearReturnFocus: HTMLElement | null = null;
+
+$('clear-ok').onclick = () => {
+  dismissClear();
+  if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
+  /* keepUndo, like the keyboard shortcut. The button is easier to hit by
+     accident than a key combination, so the undo is more necessary here, not
+     less. */
+  clearAll(true);
+};
+$('clear-cancel').onclick = () => {
+  dismissClear();
+  if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
+};
+
+clearModal.addEventListener('click', (e) => {
+  /* A click on the backdrop, outside the card, cancels. A click on the card
+     itself must not, or the text could not be selected. */
+  if (e.target === clearModal) {
+    dismissClear();
+    if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
+  }
+});
 
 /* The clear button, in the panel header. Only where the playlist can actually
    be kept: in a browser tab everything is lost on reload anyway, so a clear
@@ -681,20 +757,26 @@ if (source.canPersist()) {
   const clearButton = $('clear-list');
   if (clearButton) {
     clearButton.hidden = false;
-    /* keepUndo, like the keyboard shortcut. The button is easier to hit by
-       accident than a key combination, so the undo is more necessary here, not
-       less. */
-    clearButton.onclick = () => clearAll(true);
+    clearButton.onclick = () => {
+      clearReturnFocus = document.activeElement as HTMLElement | null;
+      askToClear();
+    };
   }
 }
 
 /* A folder is only meaningful where files have real paths, so the control only
-   appears when the source offers one. */
+   appears when the source offers one - in both places it appears, which are the
+   panel header and the empty panel. */
 if (typeof source.openFolder === 'function') {
   const addFolderButton = $('add-folder');
   if (addFolderButton) {
     addFolderButton.hidden = false;
     addFolderButton.onclick = addFolder;
+  }
+  const emptyAddFolder = $('empty-add-folder');
+  if (emptyAddFolder) {
+    emptyAddFolder.hidden = false;
+    emptyAddFolder.onclick = addFolder;
   }
 }
 
@@ -1131,7 +1213,19 @@ document.addEventListener('keydown', (e) => {
      while a <select> was open, and Space could not scroll the instructions. */
   const typing = (e.target as HTMLElement).closest?.('input, select, textarea, [contenteditable="true"]');
 
+  if (!clearModal.hidden) {
+    if (k === 'escape' || k === 'enter') {
+      dismissClear();
+      if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
+    }
+    return;
+  }
   if (k === 'escape' && settings.isOpen()) return settings.close();
+  /* S, for the same reason every other shortcut here exists: the settings
+     button claimed a key in the instructions and the tooltip and nothing bound
+     it, which teaches the user the labels are unreliable. Shift+S is the colour
+     picker, because plain S is the dialog and a dialog cannot be open twice. */
+  if (k === 's') return settings.toggle();
   if (k === 'escape' && !helpModal.hidden) return setHelp(false);
   /* Settings owns the keyboard entirely, ?/i included: handled above this
      guard, `i` opened the instructions dialog on top of it, which broke the
@@ -1156,7 +1250,10 @@ document.addEventListener('keydown', (e) => {
   if (FITS[k]) return setFit(FITS[k]);
   if (k === 'l') return toggleLoop();
   if (k === 'a') return toggleAutoStart();
-  if (k === 'x' && e.shiftKey) return clearAll(true);
+  if (k === 'x' && e.shiftKey) {
+    clearReturnFocus = document.activeElement as HTMLElement | null;
+    return askToClear();
+  }
   if (k === 'z' && e.shiftKey) return restoreCleared();
   /* O and Shift+O, so the two tooltips that name them are true. They were
      written first and the keys never bound, which is worse than no shortcut

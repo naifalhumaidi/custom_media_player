@@ -39,7 +39,7 @@ const still = $("still");
 const SEEK_STEP = 10;
 const VOL_STEP = 0.05;
 const THUMB_W = 160;
-const FITS = { d: "contain", c: "cover", s: "stretch" };
+const FITS = { d: "contain", c: "cover", e: "stretch" };
 let items = [];
 let index = 0;
 let loop = false;
@@ -491,13 +491,44 @@ async function addFolder() {
   if (picked.length) addItems(picked, false);
 }
 __name(addFolder, "addFolder");
+const addFilesAction = /* @__PURE__ */ __name(() => addFiles(), "addFilesAction");
 $("open").onclick = () => openFiles();
-$("add").onclick = () => addFiles();
+$("add").onclick = addFilesAction;
+$("empty-add").onclick = addFilesAction;
+const clearModal = $("clear-modal");
+function askToClear() {
+  if (clearModal.hidden) clearModal.hidden = false;
+  $("clear-cancel").focus();
+}
+__name(askToClear, "askToClear");
+function dismissClear() {
+  clearModal.hidden = true;
+}
+__name(dismissClear, "dismissClear");
+let clearReturnFocus = null;
+$("clear-ok").onclick = () => {
+  dismissClear();
+  if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
+  clearAll(true);
+};
+$("clear-cancel").onclick = () => {
+  dismissClear();
+  if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
+};
+clearModal.addEventListener("click", (e) => {
+  if (e.target === clearModal) {
+    dismissClear();
+    if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
+  }
+});
 if (source.canPersist()) {
   const clearButton = $("clear-list");
   if (clearButton) {
     clearButton.hidden = false;
-    clearButton.onclick = () => clearAll(true);
+    clearButton.onclick = () => {
+      clearReturnFocus = document.activeElement;
+      askToClear();
+    };
   }
 }
 if (typeof source.openFolder === "function") {
@@ -505,6 +536,11 @@ if (typeof source.openFolder === "function") {
   if (addFolderButton) {
     addFolderButton.hidden = false;
     addFolderButton.onclick = addFolder;
+  }
+  const emptyAddFolder = $("empty-add-folder");
+  if (emptyAddFolder) {
+    emptyAddFolder.hidden = false;
+    emptyAddFolder.onclick = addFolder;
   }
 }
 if (typeof source.onExternalDrop === "function") {
@@ -777,7 +813,15 @@ document.addEventListener("keydown", (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const k = typeof e.key === "string" ? e.key.toLowerCase() : "";
   const typing = e.target.closest?.('input, select, textarea, [contenteditable="true"]');
+  if (!clearModal.hidden) {
+    if (k === "escape" || k === "enter") {
+      dismissClear();
+      if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
+    }
+    return;
+  }
   if (k === "escape" && settings.isOpen()) return settings.close();
+  if (k === "s") return settings.toggle();
   if (k === "escape" && !helpModal.hidden) return setHelp(false);
   if (settings.isOpen() || typing) return;
   if (k === "?" || k === "i") return setHelp(helpModal.hidden);
@@ -791,7 +835,10 @@ document.addEventListener("keydown", (e) => {
   if (FITS[k]) return setFit(FITS[k]);
   if (k === "l") return toggleLoop();
   if (k === "a") return toggleAutoStart();
-  if (k === "x" && e.shiftKey) return clearAll(true);
+  if (k === "x" && e.shiftKey) {
+    clearReturnFocus = document.activeElement;
+    return askToClear();
+  }
   if (k === "z" && e.shiftKey) return restoreCleared();
   if (k === "o" && e.shiftKey) return addFolder();
   if (k === "o") return openFiles();

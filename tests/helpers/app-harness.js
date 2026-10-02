@@ -364,6 +364,20 @@ export async function createApp(options = {}) {
 
   const file = (name, type, bytes = 8) => new window.File([new Uint8Array(bytes)], name, { type });
 
+  /* Clearing the playlist, the way a person does it: the request, then the
+     answer. Exposed as one call so a test about the *consequence* of clearing
+     does not have to know a dialog is in the way, and a test about the dialog
+     can drive it directly. `answer` is 'ok' or 'cancel'. */
+  const requestClear = () => { $('clear-list').click(); };
+  const answerClear = (answer = 'ok') => {
+    const dialog = $('clear-modal');
+    if (dialog.hidden) return false;
+    $('clear-' + answer).click();
+    return true;
+  };
+  const clearDialogOpen = () => !$('clear-modal').hidden;
+  const settingsOpen = () => !$('settings-modal').hidden;
+
   /** Let the app's async work (probing, debounced saves) run. */
   const settle = (ms = 0) => new Promise((r) => setTimeout(r, ms));
   /** Enough for the three probe workers and the 400ms save debounce. */
@@ -389,6 +403,7 @@ export async function createApp(options = {}) {
   return {
     dom, window, document, $, player, stage, list,
     rows, names, durations, counter, total, key, file, settle, settleAll, drop, prefs,
+    requestClear, answerClear, clearDialogOpen, settingsOpen,
     urls, errors, warnings, store, failing,
     setSaveToFail: (on) => (on ? failing.add('set') : failing.delete('set')),
     close: () => window.close(),

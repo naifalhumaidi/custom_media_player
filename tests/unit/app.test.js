@@ -181,6 +181,8 @@ describe('the playlist', () => {
     await dropOnStage([VIDEO()]);
     app.rows()[0].querySelector('.x').dispatchEvent(new app.window.MouseEvent('click', { bubbles: true }));
     await app.settle(1);
+    app.answerClear('ok');
+    await app.settle(1);
     expect(app.rows()).toHaveLength(0);
     expect(app.$('drop').hidden).toBe(false);
     expect(app.player.src).toEqual([]);
@@ -201,9 +203,106 @@ describe('the playlist', () => {
     const created = app.urls.created.length;
     app.key('x', { shiftKey: true });
     await app.settle(1);
+    /* Asking is the point: the list is intact until the question is answered. */
+    expect(app.clearDialogOpen()).toBe(true);
+    expect(app.rows()).toHaveLength(2);
+    app.answerClear('ok');
+    await app.settle(1);
     expect(app.rows()).toHaveLength(0);
     expect(app.urls.revoked.length).toBeGreaterThanOrEqual(created);
     expect(app.urls.created.every((r) => r.revoked)).toBe(true);
+  });
+
+  /* ---- clearing asks first ---- */
+
+  it('the clear button asks before it clears, and Cancel changes nothing', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO(), VIDEO2()]);
+    /* Shift+X, not the button: the unit harness runs the browser source, which
+       cannot keep a playlist, so the clear button is deliberately not wired
+       there. The keyboard route is, which is why this journey uses it. */
+    app.key('x', { shiftKey: true });
+    await app.settle(1);
+    expect(app.clearDialogOpen()).toBe(true);
+    expect(app.rows()).toHaveLength(2);
+    app.answerClear('cancel');
+    await app.settle(1);
+    expect(app.clearDialogOpen()).toBe(false);
+    expect(app.rows()).toHaveLength(2);
+  });
+
+  it('Escape cancels the clear, and so does a click on the backdrop', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO(), VIDEO2()]);
+
+    app.key('x', { shiftKey: true });
+    await app.settle(1);
+    app.key('escape');
+    await app.settle(1);
+    expect(app.clearDialogOpen()).toBe(false);
+
+    app.key('x', { shiftKey: true });
+    await app.settle(1);
+    app.$('clear-modal').click();
+    await app.settle(1);
+    expect(app.clearDialogOpen()).toBe(false);
+    expect(app.rows()).toHaveLength(2);
+  });
+
+  /* A Return keypress that arrives without the dialog being read must not empty
+     a playlist, so Cancel holds the focus rather than the destructive button. */
+  it('Cancel holds the focus, so a stray Return cancels', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO(), VIDEO2()]);
+    app.key('x', { shiftKey: true });
+    await app.settle(1);
+    expect(app.document.activeElement.id).toBe('clear-cancel');
+  });
+
+  it('the dialog says what will happen and that the files are kept', async () => {
+    app = await createApp();
+    app.key('x', { shiftKey: true });
+    await app.settle(1);
+    const body = app.$('clear-body').textContent;
+    expect(body.length).toBeGreaterThan(10);
+    expect(/not deleted|kept|remove/i.test(body)).toBe(true);
+  });
+
+  /* The empty panel's own buttons. They were in the markup from the start with
+     no handler, so the only way to add anything to an empty playlist was a
+     button that did nothing. */
+  it('the empty panel\'s Add files works, and is the same action as the header', async () => {
+    app = await createApp();
+    /* It was in the markup from the start with no handler, so the only way to
+       add anything to an empty playlist was a button that did nothing. */
+    expect(app.$('empty-add').onclick).toBeTypeOf('function');
+    /* Same handler as the header button, so the two copies cannot drift. */
+    expect(app.$('empty-add').onclick).toBe(app.$('add').onclick);
+  });
+
+  it('the empty panel offers a folder exactly where the source has one', async () => {
+    app = await createApp();
+    const addFolder = app.$('empty-add-folder');
+    const hasFolders = typeof app.window.MediaFileSource.openFolder === 'function';
+    /* The browser source cannot name a folder, so it must not offer one - and
+       must not leave a dead button behind either. */
+    expect(addFolder.hidden).toBe(!hasFolders);
+    expect(Boolean(addFolder.onclick)).toBe(hasFolders);
+  });
+
+  it('S opens the settings, and E is the stretch fit', async () => {
+    app = await createApp();
+    app.key('e');
+    await app.settle(1);
+    expect(app.stage.dataset.fit).toBe('stretch');
+    app.key('s');
+    await app.settle(1);
+    expect(app.settingsOpen()).toBe(true);
+    app.key('escape');
+    await app.settle(1);
+    expect(app.settingsOpen()).toBe(false);
+    /* and S did not change the fit on its way past */
+    expect(app.stage.dataset.fit).toBe('stretch');
   });
 
   it('shows the count, and the total once every duration is known', async () => {
@@ -368,7 +467,14 @@ describe('the bar', () => {
     expect(app.stage.dataset.fit).not.toBe(stage);
     app.$('fit-d').click();
     expect(app.stage.dataset.fit).toBe('contain');
+    /* E, not S: S opens the settings dialog now. Both are asserted below, so a
+       letter cannot quietly take over the other one's job. */
+    app.key('e');
+    expect(app.stage.dataset.fit).toBe('stretch');
     app.key('s');
+    expect(app.settingsOpen()).toBe(true);
+    app.key('escape');
+    expect(app.settingsOpen()).toBe(false);
     expect(app.stage.dataset.fit).toBe('stretch');
   });
 
@@ -428,7 +534,15 @@ describe('the keyboard', () => {
     await app.settle(1);
     await acted('d', () => stage.dataset.fit);
     await acted('c', () => stage.dataset.fit);
-    await acted('s', () => stage.dataset.fit);
+    /* E, because S opens the settings dialog. Both letters are asserted, and
+       against each other, so neither can quietly take the other's job. */
+    await acted('e', () => stage.dataset.fit);
+    await acted('s', () => app.settingsOpen());
+    /* Closed again straight away: a dialog left open swallows every key after
+       it, and the rest of this test is about the keys. */
+    app.key('escape');
+    await app.settle(1);
+    expect(app.settingsOpen()).toBe(false);
     await acted('h', () => stage.classList.contains('ui'));
     await acted('p', () => stage.classList.contains('list'));
     await acted('i', () => app.$('help-modal').hidden);
@@ -606,6 +720,10 @@ describe('undoing a mistake', () => {
     await dropOnStage([VIDEO(), VIDEO2(), app.file('c.mp4', 'video/mp4')]);
     app.key('x', { shiftKey: true });
     await app.settle(1);
+    app.answerClear('ok');
+    await app.settle(1);
+    app.answerClear('ok');
+    await app.settle(1);
     expect(app.rows()).toHaveLength(0);
 
     app.key('z', { shiftKey: true });
@@ -618,6 +736,8 @@ describe('undoing a mistake', () => {
     app = await createApp();
     await dropOnStage([VIDEO(), VIDEO2()]);
     app.key('x', { shiftKey: true });
+    await app.settle(1);
+    app.answerClear('ok');
     await app.settle(1);
     app.key('z', { shiftKey: true });
     await app.settle(1);
@@ -639,6 +759,8 @@ describe('undoing a mistake', () => {
 
     app.key('z', { shiftKey: true });
     await app.settle(1);
+    app.answerClear('ok');
+    await app.settle(1);
     expect(app.rows()).toHaveLength(0);
   });
 
@@ -647,8 +769,12 @@ describe('undoing a mistake', () => {
     await dropOnStage([VIDEO(), VIDEO2()]);
     app.key('x', { shiftKey: true });
     await app.settle(1);
+    app.answerClear('ok');
+    await app.settle(1);
     await dropOnStage([app.file('z.mp4', 'video/mp4')]);
     app.key('x', { shiftKey: true });
+    await app.settle(1);
+    app.answerClear('ok');
     await app.settle(1);
     app.key('z', { shiftKey: true });
     await app.settleAll();
@@ -661,6 +787,8 @@ describe('undoing a mistake', () => {
     app.rows()[0].querySelector('.x').dispatchEvent(new app.window.MouseEvent('click', { bubbles: true }));
     await app.settle(1);
     app.key('z', { shiftKey: true });
+    await app.settle(1);
+    app.answerClear('ok');
     await app.settle(1);
     expect(app.rows()).toHaveLength(0);
   });
@@ -745,6 +873,8 @@ describe('defects the final audit found', () => {
     await dropOnStage([VIDEO(), VIDEO2()]);
     app.key('x', { shiftKey: true });
     await app.settle(1);
+    app.answerClear('ok');
+    await app.settle(1);
     /* the user built a different list before reaching for the undo */
     await dropOnStage([app.file('new.mp4', 'video/mp4')]);
     expect(app.names()).toEqual(['new.mp4']);
@@ -757,6 +887,8 @@ describe('defects the final audit found', () => {
     app = await createApp();
     await dropOnStage([VIDEO(), VIDEO2()]);
     app.key('x', { shiftKey: true });
+    await app.settle(1);
+    app.answerClear('ok');
     await app.settle(1);
     await dropOnStage([app.file('new.mp4', 'video/mp4')]);
     app.key('z', { shiftKey: true });

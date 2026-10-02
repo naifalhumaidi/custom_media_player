@@ -526,7 +526,29 @@
     const bridge = window.MediaBridge;
     const mediaEl = document.querySelector('video, audio');
 
+    /* Clearing asks first, so the first click must change nothing at all. Then
+       Cancel must also change nothing. Only the confirmation clears. Asking is
+       the feature, so a journey that clicked straight through would be testing
+       the absence of it. */
+    const clearModal = document.getElementById('clear-modal');
+    const rowsAtStart = document.querySelectorAll('#list li').length;
     clearButton.click();
+    await wait(400);
+    say('walkthrough_clear_asks',
+      `asked=${!!clearModal && !clearModal.hidden} ` +
+      `rows ${rowsAtStart} -> ${document.querySelectorAll('#list li').length} ` +
+      `(nothing cleared yet: ${document.querySelectorAll('#list li').length === rowsAtStart}) ` +
+      `focus=${document.activeElement ? document.activeElement.id : 'none'}`);
+
+    document.getElementById('clear-cancel').click();
+    await wait(300);
+    say('walkthrough_clear_cancel',
+      `closed=${!!clearModal && clearModal.hidden} ` +
+      `rows=${document.querySelectorAll('#list li').length}`);
+
+    clearButton.click();
+    await wait(300);
+    document.getElementById('clear-ok').click();
     await waitFor(() => document.querySelectorAll('#list li').length === 0, 4000,
       'the playlist to empty');
 

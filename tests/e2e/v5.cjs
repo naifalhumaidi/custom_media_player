@@ -18,7 +18,7 @@ const expect = {
   /* `volume`, not `vds-slider`: the volume control is the app's own input now,
      so it reports its id where the library's element reported a class. Its place
      in the order is what this checks - between mute and loop. */
-  'bar: order': 'open prev back play fwd next mute volume loop autoplay fit-d fit-c fit-s fs help settings',
+  'bar: order': 'open prev back play fwd next mute volume loop autoplay fit-d fit-c fit-e fs help settings',
   'help: opens': true,
   'settings: opens': true,
   'settings: language select': true,
@@ -55,7 +55,11 @@ const expect = {
   'ar: play tooltip': 'تشغيل / إيقاف (مسافة)',
   'ar: close tooltip': 'إغلاق (Esc)',
   'ar: language label': 'اللغة',
-  'ar: colour label': 'اللغة | الشعار | لون الهوية',
+  /* The logo field's label is longer now - it says what the mark is for, not
+     just "Logo" - and the button beside it has a name of its own. Both are in
+     the Arabic too, so this checks the translation is complete rather than that
+     it happens to fit. */
+  'ar: colour label': 'اللغة | الشعار في نافذة البداية | تغيير الشعار | لون الهوية',
   'ar: select options': 'English/العربية',
   'ar: help groups': 'التشغيل|العرض|قائمة التشغيل',
   'en: dir back to ltr': 'ltr',

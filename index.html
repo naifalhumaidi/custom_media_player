@@ -99,10 +99,10 @@
             <button id="autoplay" class="btn ic on" type="button" title="Auto-start on track change (a)" data-i18n-title="bar.autoplayKey" data-i18n-aria="bar.autoplay" aria-label="Auto-start"><svg viewBox="0 0 24 24"><use href="#i-auto"/><use href="#i-auto-off"/></svg></button>
             <button id="fit-d" class="btn ic" type="button" title="Default / fit (d)" data-i18n-title="bar.fitDefaultKey" data-i18n-aria="bar.fitDefault" aria-label="Default view"><svg viewBox="0 0 24 24"><use href="#i-fit"/></svg></button>
             <button id="fit-c" class="btn ic" type="button" title="Crop (c)" data-i18n-title="bar.fitCropKey" data-i18n-aria="bar.fitCrop" aria-label="Crop"><svg viewBox="0 0 24 24"><use href="#i-crop"/></svg></button>
-            <button id="fit-s" class="btn ic" type="button" title="Stretch (s)" data-i18n-title="bar.fitStretchKey" data-i18n-aria="bar.fitStretch" aria-label="Stretch"><svg viewBox="0 0 24 24"><use href="#i-stretch"/></svg></button>
+            <button id="fit-e" class="btn ic" type="button" title="Stretch (E)" data-i18n-title="bar.fitStretchKey" data-i18n-aria="bar.fitStretch" aria-label="Stretch"><svg viewBox="0 0 24 24"><use href="#i-stretch"/></svg></button>
             <button id="fs" class="btn ic" type="button" title="Fullscreen (f)" data-i18n-title="bar.fullscreenKey" data-i18n-aria="bar.fullscreen" aria-label="Fullscreen"><svg viewBox="0 0 24 24"><use href="#i-fs"/><use href="#i-fs-exit"/></svg></button>
             <button id="help" class="btn ic" type="button" title="Instructions (?)" data-i18n-title="bar.helpKey" data-i18n-aria="bar.help" aria-label="Instructions"><svg viewBox="0 0 24 24"><use href="#i-help"/></svg></button>
-            <button id="settings" class="btn ic" type="button" title="Settings" data-i18n-title="bar.settings" data-i18n-aria="bar.settings" aria-label="Settings"><svg viewBox="0 0 24 24"><use href="#i-settings"/></svg></button>
+            <button id="settings" class="btn ic" type="button" title="Settings (S)" data-i18n-title="bar.settingsKey" data-i18n-aria="bar.settings" aria-label="Settings"><svg viewBox="0 0 24 24"><use href="#i-settings"/></svg></button>
           </div>
         </div>
       </div>
@@ -210,7 +210,7 @@
               <tr><th colspan="2" data-i18n="help.group.view">View</th></tr>
               <tr><td><kbd>H</kbd></td><td data-i18n="help.k.controls"></td></tr>
               <tr><td><kbd>P</kbd></td><td data-i18n="help.k.panel"></td></tr>
-              <tr><td><kbd>D</kbd> <kbd>C</kbd> <kbd>S</kbd></td><td data-i18n="help.k.fit"></td></tr>
+              <tr><td><kbd>D</kbd> <kbd>C</kbd> <kbd>E</kbd></td><td data-i18n="help.k.fit"></td></tr>
               <tr><td><kbd>F</kbd></td><td data-i18n="help.k.fullscreen"></td></tr>
             </tbody>
           </table>
@@ -220,6 +220,7 @@
               <tr><td><kbd>O</kbd> <kbd>&#8679;</kbd><kbd>O</kbd></td><td data-i18n="help.k.open"></td></tr>
               <tr><td><kbd>&#8679;</kbd><kbd>X</kbd></td><td data-i18n="help.k.clear"></td></tr>
               <tr><td><kbd>Esc</kbd></td><td data-i18n="help.k.esc"></td></tr>
+              <tr><td><kbd>S</kbd></td><td data-i18n="help.k.settings"></td></tr>
               <tr><td><kbd>?</kbd> <kbd>I</kbd></td><td data-i18n="help.k.help"></td></tr>
             </tbody>
           </table>
@@ -234,6 +235,31 @@
           </ul>
         </section>
 
+      </div>
+    </div>
+  </div>
+
+  <!-- Clearing the playlist.
+       A confirmation, because the button is a trash can next to the add button
+       and one mis-click throws away an ordering somebody may have spent an hour
+       on. Two buttons and no third choice: Cancel is focused, so Enter cancels
+       and a stray Return does the safe thing.
+
+       Deliberately NOT window.confirm: it cannot be styled, cannot be
+       translated, and on some platforms it renders as a sheet from another
+       decade. This says what will happen, in the app's own words, in the app's
+       own colours. -->
+  <div id="clear-modal" class="modal" hidden>
+    <div class="modal-card tiny" role="alertdialog" aria-modal="true" aria-labelledby="clear-title" aria-describedby="clear-body">
+      <header class="modal-head">
+        <h2 id="clear-title" data-i18n="clear.title">Clear the playlist?</h2>
+      </header>
+      <div class="modal-body single">
+        <p id="clear-body" class="confirm-body" data-i18n="clear.body">Every file will be removed from the list. The files themselves are not deleted.</p>
+        <div class="confirm-row">
+          <button id="clear-ok" class="btn txt primary" type="button" data-i18n="clear.ok">Clear it</button>
+          <button id="clear-cancel" class="btn txt" type="button" data-i18n="clear.cancel">Cancel</button>
+        </div>
       </div>
     </div>
   </div>
@@ -265,7 +291,17 @@
             <div class="logo-row">
               <img id="set-logo-preview" class="field-preview" alt="">
               <div class="field-row">
-                <input id="set-logo" type="file" accept="image/*" data-i18n-aria="settings.logo">
+                <!-- A button, not a file input.
+                     The input was on show as "No file chosen" beside a bare
+                     Choose-file box, which describes the control rather than the
+                     action: it asked the user to read the widget instead of
+                     reading the app. The input is still here - it is how a file
+                     is chosen - but it is off screen, and the button is what is
+                     in front of them. A label, not a script: the browser's own
+                     file dialog, focus behaviour and keyboard handling all still
+                     work, because this is still a real label for a real input. -->
+                <label class="btn txt" for="set-logo" data-i18n="settings.logoChange">Change logo</label>
+                <input id="set-logo" class="offscreen-input" type="file" accept="image/*" data-i18n-aria="settings.logo" tabindex="-1">
                 <button id="set-logo-clear" class="btn txt" type="button" title="Remove your mark" data-i18n-title="settings.logoClearTitle" data-i18n="settings.logoClear">Remove</button>
               </div>
             </div>
@@ -275,7 +311,7 @@
             <label for="set-color" data-i18n="settings.color">Brand colour</label>
             <div class="field-row">
               <input id="set-color" type="color" value="#aa7827">
-              <button id="set-color-reset" class="btn txt" type="button" title="Take the colour from your mark" data-i18n-title="settings.colorResetTitle" data-i18n="settings.colorReset">Use the logo colour</button>
+              <button id="set-color-reset" class="btn txt" type="button" title="Take the colour from your mark" data-i18n-title="settings.colorResetTitle" data-i18n="settings.colorReset">Use logo color</button>
             </div>
           </div>
         </section>
