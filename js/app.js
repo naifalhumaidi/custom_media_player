@@ -39,7 +39,7 @@ const still = $("still");
 const SEEK_STEP = 10;
 const VOL_STEP = 0.05;
 const THUMB_W = 160;
-const FITS = { d: "contain", c: "cover", e: "stretch" };
+const FITS = { d: "contain", c: "cover", s: "stretch" };
 let items = [];
 let index = 0;
 let loop = false;
@@ -294,6 +294,7 @@ function syncToggleTitles() {
   $("autoplay").title = autoStart ? t("bar.autoplayKey") : t("bar.autoplayOff");
   $("loop").setAttribute("aria-pressed", String(loop));
   $("autoplay").setAttribute("aria-pressed", String(autoStart));
+  publishMenuState();
 }
 __name(syncToggleTitles, "syncToggleTitles");
 function toggleLoop() {
@@ -507,7 +508,8 @@ async function addFolder() {
 }
 __name(addFolder, "addFolder");
 const addFilesAction = /* @__PURE__ */ __name(() => addFiles(), "addFilesAction");
-$("open").onclick = () => openFiles();
+const openButton = document.getElementById("open");
+if (openButton) openButton.onclick = () => openFiles();
 $("add").onclick = addFilesAction;
 $("empty-add").onclick = addFilesAction;
 const clearModal = $("clear-modal");
@@ -641,6 +643,7 @@ function syncIcons(playing) {
   $("play").setAttribute("aria-label", isPlaying ? t("bar.pause") : t("bar.play"));
   $("loop").setAttribute("aria-pressed", String(loop));
   $("autoplay").setAttribute("aria-pressed", String(autoStart));
+  publishMenuState();
 }
 __name(syncIcons, "syncIcons");
 stage.addEventListener("dblclick", () => media.toggleFullscreen());
@@ -649,11 +652,17 @@ helpModal.hidden = true;
 $("settings-modal").hidden = true;
 function setHelp(on) {
   helpModal.hidden = !on;
-  const target = on ? $("help-close") : $("help");
-  if (target && typeof target.focus === "function") target.focus();
+  if (on) {
+    const first = $("help-close");
+    if (first && typeof first.focus === "function") first.focus();
+  } else {
+    const back = document.querySelector(".bar, #stage");
+    if (back && typeof back.focus === "function") back.focus();
+  }
 }
 __name(setHelp, "setHelp");
-$("help").onclick = () => setHelp(true);
+const helpButton = document.getElementById("help");
+if (helpButton) helpButton.onclick = () => setHelp(true);
 $("help-close").onclick = () => setHelp(false);
 function trapFocus(dialog, e) {
   if (e.key !== "Tab") return;
@@ -690,6 +699,57 @@ media.on("play", syncIconsFromEvent);
 media.on("pause", syncIconsFromEvent);
 media.onFullscreenChange(syncIconsFromEvent);
 syncIcons();
+const MENU_ACTIONS = {
+  "open-files": /* @__PURE__ */ __name(() => openFiles(), "open-files"),
+  "add-files": /* @__PURE__ */ __name(() => addFiles(), "add-files"),
+  "add-folder": /* @__PURE__ */ __name(() => addFolder(), "add-folder"),
+  "clear-playlist": /* @__PURE__ */ __name(() => {
+    clearReturnFocus = document.activeElement;
+    askToClear();
+  }, "clear-playlist"),
+  "play-pause": /* @__PURE__ */ __name(() => media.toggle(), "play-pause"),
+  "previous": /* @__PURE__ */ __name(() => step(-1), "previous"),
+  "next": /* @__PURE__ */ __name(() => step(1), "next"),
+  "settings": /* @__PURE__ */ __name(() => settings.toggle(), "settings"),
+  "info": /* @__PURE__ */ __name(() => setHelp(true), "info"),
+  "toggle-panel": /* @__PURE__ */ __name(() => setList(!stage.classList.contains("list")), "toggle-panel"),
+  "toggle-controls": /* @__PURE__ */ __name(() => setUi(!stage.classList.contains("ui")), "toggle-controls"),
+  "fit-contain": /* @__PURE__ */ __name(() => setFit("contain"), "fit-contain"),
+  "fit-cover": /* @__PURE__ */ __name(() => setFit("cover"), "fit-cover"),
+  "fit-stretch": /* @__PURE__ */ __name(() => setFit("stretch"), "fit-stretch"),
+  fullscreen: /* @__PURE__ */ __name(() => media.toggleFullscreen(), "fullscreen"),
+  "toggle-loop": /* @__PURE__ */ __name(() => toggleLoop(), "toggle-loop"),
+  "toggle-autoplay": /* @__PURE__ */ __name(() => toggleAutoStart(), "toggle-autoplay")
+};
+function publishMenuState() {
+  const shell = window.MediaShell;
+  if (!shell || typeof shell.menuState !== "function") return;
+  try {
+    shell.menuState({
+      loop: $("loop").classList.contains("on"),
+      autoplay: $("autoplay").classList.contains("on")
+    });
+  } catch {
+  }
+}
+__name(publishMenuState, "publishMenuState");
+function runMenuCommand(command) {
+  const action = MENU_ACTIONS[command];
+  if (action) {
+    action();
+    publishMenuState();
+    return;
+  }
+  console.warn("[app] the menu asked for something this build cannot do:", command);
+}
+__name(runMenuCommand, "runMenuCommand");
+if (window.MediaShell && typeof window.MediaShell.onMenuCommand === "function") {
+  window.MediaShell.onMenuCommand(runMenuCommand);
+  publishMenuState();
+}
+if (typeof window.MediaMenu === "undefined") {
+  window.MediaMenu = { send: runMenuCommand };
+}
 let dragTimer;
 function clearDragHint() {
   clearTimeout(dragTimer);
@@ -829,8 +889,15 @@ list.addEventListener("drop", (e) => {
 list.addEventListener("dragend", cancelDrag);
 $("close-side").onclick = () => setList(false);
 document.addEventListener("keydown", (e) => {
-  if (e.metaKey || e.ctrlKey || e.altKey) return;
   const k = typeof e.key === "string" ? e.key.toLowerCase() : "";
+  if (k === "," && (e.ctrlKey || e.metaKey)) {
+    if (clearModal.hidden) {
+      if (settings.isOpen()) return settings.close();
+      return settings.toggle();
+    }
+    return;
+  }
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
   const typing = e.target.closest?.('input, select, textarea, [contenteditable="true"]');
   if (!clearModal.hidden) {
     if (k === "escape") {
@@ -845,10 +912,8 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (k === "escape" && settings.isOpen()) return settings.close();
-  if (k === "s") return settings.toggle();
   if (k === "escape" && !helpModal.hidden) return setHelp(false);
   if (settings.isOpen() || typing) return;
-  if (k === "?" || k === "i") return setHelp(helpModal.hidden);
   if (media.ownsArrowKey(e.target) && k.startsWith("arrow")) return;
   if (e.target.closest?.("#list li") && (k === "enter" || k === " " || k.startsWith("arrow"))) return;
   if (k === "h") return setUi(!stage.classList.contains("ui"));

@@ -66,13 +66,39 @@ async function open(opts) {
   win.harnessErrors = errors;
   await win.loadURL(`http://127.0.0.1:${process.env.PORT || 8000}/index.html`);
   await waitForBoot(win);
+
+  /* The application menu, for the suites.
+  
+     The browser build has no menu bar - the bar belongs to the desktop shells -
+     so there is nothing real for a suite to click. But the menu commands are a
+     code path worth testing: a menu item that calls a different function from
+     the button it replaced is exactly the bug a menu invites, and a suite that
+     can only press buttons cannot catch one.
+
+     So the harness stands in for the shell: it listens for the same commands the
+     preload sends and calls the same handler the app registered. Nothing is
+     reimplemented here, so a suite sending a menu command exercises the real
+     route. */
+  await win.webContents.executeJavaScript(`
+    (() => {
+      const handlers = [];
+      const shell = window.MediaShell || (window.MediaShell = { shell: 'web' });
+      shell.onMenuCommand = (fn) => { handlers.push(fn); return () => handlers.splice(handlers.indexOf(fn), 1); };
+      shell.menuState = () => {};
+      window.__menu = (command) => { for (const fn of handlers.slice()) fn(command); };
+    })();
+  `).catch(() => {});
+
+
   return win;
 }
 
 async function waitForBoot(win) {
   for (let i = 0; i < 80; i++) {
     const ok = await win.webContents.executeJavaScript('!!window.MediaBridge && !!window.MediaSettings').catch(() => false);
-    if (ok) return true;
+    if (ok) {
+          return true;
+    }
     await new Promise((r) => setTimeout(r, 150));
   }
   return false;

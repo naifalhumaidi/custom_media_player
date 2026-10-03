@@ -290,18 +290,19 @@ describe('the playlist', () => {
     expect(Boolean(addFolder.onclick)).toBe(hasFolders);
   });
 
-  it('S opens the settings, and E is the stretch fit', async () => {
+  it('S is the stretch fit, and Ctrl+, opens the settings', async () => {
     app = await createApp();
-    app.key('e');
-    await app.settle(1);
-    expect(app.stage.dataset.fit).toBe('stretch');
     app.key('s');
     await app.settle(1);
+    expect(app.stage.dataset.fit).toBe('stretch');
+    app.key(',', { ctrlKey: true });
+    await app.settle(1);
     expect(app.settingsOpen()).toBe(true);
-    app.key('escape');
+    /* the same key closes it, as it does in every other application */
+    app.key(',', { ctrlKey: true });
     await app.settle(1);
     expect(app.settingsOpen()).toBe(false);
-    /* and S did not change the fit on its way past */
+    /* and opening the dialog did not change the fit on its way past */
     expect(app.stage.dataset.fit).toBe('stretch');
   });
 
@@ -467,13 +468,15 @@ describe('the bar', () => {
     expect(app.stage.dataset.fit).not.toBe(stage);
     app.$('fit-d').click();
     expect(app.stage.dataset.fit).toBe('contain');
-    /* E, not S: S opens the settings dialog now. Both are asserted below, so a
-       letter cannot quietly take over the other one's job. */
-    app.key('e');
-    expect(app.stage.dataset.fit).toBe('stretch');
+    /* S is the stretch fit, as documented: it had been displaced to E only
+       because settings wanted the letter, and settings moved to Ctrl+,. */
     app.key('s');
+    expect(app.stage.dataset.fit).toBe('stretch');
+    /* and settings is on the conventional key, asserted so neither can quietly
+       take the other's job */
+    app.key(',', { ctrlKey: true });
     expect(app.settingsOpen()).toBe(true);
-    app.key('escape');
+    app.key(',', { ctrlKey: true });
     expect(app.settingsOpen()).toBe(false);
     expect(app.stage.dataset.fit).toBe('stretch');
   });
@@ -518,9 +521,12 @@ describe('the keyboard', () => {
     app = await createApp();
     await dropOnStage([VIDEO(), VIDEO2()]);
     const { player, stage } = app;
-    const acted = async (key, probe) => {
+    /* `mods` is passed through, because two of the documented keys have a
+       modifier on them - and a helper that cannot express one will quietly test
+       the bare key instead, which is a different key entirely. */
+    const acted = async (key, probe, mods) => {
       const before = probe();
-      app.key(key);
+      app.key(key, mods);
       await app.settle(1);
       expect(probe(), `pressing "${key}" did nothing at all`).not.toEqual(before);
     };
@@ -534,10 +540,10 @@ describe('the keyboard', () => {
     await app.settle(1);
     await acted('d', () => stage.dataset.fit);
     await acted('c', () => stage.dataset.fit);
-    /* E, because S opens the settings dialog. Both letters are asserted, and
-       against each other, so neither can quietly take the other's job. */
-    await acted('e', () => stage.dataset.fit);
-    await acted('s', () => app.settingsOpen());
+    await acted('s', () => stage.dataset.fit);
+    /* Settings is Ctrl+, not a bare letter - the convention, and the reason S
+       could go back to the stretch fit. */
+    await acted(',', () => app.settingsOpen(), { ctrlKey: true });
     /* Closed again straight away: a dialog left open swallows every key after
        it, and the rest of this test is about the keys. */
     app.key('escape');
@@ -545,8 +551,13 @@ describe('the keyboard', () => {
     expect(app.settingsOpen()).toBe(false);
     await acted('h', () => stage.classList.contains('ui'));
     await acted('p', () => stage.classList.contains('list'));
-    await acted('i', () => app.$('help-modal').hidden);
-    await acted('?', () => app.$('help-modal').hidden);
+    /* No key opens the info dialog any more. Asserted as a key that does
+       nothing, so a future keypress cannot quietly bring it back undocumented. */
+    for (const dead of ['i', '?']) {
+      app.key(dead);
+      await app.settle(1);
+      expect(app.$('help-modal').hidden, `${dead} still opens the info dialog`).toBe(true);
+    }
   });
 
   it('ignores a key event that carries no key', async () => {
@@ -560,7 +571,7 @@ describe('the keyboard', () => {
   it('leaves the keys to a form control', async () => {
     app = await createApp();
     await dropOnStage([VIDEO()]);
-    app.$('settings').click();
+    app.key(',', { ctrlKey: true });
     app.$('set-lang').focus();
     const fit = app.stage.dataset.fit;
     app.key('c');
@@ -571,13 +582,13 @@ describe('the keyboard', () => {
 
   it('closes the dialogs with Escape, before the panel', async () => {
     app = await createApp();
-    app.key('i'); await app.settle(1);
+    app.window.MediaMenu.send('info'); await app.settle(1);
     expect(app.$('help-modal').hidden).toBe(false);
     app.key('Escape'); await app.settle(1);
     expect(app.$('help-modal').hidden).toBe(true);
 
     app.key('p'); await app.settle(1);
-    app.$('settings').click(); await app.settle(1);
+    app.key(',', { ctrlKey: true }); await app.settle(1);
     app.key('Escape'); await app.settle(1);
     expect(app.$('settings-modal').hidden).toBe(true);
     /* the panel was open underneath and must still be open */
@@ -605,12 +616,27 @@ describe('the keyboard', () => {
 });
 
 describe('the instructions dialog', () => {
-  it('opens on both its keys and closes on the same ones', async () => {
+  /* No key opens it any more. It had ? and I, which was a letter nobody would
+     guess and which collided with typing. It is reached from the Info menu item
+     and closed with Escape, and the menu calls the same function the button
+     used to - so these press Escape rather than a key that no longer exists. */
+  it('opens from the menu command and closes on Escape', async () => {
     app = await createApp();
-    for (const key of ['?', 'i']) {
-      app.key(key); await app.settle(1);
-      expect(app.$('help-modal').hidden).toBe(false);
-      app.key(key); await app.settle(1);
+    expect(app.$('help-modal').hidden).toBe(true);
+    app.window.MediaMenu.send('info');
+    await app.settle(1);
+    expect(app.$('help-modal').hidden).toBe(false);
+    app.key('escape');
+    await app.settle(1);
+    expect(app.$('help-modal').hidden).toBe(true);
+  });
+
+  /* Nothing on the keyboard is spent on it, which is the point. */
+  it('no bare letter opens it', async () => {
+    app = await createApp();
+    for (const key of ['?', 'i', 'h']) {
+      app.key(key);
+      await app.settle(1);
       expect(app.$('help-modal').hidden).toBe(true);
     }
   });
@@ -619,6 +645,7 @@ describe('the instructions dialog', () => {
     app = await createApp();
     app.key('?');
     await app.settle(1);
+    app.window.MediaMenu.send('info');
     const before = app.$('help-modal').textContent;
     app.window.I18n.setLang('ar');
     await app.settle(1);
@@ -797,7 +824,7 @@ describe('undoing a mistake', () => {
 describe('the dialogs', () => {
   it('keep Tab inside, because they claim to be modal', async () => {
     app = await createApp();
-    app.key('?');
+    app.window.MediaMenu.send('info');
     await app.settle(1);
     expect(app.$('help-modal').hidden).toBe(false);
     const focusable = [...app.$('help-modal').querySelectorAll('button, a[href], input, select')]
@@ -814,7 +841,7 @@ describe('the dialogs', () => {
 
   it('the settings dialog does the same', async () => {
     app = await createApp();
-    app.$('settings').click();
+    app.key(',', { ctrlKey: true });
     await app.settle(1);
     const focusable = [...app.$('settings-modal').querySelectorAll('button, input, select')]
       .filter((n) => !n.closest('[hidden]') && !n.disabled);
@@ -898,23 +925,27 @@ describe('defects the final audit found', () => {
     expect(app.names()).toEqual(['new.mp4']);
   });
 
-  it('the settings dialog keeps ? and i to itself', async () => {
+  /* One dialog at a time. The info dialog has no key of its own now, so the risk
+     is the settings key opening it - and the reverse: Escape closing the wrong
+     one. */
+  it('the settings dialog closes on its own key and does not stack', async () => {
     app = await createApp();
-    app.$('settings').click();
+    app.key(',', { ctrlKey: true });
     await app.settle(1);
-    app.key('i');
-    await app.settle(1);
-    /* stacking them left a dialog the keyboard could not dismiss */
-    expect(app.$('help-modal').hidden).toBe(true);
     expect(app.$('settings-modal').hidden).toBe(false);
+    /* the same key that opened it closes it */
+    app.key(',', { ctrlKey: true });
+    await app.settle(1);
+    expect(app.$('settings-modal').hidden).toBe(true);
+    expect(app.$('help-modal').hidden).toBe(true);
   });
 
   it('typing in a field does not open a dialog', async () => {
     app = await createApp();
-    app.$('settings').click();
+    app.key(',', { ctrlKey: true });
     await app.settle(1);
     app.$('set-lang').focus();
-    app.key('i');
+    app.key('?', { shiftKey: true });
     await app.settle(1);
     expect(app.$('help-modal').hidden).toBe(true);
   });

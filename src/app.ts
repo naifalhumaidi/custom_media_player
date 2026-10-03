@@ -64,7 +64,7 @@ const THUMB_W = 160;
    being dropped: the three fit keys are a set, and losing one would have left
    two controls on the bar with no key while the third had two meanings. The
    buttons, the tooltips and the instructions all moved together. */
-const FITS = { d: 'contain', c: 'cover', e: 'stretch' };
+const FITS = { d: 'contain', c: 'cover', s: 'stretch' };
 
 let items: MediaItem[] = [];
 let index = 0;
@@ -457,6 +457,10 @@ function syncToggleTitles() {
      screen reader, so it has to be stated as well */
   $('loop').setAttribute('aria-pressed', String(loop));
   $('autoplay').setAttribute('aria-pressed', String(autoStart));
+  /* The menu's checkmarks follow the same source as the buttons' lit state, so
+     the two cannot disagree. syncIcons already runs on every state change, so
+     this costs nothing and there is nowhere else to forget it. */
+  publishMenuState();
 }
 
 function toggleLoop() {
@@ -729,7 +733,11 @@ async function addFolder() {
    Add files is the same action as the header's" a thing a test can assert. */
 const addFilesAction = () => addFiles();
 
-$('open').onclick = () => openFiles();
+/* Optional: the Open button has left the bar for the File menu. `$()` throws on a
+   missing element by design - it catches a page and a script that disagree - so a
+   button that is genuinely not there has to be asked for with getElementById. */
+const openButton = document.getElementById('open');
+if (openButton) openButton.onclick = () => openFiles();
 $('add').onclick = addFilesAction;
 
 /* The same two actions again, inside the empty panel.
@@ -987,6 +995,10 @@ function syncIcons(playing?: boolean) {
   $('play').setAttribute('aria-label', isPlaying ? t('bar.pause') : t('bar.play'));
   $('loop').setAttribute('aria-pressed', String(loop));
   $('autoplay').setAttribute('aria-pressed', String(autoStart));
+  /* The menu's checkmarks follow the same source as the buttons' lit state, so
+     the two cannot disagree. syncIcons already runs on every state change, so
+     this costs nothing and there is nowhere else to forget it. */
+  publishMenuState();
 }
 
 /* double-click anywhere on the picture toggles fullscreen for the whole app */
@@ -1004,13 +1016,27 @@ $('settings-modal').hidden = true;
 
 function setHelp(on) {
   helpModal.hidden = !on;
-  /* move focus into the dialog so Esc and Tab behave, and back out when it
-     closes so the keyboard returns to the player */
-  const target = on ? $('help-close') : $('help');
-  if (target && typeof target.focus === 'function') target.focus();
+  /* Move focus into the dialog so Esc and Tab behave.
+
+     Coming back out goes to the player rather than to the button that opened it:
+     the Info and Settings buttons are in the application menu, not in the page,
+     so there is nothing in the document to hand the focus back to. `focus()` on
+     a missing element throws, which is what this used to do the moment the bar
+     buttons went. */
+  if (on) {
+    const first = $('help-close');
+    if (first && typeof first.focus === 'function') first.focus();
+  } else {
+    const back = document.querySelector('.bar, #stage');
+    if (back && typeof (back as HTMLElement).focus === 'function') (back as HTMLElement).focus();
+  }
 }
 
-$('help').onclick = () => setHelp(true);
+/* Optional, because both buttons now live in the application menu. The dialog is
+   still reachable from there, and from the keyboard, and `setHelp` is what all
+   three call. */
+const helpButton = document.getElementById('help');
+if (helpButton) helpButton.onclick = () => setHelp(true);
 $('help-close').onclick = () => setHelp(false);
 
 /* Both dialogs claim to be modal, so Tab has to stay inside them. Without
@@ -1062,6 +1088,82 @@ media.on('play', syncIconsFromEvent);
 media.on('pause', syncIconsFromEvent);
 media.onFullscreenChange(syncIconsFromEvent);
 syncIcons();
+
+/* ---------------- the application menu ---------------- */
+
+/* The menu sends a named command and this does the same thing the button does,
+   by calling the same function. That is the entire point: a menu that
+   reimplemented the actions would be a second implementation to keep in step,
+   and the two would disagree the first time either changed.
+
+   Anything the menu cannot do is listed in `UNSUPPORTED` rather than ignored, so
+   an action that arrives from a shell without an implementation says so in the
+   console instead of doing nothing and looking like a dead menu item. */
+const MENU_ACTIONS = {
+  'open-files': () => openFiles(),
+  'add-files': () => addFiles(),
+  'add-folder': () => addFolder(),
+  'clear-playlist': () => {
+    clearReturnFocus = document.activeElement as HTMLElement | null;
+    askToClear();
+  },
+  'play-pause': () => media.toggle(),
+  'previous': () => step(-1),
+  'next': () => step(1),
+  'settings': () => settings.toggle(),
+  'info': () => setHelp(true),
+  'toggle-panel': () => setList(!stage.classList.contains('list')),
+  'toggle-controls': () => setUi(!stage.classList.contains('ui')),
+  'fit-contain': () => setFit('contain'),
+  'fit-cover': () => setFit('cover'),
+  'fit-stretch': () => setFit('stretch'),
+  fullscreen: () => media.toggleFullscreen(),
+  'toggle-loop': () => toggleLoop(),
+  'toggle-autoplay': () => toggleAutoStart(),
+} as const;
+
+/* The two states the menu shows as checkmarks. Read from the page and sent back
+   whenever they change, because a checkmark that only knows what it was at start
+   is worse than none: it says Loop is off while the playlist is looping. */
+function publishMenuState() {
+  const shell = window.MediaShell;
+  if (!shell || typeof shell.menuState !== 'function') return;
+  try {
+    shell.menuState({
+      loop: $('loop').classList.contains('on'),
+      autoplay: $('autoplay').classList.contains('on'),
+    });
+  } catch { /* the shell is on its way out; nothing to do */ }
+}
+
+function runMenuCommand(command) {
+  const action = MENU_ACTIONS[command];
+  if (action) {
+    action();
+    publishMenuState();
+    return;
+  }
+  console.warn('[app] the menu asked for something this build cannot do:', command);
+}
+
+if (window.MediaShell && typeof window.MediaShell.onMenuCommand === 'function') {
+  window.MediaShell.onMenuCommand(runMenuCommand);
+  publishMenuState();
+}
+
+/* The menu, callable.
+
+   Not a test hook bolted on afterwards: the menu is this app's own interface -
+   every action is reachable from it - and a suite that cannot send a command
+   cannot check that a menu item does what the button it replaced did. Which is
+   the bug a menu invites.
+
+   Read-only in effect: it sends a named command through exactly the same table
+   the shell sends it through, so exercising it here exercises the real route
+   rather than a parallel one that could drift. */
+if (typeof window.MediaMenu === 'undefined') {
+  window.MediaMenu = { send: runMenuCommand };
+}
 
 /* drop: window = add + play, sidebar = add only */
 
@@ -1266,10 +1368,26 @@ $('close-side').onclick = () => setList(false);
    stopPropagation() on keydown, so a bubbling listener never sees the key once
    a control has focus - which is why L and C stopped working. */
 document.addEventListener('keydown', (e) => {
-  if (e.metaKey || e.ctrlKey || e.altKey) return;
-
   /* e.key is absent on some synthetic and IME key events */
   const k = typeof e.key === 'string' ? e.key.toLowerCase() : '';
+
+  /* Ctrl+, is read BEFORE the modifier guard below, and it has to be: that guard
+     exists so a browser or desktop shortcut is not swallowed by the app, and it
+     returns on any modifier. Sitting under it, the key was unreachable - the one
+     shortcut the app had with a modifier in it could never fire, and nothing
+     said so. Which is the whole reason it is worth writing down. */
+  if (k === ',' && (e.ctrlKey || e.metaKey)) {
+    if (clearModal.hidden) {
+      if (settings.isOpen()) return settings.close();
+      return settings.toggle();
+    }
+    return;
+  }
+
+  /* Every other modified key belongs to the browser or the window manager:
+     Ctrl+R reloads, Ctrl+W closes, Alt+Tab switches. Swallowing those would
+     make the app feel like it had captured the keyboard. */
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
 
   /* Dialogs and form controls own the keyboard while they are up. Without this
      M muted the video behind the settings dialog, arrow keys changed the volume
@@ -1293,18 +1411,12 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (k === 'escape' && settings.isOpen()) return settings.close();
-  /* S, for the same reason every other shortcut here exists: the settings
-     button claimed a key in the instructions and the tooltip and nothing bound
-     it, which teaches the user the labels are unreliable. Shift+S is the colour
-     picker, because plain S is the dialog and a dialog cannot be open twice. */
-  if (k === 's') return settings.toggle();
   if (k === 'escape' && !helpModal.hidden) return setHelp(false);
-  /* Settings owns the keyboard entirely, ?/i included: handled above this
-     guard, `i` opened the instructions dialog on top of it, which broke the
-     one-modal-at-a-time rule and left a dialog the keyboard could not
-     dismiss. The instructions dialog is exempt, because ?/i toggles it. */
+
+  /* The info dialog is reached from the Info menu item, not from a key. It had
+     ? and I, which was a letter nobody would guess and which collided with
+     typing; both are gone, so nothing on the keyboard is spent on it. */
   if (settings.isOpen() || typing) return;
-  if (k === '?' || k === 'i') return setHelp(helpModal.hidden);
 
   /* let the library's own sliders handle their arrow keys */
   if (media.ownsArrowKey(e.target) && k.startsWith('arrow')) return;

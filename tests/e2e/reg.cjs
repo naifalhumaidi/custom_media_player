@@ -137,8 +137,8 @@ async function main() {
     // ---- 9. the instructions dialog ----
     const modal = $('help-modal');
     S('help: hidden at boot', modal.hidden);
-    $('help').click(); await wait(300);
-    S('help: opens from the bar button', modal.hidden === false);
+    window.MediaMenu.send('info'); await wait(300);
+    S('help: opens from the Info menu', modal.hidden === false);
     S('help: shortcut table present', document.querySelectorAll('.keys tr').length > 10);
     S('help: start page has no hint list', !document.querySelector('.drop .hint'));
     key('Escape'); await wait(300);
@@ -185,7 +185,7 @@ async function main() {
     'autoplay on: next track plays': true, 'autoplay on: shows the pause glyph': '#i-pause',
     'panel sits above the bar': true, 'bar is full width with the panel open': 1100,
     'dragover marks the stage': true, 'dragleave clears the hint': true,
-    'help: hidden at boot': true, 'help: opens from the bar button': true,
+    'help: hidden at boot': true, 'help: opens from the Info menu': true,
     'help: shortcut table present': true, 'help: start page has no hint list': true,
     'help: esc closes it': true, 'library shortcuts cleared': true,
     'panel reopened': true, 'click inside keeps it open': true, 'click outside closes it': true,

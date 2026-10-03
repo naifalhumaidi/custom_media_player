@@ -216,6 +216,17 @@ export interface MediaMimeModule {
 declare global {
   /* eslint-disable-next-line @typescript-eslint/no-namespace */
   interface Window {
+    /**
+     * The application's own menu, in every build.
+     *
+     * The menu bar itself belongs to the desktop shells - a browser tab has
+     * none - but the commands are the app's, and this is how anything without a
+     * shell sends one: the test suites, and any future build with a menu of its
+     * own. It is the same table the shells reach, so there is one implementation
+     * of every action rather than two that can disagree.
+     */
+    MediaMenu?: { send(command: string): void };
+
     MediaMime?: MediaMimeModule;
     MediaFileSource?: FileSource;
     MediaFileSourceWeb?: FileSource;
@@ -246,6 +257,15 @@ declare global {
       };
       dropFilesForTest?(paths: string[]): void;
       takeDropPaths?(): string[];
+
+      /* The application menu. The shell sends one of a fixed set of names and
+         the app calls the same function the matching button calls - which is
+         what stops the menu and the buttons from becoming two implementations
+         that disagree. Returns an unsubscribe, so a hot reload in development
+         does not stack listeners. */
+      onMenuCommand?(handler: (command: string) => void): () => void;
+      /** Report the states the menu shows as checkmarks. */
+      menuState?(state: { loop: boolean; autoplay: boolean }): void;
     };
 
     /** Present only in the Tauri shell. */

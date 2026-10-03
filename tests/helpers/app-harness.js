@@ -299,6 +299,43 @@ export async function createApp(options = {}) {
 
   window.Image = window.FakeImage;
   window.DataTransfer = FakeDataTransfer;
+
+  /* A stand-in for the application menu, so the commands a shell sends can be
+     driven from a test.
+
+     The menu is the app's own shell feature - the browser build has no menu bar,
+     so there is nothing real to press. But the code path matters: a menu item
+     that calls a different function from the button beside it is exactly the bug
+     a menu invites, and a test that cannot send a command cannot catch it. So
+     the harness offers the same two methods the preload does, and the tests
+     drive the menu through them rather than through the buttons. */
+  const menuHandlers = [];
+  window.MediaShell = {
+    shell: 'electron',
+    /* Enough of the contract for the browser source to load and for the menu to
+       be reachable. The file-picking methods are never called by these tests. */
+    pickFiles: async () => [],
+    pickFolder: async () => null,
+    listFolder: async () => [],
+    fileExists: async () => true,
+    loadState: async () => null,
+    saveState: async () => {},
+    mediaUrl: async (file) => `blob:${file}`,
+    setFullscreen: async () => {},
+    isFullscreen: async () => false,
+    pathForFile: () => '',
+    onMenuCommand(handler) {
+      menuHandlers.push(handler);
+      return () => {
+        const at = menuHandlers.indexOf(handler);
+        if (at >= 0) menuHandlers.splice(at, 1);
+      };
+    },
+    menuState() {},
+  };
+  /* The app publishes window.MediaMenu itself, so a test fires the menu through
+     that - the same table the shell reaches - rather than through a helper here
+     that could answer differently. */
   /* The app probes with document.createElement('video' | 'audio') and reads a
      duration off the result. jsdom never fires loadedmetadata, so those two
      tags resolve to the fake probe instead - which is the same boundary

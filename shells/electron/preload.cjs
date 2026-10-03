@@ -22,6 +22,17 @@ contextBridge.exposeInMainWorld('MediaShell', {
   listFolder: (dir) => ipcRenderer.invoke('list-folder', dir),
   fileExists: (file) => ipcRenderer.invoke('file-exists', file),
 
+  /* The application menu. A fixed list of named commands rather than a generic
+     `invoke`, for the same reason everything else here is fixed: a generic
+     bridge would hand the page the whole IPC surface, which is the thing
+     context isolation exists to prevent. */
+  onMenuCommand: (handler) => {
+    const listener = (_event, command) => handler(command);
+    ipcRenderer.on('menu-command', listener);
+    return () => ipcRenderer.removeListener('menu-command', listener);
+  },
+  menuState: (state) => ipcRenderer.send('menu-state', state),
+
   loadState: () => ipcRenderer.invoke('load-state'),
   saveState: (state) => ipcRenderer.invoke('save-state', state),
 

@@ -18,7 +18,10 @@ const expect = {
   /* `volume`, not `vds-slider`: the volume control is the app's own input now,
      so it reports its id where the library's element reported a class. Its place
      in the order is what this checks - between mute and loop. */
-  'bar: order': 'open prev back play fwd next mute volume loop autoplay fit-d fit-c fit-e fs help settings',
+  /* Open, Info and Settings have moved to the application menu; everything else
+     is untouched. The transport, the time, mute, volume and the rest stay in
+     this order, which is what this checks. */
+  'bar: order': 'prev back play fwd next mute volume loop autoplay fit-d fit-c fit-s fs',
   'help: opens': true,
   'settings: opens': true,
   'settings: language select': true,
@@ -95,7 +98,7 @@ async function main() {
 
   // settings must survive a reload
   await H.run(win, `(async()=>{const w=ms=>new Promise(r=>setTimeout(r,ms));
-    document.getElementById('settings').click(); await w(300);
+    window.MediaMenu.send('settings'); await w(300);
     const s=document.getElementById('set-lang'); s.value='ar'; s.dispatchEvent(new Event('change',{bubbles:true}));
     await w(300);
     const c=document.getElementById('set-color'); c.value='#3a7bd5'; c.dispatchEvent(new Event('input',{bubbles:true}));
@@ -139,9 +142,9 @@ async function main() {
   };
   await H.fresh(win);
   await grab('1-start-en', "document.getElementById('stage').classList.add('ui');");
-  await grab('2-settings-en', "document.getElementById('settings').click();");
+  await grab('2-settings-en', "window.MediaMenu.send('settings');");
   await grab('3-settings-ar', "(()=>{const s=document.getElementById('set-lang');s.value='ar';s.dispatchEvent(new Event('change',{bubbles:true}));})();");
-  await grab('4-help-ar', "(()=>{document.getElementById('settings-close').click();document.getElementById('help').click();})();");
+  await grab('4-help-ar', "(()=>{document.getElementById('settings-close').click();window.MediaMenu.send('info');})();");
   await grab('5-empty-panel-ar', "(()=>{document.getElementById('help-close').click();(document.activeElement||document).dispatchEvent(new KeyboardEvent('keydown',{key:'p',bubbles:true,cancelable:true}));})();");
   await grab('6-playlist-ar', `(async()=>{const w=ms=>new Promise(r=>setTimeout(r,ms));
     const d=new DataTransfer();

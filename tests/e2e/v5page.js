@@ -111,12 +111,12 @@ window.__DONE = (async () => {
         + ' ' + Math.round(r.width) + 'x' + Math.round(r.height)
         + ' inside=' + (r.top >= 0 && r.bottom <= window.innerHeight && r.left >= 0 && r.right <= window.innerWidth);
     };
-    $('help').click(); await wait(400);
+    window.MediaMenu.send('info'); await wait(400);
     S('help: opens', $('help-modal').hidden === false);
     S('help: card', box('.modal-card'));
     $('help-close').click(); await wait(250);
 
-    $('settings').click(); await wait(400);
+    window.MediaMenu.send('settings'); await wait(400);
     S('settings: opens', $('settings-modal').hidden === false);
     S('settings: card', box('#settings-modal .modal-card'));
     S('settings: language select', !!$('set-lang'));
@@ -184,7 +184,7 @@ window.__DONE = (async () => {
 
     $('settings-close').click(); await wait(250);
     S('ar: settings closed', $('settings-modal').hidden);
-    $('help').click(); await wait(400);
+    window.MediaMenu.send('info'); await wait(400);
     S('ar: help title', $('help-title').textContent);
     S('ar: help table is arabic', [...document.querySelectorAll('.keys')].map((k) => k.textContent).join(' ').includes('ملء الشاشة'));
     S('ar: help says what the app does', document.querySelector('.help-tagline').textContent.length > 60);
@@ -194,7 +194,7 @@ window.__DONE = (async () => {
     S('ar: help groups', [...document.querySelectorAll('.keys th')].map((t) => t.textContent).join('|'));
     $('help-close').click(); await wait(250);
 
-    $('settings').click(); await wait(300);
+    window.MediaMenu.send('settings'); await wait(300);
     $('set-lang').value = 'en';
     $('set-lang').dispatchEvent(new Event('change', { bubbles: true }));
     await wait(400);

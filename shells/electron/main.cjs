@@ -351,6 +351,161 @@ ipcMain.handle('file-exists', (_event, file) => {
 ipcMain.handle('media-url', (_event, file) => `${origin}/m/${registerMedia(file)}`);
 
 /* ------------------------------------------------------------------ */
+/* the menu bar                                                       */
+/* ------------------------------------------------------------------ */
+
+/* A menu of our own.
+
+   Electron's default bar was showing, and it had never been asked for. Every
+   item in it acts on an Electron window - minimise, zoom, the dev tools, "reload"
+   - rather than on this app, and "Reload" in particular threw away an unsaved
+   playlist. So it was replaced rather than removed: the bar is also the one place
+   where every action can carry its shortcut, which is where the app actually
+   wants to be.
+
+   Menu items do not reach into the page. They send one of the named commands
+   below, and the page does what it would have done had the button been pressed -
+   so the menu cannot drift away from the buttons it duplicates. That is the
+   whole reason for the command table rather than a direct handler.
+
+   A menu item that the page does not implement is disabled rather than hidden,
+   so the list is the same length everywhere and a person can see that Clear
+   exists and is not offered in this build. */
+function send(command) {
+  return () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send('menu-command', command);
+  };
+}
+
+function toggleItem(command, test) {
+  return () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send('menu-command', command);
+    /* The check mark has to come from the same source as the state, or it drifts
+       the moment either side changes. */
+    if (test) mainWindow.setMenuItemChecked?.(command, !!test());
+  };
+}
+
+function buildMenu() {
+  const { Menu, MenuItem, app: electronApp } = require('electron');
+
+  /* Read by the page, so an item can be greyed out when the thing it names is
+     not there - Clear in a browser tab, Add a folder where there are no paths. */
+  const can = (name) => {
+    try {
+      return mainWindow.webContents.executeJavaSync(
+        `window.MediaFileSource && window.MediaFileSource.${name} ? true : false`,
+      );
+    } catch {
+      return false;
+    }
+  };
+  const isOn = (expr) => {
+    try {
+      return mainWindow.webContents.executeJavaSync(`!!(${expr})`);
+    } catch {
+      return false;
+    }
+  };
+
+  const template = [
+    {
+      label: 'File',
+      submenu: [
+        { label: 'Open Files', accelerator: 'CmdOrCtrl+O', click: send('open-files') },
+        { label: 'Add Files', accelerator: 'CmdOrCtrl+Shift+O', click: send('add-files') },
+        { label: 'Add Folder', click: send('add-folder'), enabled: can('openFolder') },
+        { type: 'separator' },
+        {
+          label: 'Clear Playlist',
+          accelerator: 'CmdOrCtrl+Shift+X',
+          click: send('clear-playlist'),
+          /* Only where a playlist can outlive the session. A clear button that
+             throws everything away for nothing is worse than no clear button. */
+          enabled: can('canPersist'),
+        },
+        { type: 'separator' },
+        { role: 'quit', label: 'Quit' },
+      ],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        {
+          label: 'Play / Pause',
+          accelerator: 'Space',
+          /* Registered as an accelerator rather than handled here, because the
+             page already owns Space and owns it correctly - including the rule
+             that a focused control gets it first. Two handlers would fire. */
+          registerAccelerator: true,
+          click: send('play-pause'),
+        },
+        { label: 'Previous', accelerator: ',', registerAccelerator: true, click: send('previous') },
+        { label: 'Next', accelerator: '.', registerAccelerator: true, click: send('next') },
+        { type: 'separator' },
+        { label: 'Settings', accelerator: 'CmdOrCtrl+,', click: send('settings') },
+      ],
+    },
+    {
+      label: 'View',
+      submenu: [
+        { label: 'Show Playlist', accelerator: 'P', click: send('toggle-panel') },
+        { label: 'Show Controls', accelerator: 'H', click: send('toggle-controls') },
+        { type: 'separator' },
+        { label: 'Default', accelerator: 'D', click: send('fit-contain') },
+        { label: 'Crop', accelerator: 'C', click: send('fit-cover') },
+        { label: 'Stretch', accelerator: 'S', click: send('fit-stretch') },
+        { type: 'separator' },
+        { label: 'Enter Fullscreen', accelerator: 'F', click: send('fullscreen') },
+        { type: 'separator' },
+        { role: 'reload' },
+        { role: 'toggleDevTools' },
+      ],
+    },
+    {
+      label: 'Playback',
+      submenu: [
+        {
+          label: 'Loop Playlist',
+          type: 'checkbox',
+          accelerator: 'L',
+          checked: isOn('window.MediaBridge && window.MediaBridge.loop'),
+          click: send('toggle-loop'),
+        },
+        {
+          label: 'Auto Start',
+          type: 'checkbox',
+          accelerator: 'A',
+          checked: isOn('document.getElementById("autoplay").classList.contains("on")'),
+          click: send('toggle-autoplay'),
+        },
+      ],
+    },
+    {
+      /* Standalone, not a submenu item.
+
+         Settings and Info are places a person goes to deliberately, not things
+         they browse for. Every application on this desktop - the browser, the
+         file manager, the IDE - puts them at the top level, and burying them
+         under Help is the thing that makes a menu feel old. */
+      label: 'Info',
+      click: send('info'),
+    },
+    {
+      label: 'Settings',
+      accelerator: 'CmdOrCtrl+,',
+      click: send('settings'),
+    },
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+  return menu;
+}
+
+/* ------------------------------------------------------------------ */
 /* walkthrough                                                         */
 /* ------------------------------------------------------------------ */
 
@@ -413,9 +568,25 @@ async function createWindow() {
   /* Shown once painted, so a launch never flashes an empty white box. */
   mainWindow.once('ready-to-show', () => mainWindow.show());
 
+  /* The menu needs the page to exist: two of its items are greyed out or ticked
+     from what the page says. Built when the window is created rather than at
+     app-ready, because `can()` reads the page and would answer "no" for
+     everything. */
+  buildMenu();
+
   /* Nothing in this app should ever open a second window or navigate away. A
      link to somewhere else would leave the user in a page with no way back. */
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
+  /* The two checkbox items follow the page. Without this they are whatever they
+     were at build time, which is "off" - so Loop would show unticked while the
+     playlist was looping, and unticking it in the menu would be the only way to
+     see the truth. */
+  mainWindow.webContents.on('menu-state', (_e, state) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.setMenuItemChecked?.('toggle-loop', !!state.loop);
+    mainWindow.setMenuItemChecked?.('toggle-autoplay', !!state.autoplay);
+  });
   mainWindow.webContents.on('will-navigate', (event, url) => {
     if (url !== mainWindow.webContents.getURL()) event.preventDefault();
   });

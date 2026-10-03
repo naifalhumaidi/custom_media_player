@@ -13,9 +13,13 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 let app;
 afterEach(() => app?.close());
 
+/* Ctrl+, - the same route the application menu uses. The Settings button has
+   left the control bar, so the button is no longer what a person presses either,
+   and a helper that still clicked it would be testing something nobody can
+   reach. */
 const openSettings = async (options) => {
   app = await createApp(options);
-  app.$('settings').click();
+  app.key(',', { ctrlKey: true });
   await app.settle(1);
   return app;
 };
@@ -125,7 +129,7 @@ describe('the brand colour', () => {
     app.$('set-color').dispatchEvent(new app.window.Event('input', { bubbles: true }));
     await app.settle(1);
     app.$('settings-close').click();    /* close */
-    app.$('settings').click();          /* reopen: syncInputs runs again */
+    app.key(',', { ctrlKey: true });    /* reopen: syncInputs runs again */
     await app.settle(1);
     expect(app.$('set-color').value).toBe('#3a7bd5');
   });

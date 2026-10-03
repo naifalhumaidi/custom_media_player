@@ -570,6 +570,8 @@ import type { I18nModule, SavedState, SettingsModule } from '../types.js';
       if (e.target === m) close();
     });
 
+    /* Optional: the Settings button now lives in the application menu. Kept for
+       a build that still has one, so the wiring is not lost if it comes back. */
     const settingsButton = document.getElementById('settings');
     if (settingsButton) settingsButton.addEventListener('click', toggle);
 
