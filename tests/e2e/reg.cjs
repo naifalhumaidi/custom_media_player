@@ -139,7 +139,12 @@ async function main() {
     S('help: hidden at boot', modal.hidden);
     window.MediaMenu.send('info'); await wait(300);
     S('help: opens from the Info menu', modal.hidden === false);
-    S('help: shortcut table present', document.querySelectorAll('.keys tr').length > 10);
+    /* Two paragraphs now. The shortcuts moved to Settings, where they can be
+       changed - a list you cannot edit is a list you have to trust. Checked here
+       so the page cannot quietly grow a manual again. */
+    S('help: two paragraphs, no manual',
+      document.querySelectorAll('.help-body p').length === 2 &&
+      document.querySelectorAll('.help-body .keys').length === 0);
     S('help: start page has no hint list', !document.querySelector('.drop .hint'));
     key('Escape'); await wait(300);
     S('help: esc closes it', modal.hidden);
@@ -186,7 +191,7 @@ async function main() {
     'panel sits above the bar': true, 'bar is full width with the panel open': 1100,
     'dragover marks the stage': true, 'dragleave clears the hint': true,
     'help: hidden at boot': true, 'help: opens from the Info menu': true,
-    'help: shortcut table present': true, 'help: start page has no hint list': true,
+    'help: two paragraphs, no manual': true, 'help: start page has no hint list': true,
     'help: esc closes it': true, 'library shortcuts cleared': true,
     'panel reopened': true, 'click inside keeps it open': true, 'click outside closes it': true,
   };

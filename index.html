@@ -170,7 +170,7 @@
   <div id="help-modal" class="modal" hidden>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="help-title">
       <header class="modal-head">
-        <h2 id="help-title" data-i18n="help.title">Instructions</h2>
+        <h2 id="help-title" data-i18n="help.title">About</h2>
         <button id="help-close" class="btn ic" type="button" title="Close (Esc)" data-i18n-title="help.close" data-i18n-aria="common.close" aria-label="Close"><svg viewBox="0 0 24 24"><use href="#i-close"/></svg></button>
       </header>
 
@@ -179,80 +179,27 @@
            eye jumped between them, and the eye has to choose where to start. A
            single column with a clear order - what this is, then settings, then
            files, then keys - is read top to bottom and scrolled like a page. -->
-      <div class="modal-body help-body">
+      <!-- Two paragraphs and nothing else.
 
+           It was a page with four sections and three key tables. That is what a
+           manual looks like, and a manual is not what someone opens when they
+           want to know what this is. Two paragraphs: what the app does, and that
+           the language, the logo and the brand colour are theirs to change, and
+           where to find them.
+
+           No button to Settings. Settings has its own place in the menu bar
+           above, and a button that says "go to the thing in the menu bar" is a
+           button about the menu bar.
+
+           The shortcuts are not here either. They are in Settings, where they
+           can be changed - a list you cannot edit is a list you have to trust. -->
+      <div class="modal-body help-body">
         <section class="help-lead">
           <p class="help-tagline" data-i18n="app.about"></p>
         </section>
-
         <section>
-          <h3 data-i18n="help.settings">Settings</h3>
-          <p class="help-lead-text" data-i18n="help.settingsLead"></p>
-          <dl class="help-defs">
-            <dt data-i18n="settings.language">Language</dt>
-            <dd data-i18n="help.settings.language"></dd>
-            <dt data-i18n="settings.logo">Mark on the start window</dt>
-            <dd data-i18n="help.settings.logo"></dd>
-            <dt data-i18n="settings.color">Brand colour</dt>
-            <dd data-i18n="help.settings.color"></dd>
-          </dl>
-          <p class="help-foot"><kbd>,</kbd> <span data-i18n="help.settings.open"></span></p>
+          <p class="help-note" data-i18n="help.settingsAll"></p>
         </section>
-
-        <section>
-          <h3 data-i18n="help.files">Files</h3>
-          <ul class="notes">
-            <li data-i18n="help.files.1"></li>
-            <li data-i18n="help.files.2"></li>
-            <li data-i18n="help.files.3"></li>
-            <li><b data-i18n="help.files.4a">Click</b> <span data-i18n="help.files.4b"></span> <b data-i18n="help.files.4c">Double-click</b> <span data-i18n="help.files.4d"></span></li>
-            <li><span data-i18n="help.files.5a"></span> <b>&#10005;</b> <span data-i18n="help.files.5b"></span></li>
-          </ul>
-        </section>
-
-        <section>
-          <h3 data-i18n="help.shortcuts">Shortcuts</h3>
-          <table class="keys">
-            <tbody>
-              <tr><th colspan="2" data-i18n="help.group.playback">Playback</th></tr>
-              <tr><td><kbd>Space</kbd> <kbd>K</kbd></td><td data-i18n="help.k.playpause"></td></tr>
-              <tr><td><kbd>&larr;</kbd> <kbd>&rarr;</kbd></td><td data-i18n="help.k.seek"></td></tr>
-              <tr><td><kbd>,</kbd> <kbd>.</kbd></td><td data-i18n="help.k.prevnext"></td></tr>
-              <tr><td><kbd>L</kbd></td><td data-i18n="help.k.loop"></td></tr>
-              <tr><td><kbd>A</kbd></td><td data-i18n="help.k.autoplay"></td></tr>
-              <tr><td><kbd>M</kbd></td><td data-i18n="help.k.mute"></td></tr>
-              <tr><td><kbd>&uarr;</kbd> <kbd>&darr;</kbd></td><td data-i18n="help.k.volume"></td></tr>
-            </tbody>
-          </table>
-          <table class="keys">
-            <tbody>
-              <tr><th colspan="2" data-i18n="help.group.view">View</th></tr>
-              <tr><td><kbd>H</kbd></td><td data-i18n="help.k.controls"></td></tr>
-              <tr><td><kbd>P</kbd></td><td data-i18n="help.k.panel"></td></tr>
-              <tr><td><kbd>D</kbd> <kbd>C</kbd> <kbd>S</kbd></td><td data-i18n="help.k.fit"></td></tr>
-              <tr><td><kbd>F</kbd></td><td data-i18n="help.k.fullscreen"></td></tr>
-            </tbody>
-          </table>
-          <table class="keys">
-            <tbody>
-              <tr><th colspan="2" data-i18n="help.group.playlist">Playlist</th></tr>
-              <tr><td><kbd>O</kbd> <kbd>&#8679;</kbd><kbd>O</kbd></td><td data-i18n="help.k.open"></td></tr>
-              <tr><td><kbd>&#8679;</kbd><kbd>X</kbd></td><td data-i18n="help.k.clear"></td></tr>
-              <tr><td><kbd>Esc</kbd></td><td data-i18n="help.k.esc"></td></tr>
-              <tr><td><kbd>Ctrl</kbd><kbd>,</kbd></td><td data-i18n="help.k.settings"></td></tr>
-            </tbody>
-          </table>
-        </section>
-
-        <section>
-          <h3 data-i18n="help.notes">Notes</h3>
-          <ul class="notes">
-            <li><span data-i18n="help.notes.1a"></span> <kbd>Space</kbd> <span data-i18n="help.notes.1b"></span> <kbd>&rarr;</kbd> <span data-i18n="help.notes.1c"></span></li>
-            <li data-i18n="help.notes.2"></li>
-            <li data-i18n="help.notes.3"></li>
-          </ul>
-        </section>
-
       </div>
     </div>
   </div>

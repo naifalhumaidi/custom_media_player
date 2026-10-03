@@ -106,9 +106,16 @@ async function drawImageThumb(url) {
     canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("no 2d context");
+    ctx.imageSmoothingQuality = "high";
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", 0.6);
-  } catch {
+    const out = canvas.toDataURL("image/jpeg", 0.6);
+    img.src = "";
+    canvas.width = 0;
+    canvas.height = 0;
+    return out;
+  } catch (err) {
+    const why = err instanceof Error ? err.name + ": " + err.message : String(err);
+    console.warn("[app] no thumbnail for this image:", why);
     return null;
   }
 }
@@ -1316,6 +1323,7 @@ const zeroTime = /* @__PURE__ */ __name(() => fmt(0), "zeroTime");
 window.I18n.onChange(() => {
   syncIcons();
   syncToggleTitles();
+  renderShortcutTable();
   paintShortcutLabels();
   if (!items.length || stage.dataset.kind === "image") {
     const cur = $("time-now");

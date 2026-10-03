@@ -147,22 +147,52 @@ async function drawImageThumb(url) {
     /* Same reason as the video probe: without this the canvas is tainted and
        `toDataURL` throws, which is the desktop thumbnails failing silently. */
     img.crossOrigin = 'anonymous';
+
     img.src = url;
-    /* the fallback must be able to FAIL: without an onerror, a corrupt image
-       never settles and permanently occupies one of the three probe workers */
+
+    /* The fallback must be able to FAIL: without an onerror, a corrupt image
+       never settles and permanently occupies one of the three probe workers. */
     await (img.decode
       ? img.decode()
       : new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; }));
     if (!img.naturalWidth) return null;
+
     const scale = THUMB_W / img.naturalWidth;
     const canvas = document.createElement('canvas');
     canvas.width = THUMB_W;
     canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('no 2d context');
+    /* High, because this is a photograph reduced by a factor of ten and the
+       default filter is visibly worse than the difference is worth. */
+    ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', 0.6);
-  } catch {
+    /* Read out before the bitmap is dropped: toDataURL is synchronous, but the
+       canvas is resized to nothing on the next line and a comment claiming
+       otherwise is worth nothing. */
+    const out = canvas.toDataURL('image/jpeg', 0.6);
+    /* Let go of the decoded bitmap. It is the expensive thing and nothing needs
+       it once the 160px version exists - the photograph itself is fetched again
+       by the <img> that displays it, from the item's own URL.
+
+       A comment here claimed this kept a folder of large photographs inside the
+       decoder's budget. It does not: the same six images failed identically with
+       and without it, at every worker count, and the real cause was the browser
+       decoder refusing a bitmap while three were in flight. What this does do is
+       release memory sooner, which is worth having and is not the fix. */
+    img.src = '';
+    canvas.width = 0;
+    canvas.height = 0;
+    return out;
+  } catch (err) {
+    /* Logged, not swallowed. A bare `catch { return null }` here is why a row can
+       sit on its placeholder glyph with nothing anywhere saying why - the failure
+       is invisible, and the only symptom is a thumbnail that never appears, which
+       reads as "slow" rather than as "failed". It cost an afternoon to find one
+       row of six that never got its picture, and the reason was right here in a
+       catch with no body. */
+    const why = err instanceof Error ? err.name + ': ' + err.message : String(err);
+    console.warn('[app] no thumbnail for this image:', why);
     return null;
   }
 }
@@ -248,6 +278,21 @@ function runProbes(batch) {
   probeAll(batch).catch((err) => console.warn('[app] the probe queue stopped:', err));
 }
 
+/* Three workers, and the count is not the problem it looked like.
+
+   It was reduced to two on the theory that three concurrent image decodes
+   exhausted the browser's decoder - a photograph throws
+   `EncodingError: The source image cannot be decoded`, one row of six keeps its
+   placeholder glyph for good, and three in flight is a plausible cause.
+
+   It is not the cause. Measured at one, two and three workers, the same six
+   photographs lose the same row every time - and so do six small ones, which no
+   decoder budget can explain. Whatever it is, it is not concurrency, so the
+   count goes back to what it was and the change is withdrawn rather than left in
+   as a plausible-sounding guess.
+
+   What is real, and kept: the decode failure used to be swallowed by an empty
+   catch, so nothing anywhere said why a row had no picture. It is logged now. */
 async function probeAll(batch) {
   let next = 0;
   const worker = async () => {
@@ -320,6 +365,7 @@ function addItems(incoming, play) {
 
   const wasEmpty = items.length === 0;
   items = items.concat(wanted);
+
   drop.hidden = true;
   renderEmptyState();
   if (wasEmpty || play) load(wasEmpty ? 0 : items.length - wanted.length, true);
@@ -2010,6 +2056,11 @@ const zeroTime = () => fmt(0);
 (window.I18n as I18nModule).onChange(() => {
   syncIcons();
   syncToggleTitles();
+  /* The shortcut table renders its names, so it has to be rendered again. It was
+     built once at boot, which meant the Settings dialog listed every action in
+     English inside an Arabic app - the one part of the dialog that did not
+     follow the language. */
+  renderShortcutTable();
   /* After the translations are applied, because apply() writes every
      data-i18n-title - and the tooltip is one of those. Painting before it was
      silently undone, and the key vanished from the control. */

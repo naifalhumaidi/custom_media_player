@@ -186,12 +186,24 @@ window.__DONE = (async () => {
     S('ar: settings closed', $('settings-modal').hidden);
     window.MediaMenu.send('info'); await wait(400);
     S('ar: help title', $('help-title').textContent);
-    S('ar: help table is arabic', [...document.querySelectorAll('.keys')].map((k) => k.textContent).join(' ').includes('ملء الشاشة'));
     S('ar: help says what the app does', document.querySelector('.help-tagline').textContent.length > 60);
-    S('ar: help lists the settings', document.querySelector('.help-defs').textContent.length > 20);
+    /* The second paragraph is the one that changed: it used to be a definition
+       list of the settings, and it is now one sentence naming them and saying
+       where to find them. Checked for Arabic letters, not for a length - a length
+       would pass on English text and fail on a translation that says it shorter. */
+    S('ar: second paragraph is arabic', /[\u0600-\u06FF]/.test(
+      (document.querySelector('.help-note') || {}).textContent || '')
+      && /\u0627\u0644\u0625\u0639\u062f\u0627\u062f\u0627\u062a/.test(
+        (document.querySelector('.help-note') || {}).textContent || ''));
     /* The control bar is a fixed arrangement, so it must not mirror in Arabic. */
     S('bar stays left-to-right in arabic', getComputedStyle($('bar')).direction);
-    S('ar: help groups', [...document.querySelectorAll('.keys th')].map((t) => t.textContent).join('|'));
+    /* The key groups moved to Settings with the keys themselves, so this checks
+       that they are there and in Arabic rather than that they are here. */
+    window.MediaMenu.send('settings'); await wait(400);
+    S('ar: shortcut table is arabic', [...document.querySelectorAll('#shortcut-rows th')]
+      .map((t) => t.textContent).join('|').includes('\u0627\u0644\u062a\u0634\u063a\u064a\u0644'));
+    S('ar: shortcut rows', document.querySelectorAll('#shortcut-rows tr').length);
+    $('settings-close').click(); await wait(200);
     $('help-close').click(); await wait(250);
 
     window.MediaMenu.send('settings'); await wait(300);

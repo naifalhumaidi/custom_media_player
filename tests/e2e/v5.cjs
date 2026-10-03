@@ -46,8 +46,11 @@ const expect = {
   'ar: empty message names the buttons': 'إضافة ملفات',
   'bar stays left-to-right in arabic': 'ltr',
   'ar: settings title': 'الإعدادات',
-  'ar: help title': 'التعليمات',
-  'ar: help table is arabic': true,
+  /* The dialog is two paragraphs about the app now, so the heading says About and
+     there is no key table to be in Arabic - the keys are in Settings, spelled the
+     same way a keyboard is in both languages. */
+  'ar: help title': 'حول التطبيق',
+  'ar: second paragraph is arabic': true,
   'ar: panel title': 'قائمة التشغيل',
   'ar: side hint': 'أفلت هنا للإضافة — يستمر التشغيل',
   'ar: empty message': true,
@@ -69,7 +72,8 @@ const expect = {
      it happens to fit. */
   'ar: colour label': 'اللغة | الشعار في نافذة البداية | تغيير الشعار | لون الهوية',
   'ar: select options': 'English/العربية',
-  'ar: help groups': 'التشغيل|العرض|قائمة التشغيل',
+  'ar: shortcut table is arabic': true,
+  'ar: shortcut rows': 21,
   'en: dir back to ltr': 'ltr',
   'en: loop tooltip when on': 'Loop playlist (L) — on',
   'en: first duration': '0:08',

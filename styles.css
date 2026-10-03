@@ -988,9 +988,8 @@ tr:has(.key-cell.capturing) th { color: #8f8f8f; }
 }
 
 .help-lead {
-  margin: 0 0 22px;
-  padding: 0 2px 18px;
-  border-bottom: 1px solid #1a1a1a;
+  margin: 0 0 20px;
+  padding: 0;
 }
 
 .help-tagline {
@@ -1014,11 +1013,14 @@ tr:has(.key-cell.capturing) th { color: #8f8f8f; }
   color: var(--gold-text);
 }
 
-.help-lead-text {
-  margin: 0 0 10px;
+/* The second paragraph. Quieter than the first, and the same width, so the two
+   read as one thought and a half rather than as two sections. */
+.help-note {
+  margin: 0;
+  max-width: 56ch;
   font-size: 12.5px;
-  line-height: 1.55;
-  color: #949494;
+  line-height: 1.6;
+  color: #9a9a9a;
 }
 
 .help-defs { margin: 0; font-size: 12.5px; }
