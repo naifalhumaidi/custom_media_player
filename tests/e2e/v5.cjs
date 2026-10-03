@@ -55,7 +55,12 @@ const expect = {
   'ar: help lists the settings': true,
   'ar: loop tooltip': 'تكرار قائمة التشغيل (L)',
   'ar: fs tooltip': 'ملء الشاشة (F)',
-  'ar: play tooltip': 'تشغيل / إيقاف (مسافة)',
+  /* The key is spelled the way the keyboard is, in Arabic as in English, because
+     it is a key: "Space" is what every keyboard prints and what the handler
+     matches. A translated "مسافة" would name something that cannot be pressed,
+     which is why the tooltip takes its key from the shortcut table rather than
+     from the translation. */
+  'ar: play tooltip': 'تشغيل / إيقاف (Space, K)',
   'ar: close tooltip': 'إغلاق (Esc)',
   'ar: language label': 'اللغة',
   /* The logo field's label is longer now - it says what the mark is for, not

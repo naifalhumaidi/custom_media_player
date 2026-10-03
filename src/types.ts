@@ -225,7 +225,13 @@ declare global {
      * own. It is the same table the shells reach, so there is one implementation
      * of every action rather than two that can disagree.
      */
-    MediaMenu?: { send(command: string): void };
+    MediaMenu?: {
+      send(command: string): void;
+      /** What every action is bound to right now, read once. */
+      bindings: Record<string, string[]>;
+      /** Every action with its name and its current keys, for building a menu. */
+      shortcuts(): Array<{ id: string; label: string; keys: string[] }>;
+    };
 
     MediaMime?: MediaMimeModule;
     MediaFileSource?: FileSource;

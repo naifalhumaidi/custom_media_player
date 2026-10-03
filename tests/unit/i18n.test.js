@@ -232,16 +232,28 @@ describe('apply()', () => {
     expect(dom.window.document.querySelector('body > span').textContent).toBe('');
   });
 
-  it('the keyboard hints name a key the handler actually matches', () => {
-    /* a localised comma or question mark is a different code point, so
-       following the tooltip would press a key that does nothing */
+  /* The tooltip carries no key of its own any more - it is painted from the
+     shortcut table, which is the only place a binding is written down. That is
+     what stopped a reassignment showing in the settings table and nowhere else.
+
+     So the question this used to ask is now asked of the table: is the key in
+     the tooltip one the handler actually matches? A localised comma or question
+     mark is a different code point, and following the tooltip would press a key
+     that does nothing - which is why the key is never translated at all. */
+  it('no translation spells a key into a tooltip', () => {
+    /* Arabic, where the punctuation is a different code point entirely: a
+       translated "،" would name a key the handler does not match. */
     I18n.setLang('ar');
-    for (const [key, glyph] of [
-      ['bar.previousKey', ','],
-      ['bar.nextKey', '.'],
-      ['bar.helpKey', '?'],
+    for (const [id, glyph] of [
+      ['bar.previousKey', '،'],
+      ['bar.nextKey', '،'],
     ]) {
-      expect(I18n.t(key)).toContain(glyph);
+      expect(I18n.t(id)).not.toContain(glyph);
+    }
+    /* And the key is ASCII in both languages, because it is a key. */
+    I18n.setLang('en');
+    for (const id of ['bar.previousKey', 'bar.nextKey', 'bar.muteKey']) {
+      expect(I18n.t(id)).not.toMatch(/\([^)]*[A-Za-z0-9,./][^)]*\)\s*$/);
     }
   });
 });

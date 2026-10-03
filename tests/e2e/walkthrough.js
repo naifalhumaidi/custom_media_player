@@ -625,9 +625,12 @@
   /* ---- settings, and the colour taken from the mark ------------------ */
 
   journey('walkthrough_settings', async () => {
-    const press = (k) => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+    /* With the modifier, since the key the app answers to is Ctrl+, - the
+       convention, and the reason S is free to be the stretch fit again. */
+    const press = (k, mods) => document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: k, bubbles: true, ...(mods || {}) }));
 
-    press('s');
+    press(',', { ctrlKey: true });
     await wait(500);
     const modal = document.getElementById('settings-modal');
     say('walkthrough_settings_opens', `open=${!!modal && !modal.hidden}`);
@@ -681,7 +684,44 @@
       say('walkthrough_logo_colour', 'no button');
     }
 
-    press('escape');
+    /* The shortcut table, and reassigning one.
+
+       Checked here rather than in a unit test because the point is that the
+       tooltip follows: the whole reason the table exists is that a binding used
+       to be written in four places and the tooltip was the one that lost. */
+    const rows = document.querySelectorAll('#shortcut-rows tr');
+    const cell = document.querySelector('[data-shortcut-cell="mute"]');
+    const muteTitleBefore = document.getElementById('mute').title;
+    if (cell && rows.length) {
+      cell.click();
+      await wait(300);
+      const waiting = cell.classList.contains('capturing');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', bubbles: true }));
+      await wait(400);
+      const after = document.getElementById('mute').title;
+      say('walkthrough_shortcut_edit',
+        `rows=${rows.length} waiting=${waiting} ` +
+        `tooltip "${muteTitleBefore}" -> "${after}" ` +
+        `${after.includes('B') && !after.includes('(M)') ? 'the tooltip followed' : 'THE TOOLTIP DID NOT FOLLOW'}`);
+
+      /* and the new key works, with nothing else bound to it */
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', bubbles: true }));
+      await wait(300);
+      say('walkthrough_shortcut_works',
+        `muted=${document.getElementById('mute').classList.contains('muted')}`);
+
+      /* The dialog is left open on purpose. The key below is the one that opened
+         it, and it closes what it opens - so closing it here first would mean the
+         keypress reopened it, and the line would report the opposite of what
+         happened.
+
+         The reassignment is left in place too: this run has its own state
+         directory, and it is the only thing that writes to it. */
+    } else {
+      say('walkthrough_shortcut_edit', `rows=${rows.length} cell=${!!cell}`);
+    }
+
+    press(',', { ctrlKey: true });
     await wait(400);
     say('walkthrough_settings_closes', `closed=${!!modal && modal.hidden}`);
   });
@@ -745,6 +785,10 @@
          - and a verdict that does not read them will pass a player whose volume
          and mute are dead. */
       /IGNORED/, /did not (move|change|answer)/,
+      /* A control the walkthrough pressed that did not open, and a shortcut that
+         changed a tooltip without the key working. Both are the whole point of
+         the journeys that report them. */
+      /open=false/, /THE TOOLTIP DID NOT FOLLOW/, /waiting=false/,
     ];
 
     for (const [key, value] of Object.entries(report)) {

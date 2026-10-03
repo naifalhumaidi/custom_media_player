@@ -86,11 +86,11 @@
 
         <div class="row">
           <div class="grp">
-            <button id="prev" class="btn ic" type="button" title="Previous (,)" data-i18n-title="bar.previousKey" data-i18n-aria="bar.previous" aria-label="Previous"><svg viewBox="0 0 24 24"><use href="#i-prev"/></svg></button>
-            <media-seek-button id="back" class="btn ic" seconds="-10" title="Back 10s (←)" data-i18n-title="bar.backKey" data-i18n-aria="bar.back" aria-label="Back 10 seconds"><svg viewBox="0 0 24 24"><use href="#i-back"/></svg></media-seek-button>
-            <media-play-button id="play" class="btn ic play" title="Play / pause (Space)" data-i18n-title="bar.playKey" data-i18n-aria="bar.play" aria-label="Play"><svg viewBox="0 0 24 24"><use href="#i-play"/><use href="#i-pause"/></svg></media-play-button>
-            <media-seek-button id="fwd" class="btn ic" seconds="10" title="Forward 10s (→)" data-i18n-title="bar.forwardKey" data-i18n-aria="bar.forward" aria-label="Forward 10 seconds"><svg viewBox="0 0 24 24"><use href="#i-fwd"/></svg></media-seek-button>
-            <button id="next" class="btn ic" type="button" title="Next (.)" data-i18n-title="bar.nextKey" data-i18n-aria="bar.next" aria-label="Next"><svg viewBox="0 0 24 24"><use href="#i-next"/></svg></button>
+            <button id="prev" data-shortcut="previous" class="btn ic" type="button" title="Previous (,)" data-i18n-title="bar.previousKey" data-i18n-aria="bar.previous" aria-label="Previous"><svg viewBox="0 0 24 24"><use href="#i-prev"/></svg></button>
+            <media-seek-button id="back" data-shortcut="seekBack" class="btn ic" seconds="-10" title="Back 10s (←)" data-i18n-title="bar.backKey" data-i18n-aria="bar.back" aria-label="Back 10 seconds"><svg viewBox="0 0 24 24"><use href="#i-back"/></svg></media-seek-button>
+            <media-play-button id="play" data-shortcut="playPause" class="btn ic play" title="Play / pause (Space)" data-i18n-title="bar.playKey" data-i18n-aria="bar.play" aria-label="Play"><svg viewBox="0 0 24 24"><use href="#i-play"/><use href="#i-pause"/></svg></media-play-button>
+            <media-seek-button id="fwd" data-shortcut="seekForward" class="btn ic" seconds="10" title="Forward 10s (→)" data-i18n-title="bar.forwardKey" data-i18n-aria="bar.forward" aria-label="Forward 10 seconds"><svg viewBox="0 0 24 24"><use href="#i-fwd"/></svg></media-seek-button>
+            <button id="next" data-shortcut="next" class="btn ic" type="button" title="Next (.)" data-i18n-title="bar.nextKey" data-i18n-aria="bar.next" aria-label="Next"><svg viewBox="0 0 24 24"><use href="#i-next"/></svg></button>
           </div>
 
           <span class="time"><media-time id="time-now" type="current">0:00</media-time><i>/</i><media-time id="time-total" type="duration">0:00</media-time></span>
@@ -113,15 +113,15 @@
                rather than a hand-built one, so dragging, the arrow keys, Home,
                End and the screen reader all come with it. -->
           <div class="grp">
-            <button id="mute" class="btn ic" type="button" title="Mute (m)" data-i18n-title="bar.muteKey" data-i18n-aria="bar.mute" aria-label="Mute" aria-pressed="false"><svg viewBox="0 0 24 24"><use href="#i-sound"/><use href="#i-mute"/></svg></button>
+            <button id="mute" data-shortcut="mute" class="btn ic" type="button" title="Mute (m)" data-i18n-title="bar.muteKey" data-i18n-aria="bar.mute" aria-label="Mute" aria-pressed="false"><svg viewBox="0 0 24 24"><use href="#i-sound"/><use href="#i-mute"/></svg></button>
             <input id="volume" class="vds-slider vds-volume" type="range" min="0" max="1" step="0.01" value="1"
                    data-i18n-aria="bar.volume" aria-label="Volume">
-            <button id="loop" class="btn ic" type="button" title="Loop playlist (l)" data-i18n-title="bar.loopKey" data-i18n-aria="bar.loop" aria-label="Loop"><svg viewBox="0 0 24 24"><use href="#i-loop"/></svg></button>
-            <button id="autoplay" class="btn ic on" type="button" title="Auto-start on track change (a)" data-i18n-title="bar.autoplayKey" data-i18n-aria="bar.autoplay" aria-label="Auto-start"><svg viewBox="0 0 24 24"><use href="#i-auto"/><use href="#i-auto-off"/></svg></button>
-            <button id="fit-d" class="btn ic" type="button" title="Default / fit (d)" data-i18n-title="bar.fitDefaultKey" data-i18n-aria="bar.fitDefault" aria-label="Default view"><svg viewBox="0 0 24 24"><use href="#i-fit"/></svg></button>
-            <button id="fit-c" class="btn ic" type="button" title="Crop (c)" data-i18n-title="bar.fitCropKey" data-i18n-aria="bar.fitCrop" aria-label="Crop"><svg viewBox="0 0 24 24"><use href="#i-crop"/></svg></button>
-            <button id="fit-s" class="btn ic" type="button" title="Stretch (S)" data-i18n-title="bar.fitStretchKey" data-i18n-aria="bar.fitStretch" aria-label="Stretch"><svg viewBox="0 0 24 24"><use href="#i-stretch"/></svg></button>
-            <button id="fs" class="btn ic" type="button" title="Fullscreen (f)" data-i18n-title="bar.fullscreenKey" data-i18n-aria="bar.fullscreen" aria-label="Fullscreen"><svg viewBox="0 0 24 24"><use href="#i-fs"/><use href="#i-fs-exit"/></svg></button>
+            <button id="loop" data-shortcut="loop" class="btn ic" type="button" title="Loop playlist (l)" data-i18n-title="bar.loopKey" data-i18n-aria="bar.loop" aria-label="Loop"><svg viewBox="0 0 24 24"><use href="#i-loop"/></svg></button>
+            <button id="autoplay" data-shortcut="autoplay" class="btn ic on" type="button" title="Auto-start on track change (a)" data-i18n-title="bar.autoplayKey" data-i18n-aria="bar.autoplay" aria-label="Auto-start"><svg viewBox="0 0 24 24"><use href="#i-auto"/><use href="#i-auto-off"/></svg></button>
+            <button id="fit-d" data-shortcut="fitDefault" class="btn ic" type="button" title="Default / fit (d)" data-i18n-title="bar.fitDefaultKey" data-i18n-aria="bar.fitDefault" aria-label="Default view"><svg viewBox="0 0 24 24"><use href="#i-fit"/></svg></button>
+            <button id="fit-c" data-shortcut="fitCrop" class="btn ic" type="button" title="Crop (c)" data-i18n-title="bar.fitCropKey" data-i18n-aria="bar.fitCrop" aria-label="Crop"><svg viewBox="0 0 24 24"><use href="#i-crop"/></svg></button>
+            <button id="fit-s" data-shortcut="fitStretch" class="btn ic" type="button" title="Stretch (S)" data-i18n-title="bar.fitStretchKey" data-i18n-aria="bar.fitStretch" aria-label="Stretch"><svg viewBox="0 0 24 24"><use href="#i-stretch"/></svg></button>
+            <button id="fs" data-shortcut="fullscreen" class="btn ic" type="button" title="Fullscreen (f)" data-i18n-title="bar.fullscreenKey" data-i18n-aria="bar.fullscreen" aria-label="Fullscreen"><svg viewBox="0 0 24 24"><use href="#i-fs"/><use href="#i-fs-exit"/></svg></button>
                       </div>
         </div>
       </div>
@@ -336,6 +336,20 @@
               <input id="set-color" type="color" value="#aa7827">
               <button id="set-color-reset" class="btn txt" type="button" title="Take the colour from your mark" data-i18n-title="settings.colorResetTitle" data-i18n="settings.colorReset">Use logo color</button>
             </div>
+          </div>
+        </section>
+
+        <section>
+          <h3 data-i18n="settings.shortcuts">Shortcuts</h3>
+          <p class="help-lead-text" data-i18n="settings.shortcutsLead"></p>
+
+          <table class="shortcuts" id="shortcut-table">
+            <tbody id="shortcut-rows"></tbody>
+          </table>
+
+          <div class="field-row">
+            <button id="shortcut-reset" class="btn txt" type="button" data-i18n="settings.shortcutsReset">Reset to defaults</button>
+            <span id="shortcut-hint" class="field-hint" data-i18n="settings.shortcutsHint"></span>
           </div>
         </section>
 

@@ -628,6 +628,200 @@ media.on("volume", () => {
   syncIcons();
 });
 showVolume();
+const SHORTCUTS = [
+  { id: "playPause", label: "bar.play", keys: ["Space", "K"] },
+  { id: "seekBack", label: "bar.back", keys: ["ArrowLeft"] },
+  { id: "seekForward", label: "bar.forward", keys: ["ArrowRight"] },
+  { id: "volumeUp", label: "bar.volumeUp", keys: ["ArrowUp"] },
+  { id: "volumeDown", label: "bar.volumeDown", keys: ["ArrowDown"] },
+  { id: "previous", label: "bar.previous", keys: [","] },
+  { id: "next", label: "bar.next", keys: ["."] },
+  { id: "mute", label: "bar.mute", keys: ["M"] },
+  { id: "loop", label: "bar.loop", keys: ["L"] },
+  { id: "autoplay", label: "bar.autoplay", keys: ["A"] },
+  { id: "fitDefault", label: "bar.fitDefault", keys: ["D"] },
+  { id: "fitCrop", label: "bar.fitCrop", keys: ["C"] },
+  { id: "fitStretch", label: "bar.fitStretch", keys: ["S"] },
+  { id: "fullscreen", label: "bar.fullscreen", keys: ["F"] },
+  { id: "controls", label: "bar.controls", keys: ["H"] },
+  { id: "panel", label: "bar.panel", keys: ["P"] },
+  { id: "open", label: "bar.open", keys: ["O"] },
+  { id: "addFolder", label: "bar.addFolder", keys: ["Shift+O"] },
+  { id: "clear", label: "panel.clearTitle", keys: ["Shift+X"] },
+  { id: "undo", label: "bar.undo", keys: ["Shift+Z"] },
+  { id: "settings", label: "bar.settings", keys: ["Ctrl+,"] }
+];
+let shortcutOverrides = {};
+function keysOf(id) {
+  return shortcutOverrides[id] || SHORTCUTS.find((s) => s.id === id).keys;
+}
+__name(keysOf, "keysOf");
+function prettyKey(key) {
+  const parts = key.split("+");
+  const last = parts.pop();
+  const named = {
+    ArrowLeft: "←",
+    ArrowRight: "→",
+    ArrowUp: "↑",
+    ArrowDown: "↓",
+    " ": "Space",
+    Control: "Ctrl",
+    Ctrl: "Ctrl",
+    Meta: "Ctrl",
+    Command: "Ctrl",
+    Escape: "Esc",
+    Shift: "Shift",
+    Alt: "Alt",
+    AltGraph: "AltGr",
+    Enter: "Enter",
+    Tab: "Tab",
+    Backspace: "Backspace",
+    Delete: "Del"
+  };
+  const mods = parts.map((p) => named[p] || p);
+  const tail = named[last] || (last.length === 1 ? last.toUpperCase() : last);
+  return [...mods, tail].join("+");
+}
+__name(prettyKey, "prettyKey");
+const MODIFIER_ORDER = ["Control", "Alt", "Shift"];
+const MODIFIER_ALIASES = {
+  Ctrl: "Control",
+  Control: "Control",
+  Meta: "Control",
+  Cmd: "Control",
+  Command: "Control",
+  Super: "Control",
+  Alt: "Alt",
+  Option: "Alt",
+  Shift: "Shift"
+};
+const SPACING_ALIASES = {
+  " ": "Space",
+  Space: "Space",
+  Spacebar: "Space",
+  Escape: "Escape",
+  Esc: "Escape",
+  Left: "ArrowLeft",
+  Right: "ArrowRight",
+  Up: "ArrowUp",
+  Down: "ArrowDown",
+  ArrowLeft: "ArrowLeft",
+  ArrowRight: "ArrowRight",
+  ArrowUp: "ArrowUp",
+  ArrowDown: "ArrowDown",
+  Del: "Delete",
+  Return: "Enter"
+};
+function normaliseBinding(binding) {
+  const parts = binding.split("+");
+  const key = parts.pop() || "";
+  const mods = MODIFIER_ORDER.filter((m) => parts.some((p) => MODIFIER_ALIASES[p] === m));
+  const folded = key.length === 1 ? key.toUpperCase() : key;
+  const canonical = SPACING_ALIASES[folded] || folded;
+  const dropShift = mods.includes("Shift") && key.length === 1 && !/[a-z0-9]/i.test(key);
+  return [...mods.filter((m) => !(dropShift && m === "Shift")), canonical].join("+");
+}
+__name(normaliseBinding, "normaliseBinding");
+function bindingFromEvent(event) {
+  const key = typeof event.key === "string" ? event.key : "";
+  const mods = [
+    event.ctrlKey || event.metaKey ? "Control" : "",
+    event.altKey ? "Alt" : "",
+    event.shiftKey ? "Shift" : ""
+  ].filter(Boolean);
+  return normaliseBinding([...mods, key].join("+"));
+}
+__name(bindingFromEvent, "bindingFromEvent");
+function normalise(key) {
+  return normaliseBinding(key);
+}
+__name(normalise, "normalise");
+function ownerOf(binding) {
+  const wanted = normalise(binding);
+  for (const entry of SHORTCUTS) {
+    if (keysOf(entry.id).some((key) => normalise(key) === wanted)) return entry.id;
+  }
+  return null;
+}
+__name(ownerOf, "ownerOf");
+function setShortcut(id, keys) {
+  const clash = keys.map((k) => ownerOf(k)).find((owner) => owner && owner !== id);
+  if (clash) return { ok: false, owner: clash };
+  shortcutOverrides[id] = keys;
+  paintShortcutLabels();
+  saveShortcuts();
+  return { ok: true };
+}
+__name(setShortcut, "setShortcut");
+function resetShortcuts() {
+  shortcutOverrides = {};
+  paintShortcutLabels();
+  saveShortcuts();
+}
+__name(resetShortcuts, "resetShortcuts");
+function currentShortcuts() {
+  const out = {};
+  for (const entry of SHORTCUTS) out[entry.id] = keysOf(entry.id).slice();
+  return out;
+}
+__name(currentShortcuts, "currentShortcuts");
+const STATE_LABELS = {
+  mute: /* @__PURE__ */ __name(() => $("mute").classList.contains("muted") ? t("bar.unmute") : t("bar.mute"), "mute"),
+  fullscreen: /* @__PURE__ */ __name(() => media.fullscreen ? t("bar.fullscreenExit") : t("bar.fullscreen"), "fullscreen")
+};
+function paintStateTooltips() {
+  for (const id of Object.keys(STATE_LABELS)) paintShortcutLabel(id);
+}
+__name(paintStateTooltips, "paintStateTooltips");
+function paintShortcutLabels() {
+  for (const entry of SHORTCUTS) paintShortcutLabel(entry.id);
+}
+__name(paintShortcutLabels, "paintShortcutLabels");
+function paintShortcutLabel(id) {
+  {
+    const entry = SHORTCUTS.find((e) => e.id === id);
+    if (!entry) return;
+    const keys = keysOf(entry.id);
+    const suffix = keys.length ? ` (${keys.map(prettyKey).join(", ")})` : "";
+    for (const el of document.querySelectorAll(`[data-shortcut="${entry.id}"]`)) {
+      const stateful = STATE_LABELS[entry.id];
+      let label = "";
+      if (stateful) {
+        label = stateful() || "";
+      } else {
+        const base = el.getAttribute("data-i18n-title");
+        const translated = base ? t(base) : el.title;
+        label = translated.replace(/\s*\([^)]*\)\s*$/, "") || translated;
+      }
+      el.title = label + suffix;
+    }
+  }
+}
+__name(paintShortcutLabel, "paintShortcutLabel");
+function saveShortcuts() {
+  try {
+    localStorage.setItem("mediatools.shortcuts", JSON.stringify(shortcutOverrides));
+  } catch (err) {
+    console.warn("[app] could not save the shortcuts:", err);
+  }
+}
+__name(saveShortcuts, "saveShortcuts");
+function loadShortcuts() {
+  try {
+    const raw = localStorage.getItem("mediatools.shortcuts");
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    const known = new Set(SHORTCUTS.map((entry) => entry.id));
+    for (const [id, keys] of Object.entries(parsed)) {
+      if (known.has(id) && Array.isArray(keys) && keys.every((k) => typeof k === "string")) {
+        shortcutOverrides[id] = keys;
+      }
+    }
+  } catch (err) {
+    console.warn("[app] could not read the saved shortcuts, using the defaults:", err);
+  }
+}
+__name(loadShortcuts, "loadShortcuts");
 function syncIcons(playing) {
   const isPlaying = playing === void 0 ? media.playing : !!playing;
   const muted = media.muted || media.volume === 0;
@@ -639,7 +833,7 @@ function syncIcons(playing) {
   $("fs").title = inFs ? t("bar.fullscreenExitKey") : t("bar.fullscreenKey");
   $("fs").setAttribute("aria-label", inFs ? t("bar.fullscreenExit") : t("bar.fullscreen"));
   $("mute").setAttribute("aria-label", muted ? t("bar.unmute") : t("bar.mute"));
-  $("mute").title = muted ? t("bar.unmuteKey") : t("bar.muteKey");
+  paintStateTooltips();
   $("play").setAttribute("aria-label", isPlaying ? t("bar.pause") : t("bar.play"));
   $("loop").setAttribute("aria-pressed", String(loop));
   $("autoplay").setAttribute("aria-pressed", String(autoStart));
@@ -699,6 +893,99 @@ media.on("play", syncIconsFromEvent);
 media.on("pause", syncIconsFromEvent);
 media.onFullscreenChange(syncIconsFromEvent);
 syncIcons();
+let capturing = null;
+function renderShortcutTable() {
+  const body = document.getElementById("shortcut-rows");
+  if (!body) return;
+  body.textContent = "";
+  for (const entry of SHORTCUTS) {
+    const row = document.createElement("tr");
+    row.dataset.shortcutRow = entry.id;
+    const name = document.createElement("th");
+    name.textContent = t(entry.label);
+    row.appendChild(name);
+    const cell = document.createElement("td");
+    const button = document.createElement("button");
+    button.className = "key-cell";
+    button.type = "button";
+    button.dataset.shortcutCell = entry.id;
+    button.textContent = keysOf(entry.id).map(prettyKey).join(", ") || "—";
+    cell.appendChild(button);
+    row.appendChild(cell);
+    body.appendChild(row);
+  }
+}
+__name(renderShortcutTable, "renderShortcutTable");
+function beginCapture(id, cell) {
+  endCapture();
+  capturing = { id, row: cell.closest("tr"), cell };
+  cell.textContent = t("settings.shortcutsPress");
+  cell.classList.add("capturing");
+  cell.focus?.();
+}
+__name(beginCapture, "beginCapture");
+function endCapture() {
+  if (!capturing) return;
+  capturing.cell.classList.remove("capturing");
+  capturing.cell.textContent = keysOf(capturing.id).map(prettyKey).join(", ") || "—";
+  capturing = null;
+}
+__name(endCapture, "endCapture");
+document.getElementById("shortcut-rows")?.addEventListener("click", (e) => {
+  const button = e.target.closest("[data-shortcut-cell]");
+  if (!button || !button.dataset.shortcutCell) return;
+  beginCapture(button.dataset.shortcutCell, button);
+});
+document.addEventListener("keydown", (e) => {
+  if (!capturing) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.key === "Escape") {
+    const back = capturing.cell;
+    endCapture();
+    back.focus?.();
+    return;
+  }
+  if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) return;
+  const id = capturing.id;
+  const binding = bindingFromEvent(e);
+  const result = setShortcut(id, [binding]);
+  if (!result.ok) {
+    const hint2 = document.getElementById("shortcut-hint");
+    if (hint2) {
+      hint2.textContent = t("settings.shortcutsTaken") + " — " + t(SHORTCUTS.find((s2) => s2.id === result.owner).label);
+      hint2.classList.add("is-error");
+    }
+    endCapture();
+    return;
+  }
+  const hint = document.getElementById("shortcut-hint");
+  if (hint) {
+    hint.textContent = t("settings.shortcutsSaved");
+    hint.classList.remove("is-error");
+  }
+  endCapture();
+  renderShortcutTable();
+  const again = document.querySelector(`[data-shortcut-cell="${id}"]`);
+  again?.focus?.();
+}, true);
+renderShortcutTable();
+function repaintShortcutLabels() {
+  paintShortcutLabels();
+}
+__name(repaintShortcutLabels, "repaintShortcutLabels");
+const resetButton = document.getElementById("shortcut-reset");
+if (resetButton) {
+  resetButton.onclick = () => {
+    resetShortcuts();
+    renderShortcutTable();
+    const hint = document.getElementById("shortcut-hint");
+    if (hint) {
+      hint.textContent = t("settings.shortcutsReset");
+      hint.classList.remove("is-error");
+    }
+  };
+}
 const MENU_ACTIONS = {
   "open-files": /* @__PURE__ */ __name(() => openFiles(), "open-files"),
   "add-files": /* @__PURE__ */ __name(() => addFiles(), "add-files"),
@@ -748,7 +1035,15 @@ if (window.MediaShell && typeof window.MediaShell.onMenuCommand === "function") 
   publishMenuState();
 }
 if (typeof window.MediaMenu === "undefined") {
-  window.MediaMenu = { send: runMenuCommand };
+  window.MediaMenu = {
+    send: runMenuCommand,
+    /* What every action is bound to right now. The menu reads it so its
+       accelerators follow a reassignment instead of going stale. */
+    get bindings() {
+      return currentShortcuts();
+    },
+    shortcuts: /* @__PURE__ */ __name(() => SHORTCUTS.map((entry) => ({ id: entry.id, label: entry.label, keys: keysOf(entry.id).slice() })), "shortcuts")
+  };
 }
 let dragTimer;
 function clearDragHint() {
@@ -889,51 +1184,46 @@ list.addEventListener("drop", (e) => {
 list.addEventListener("dragend", cancelDrag);
 $("close-side").onclick = () => setList(false);
 document.addEventListener("keydown", (e) => {
-  const k = typeof e.key === "string" ? e.key.toLowerCase() : "";
-  if (k === "," && (e.ctrlKey || e.metaKey)) {
-    if (clearModal.hidden) {
-      if (settings.isOpen()) return settings.close();
-      return settings.toggle();
-    }
-    return;
-  }
-  if (e.metaKey || e.ctrlKey || e.altKey) return;
-  const typing = e.target.closest?.('input, select, textarea, [contenteditable="true"]');
+  const k = typeof e.key === "string" ? e.key : "";
+  const binding = bindingFromEvent(e);
   if (!clearModal.hidden) {
-    if (k === "escape") {
+    if (k.toLowerCase() === "escape") {
       dismissClear();
       if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
       return;
     }
-    if (k === "enter" && !inClearDialog(e.target)) {
+    if (k === "Enter" && !inClearDialog(e.target)) {
       dismissClear();
       if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
     }
     return;
   }
-  if (k === "escape" && settings.isOpen()) return settings.close();
-  if (k === "escape" && !helpModal.hidden) return setHelp(false);
-  if (settings.isOpen() || typing) return;
-  if (media.ownsArrowKey(e.target) && k.startsWith("arrow")) return;
-  if (e.target.closest?.("#list li") && (k === "enter" || k === " " || k.startsWith("arrow"))) return;
-  if (k === "h") return setUi(!stage.classList.contains("ui"));
-  if (k === "p") return setList(!stage.classList.contains("list"));
-  if (k === "escape" && stage.classList.contains("list")) return setList(false);
-  if (k === ",") return step(-1);
-  if (k === ".") return step(1);
-  if (FITS[k]) return setFit(FITS[k]);
-  if (k === "l") return toggleLoop();
-  if (k === "a") return toggleAutoStart();
-  if (k === "x" && e.shiftKey) {
-    clearReturnFocus = document.activeElement;
-    return askToClear();
+  let action = null;
+  for (const entry of SHORTCUTS) {
+    const matched = keysOf(entry.id).some((key) => normalise(key) === binding);
+    if (matched) {
+      action = entry.id;
+      break;
+    }
   }
-  if (k === "z" && e.shiftKey) return restoreCleared();
-  if (k === "o" && e.shiftKey) return addFolder();
-  if (k === "o") return openFiles();
-  if (k === "m") return media.toggleMute();
-  if (k === "f") return media.toggleFullscreen();
-  if (k === " " || k === "enter" || k === "k") {
+  if (action === "settings") {
+    if (settings.isOpen()) return settings.close();
+    settings.toggle();
+    repaintShortcutLabels();
+    return;
+  }
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const isEscape = k.toLowerCase() === "escape";
+  if (isEscape && settings.isOpen()) return settings.close();
+  if (isEscape && !helpModal.hidden) return setHelp(false);
+  const typing = e.target.closest?.('input, select, textarea, [contenteditable="true"]');
+  if (settings.isOpen() || typing) return;
+  if (media.ownsArrowKey(e.target) && k.startsWith("Arrow")) return;
+  const inRow = e.target.closest?.("#list li");
+  if (inRow && (k === "Enter" || k === " " || k.startsWith("Arrow"))) return;
+  if (isEscape && stage.classList.contains("list")) return setList(false);
+  if (!action) return;
+  if (action === "playPause") {
     const focused = e.target;
     if (focused && focused !== document.body && focused.closest?.("#bar") && typeof focused.blur === "function") {
       focused.blur();
@@ -941,30 +1231,62 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     e.stopPropagation();
     if (stage.dataset.kind === "image") return step(1);
-    toggle();
-    return;
+    return toggle();
   }
-  if (k === "arrowleft") {
+  if (action === "seekBack" || action === "seekForward") {
     if (stage.dataset.kind === "image") return;
-    media.seekBy(-SEEK_STEP);
+    media.seekBy(action === "seekBack" ? -SEEK_STEP : SEEK_STEP);
     e.preventDefault();
     return;
   }
-  if (k === "arrowright") {
-    if (stage.dataset.kind === "image") return;
-    media.seekBy(SEEK_STEP);
+  if (action === "volumeUp" || action === "volumeDown") {
+    media.setVolume(media.volume + (action === "volumeUp" ? VOL_STEP : -VOL_STEP));
     e.preventDefault();
     return;
   }
-  if (k === "arrowup" || k === "arrowdown") {
-    media.setVolume(media.volume + (k === "arrowup" ? VOL_STEP : -VOL_STEP));
-    e.preventDefault();
+  switch (action) {
+    case "previous":
+      return step(-1);
+    case "next":
+      return step(1);
+    case "mute":
+      return media.toggleMute();
+    case "loop":
+      return toggleLoop();
+    case "autoplay":
+      return toggleAutoStart();
+    case "fitDefault":
+      return setFit("contain");
+    case "fitCrop":
+      return setFit("cover");
+    case "fitStretch":
+      return setFit("stretch");
+    case "fullscreen":
+      return media.toggleFullscreen();
+    case "controls":
+      return setUi(!stage.classList.contains("ui"));
+    case "panel":
+      return setList(!stage.classList.contains("list"));
+    case "open":
+      return openFiles();
+    case "addFolder":
+      return addFolder();
+    case "clear":
+      clearReturnFocus = document.activeElement;
+      return askToClear();
+    case "undo":
+      return restoreCleared();
+    default:
+      return;
   }
 }, true);
 async function restore() {
   const state = await source.loadState();
+  loadShortcuts();
+  renderShortcutTable();
   settings.load(state);
   if (state?.fit) stage.dataset.fit = state.fit;
+  repaintShortcutLabels();
   setFit(stage.dataset.fit);
   setUi(state?.ui !== false);
   setList(!!state?.list);
@@ -994,6 +1316,7 @@ const zeroTime = /* @__PURE__ */ __name(() => fmt(0), "zeroTime");
 window.I18n.onChange(() => {
   syncIcons();
   syncToggleTitles();
+  paintShortcutLabels();
   if (!items.length || stage.dataset.kind === "image") {
     const cur = $("time-now");
     const dur = $("time-total");

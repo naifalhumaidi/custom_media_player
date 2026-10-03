@@ -975,6 +975,287 @@ showVolume();
    means the pause glyph shows. An argument lets the caller state the intent
    before the library has swapped the provider, because a track that loads
    paused fires no play/pause event at all. */
+/* ---------------- shortcuts ---------------- */
+
+/* One table, and everything reads it.
+
+   The dispatch used to be a chain of `if (k === ...)` and the settings dialog
+   had its own list of names, and the tooltips had a third. Three places naming
+   the same twenty keys is three places for a key to be wrong, and the user found
+   out: "i just looked at the first letter and assigned a shortcut" - a key that
+   was printed in the instructions and did nothing, because it was never bound.
+
+   So the table is the definition. The keyboard reads it, the settings table
+   renders it, the tooltips are built from it, and changing one changes all
+   three. A key that is listed but not here cannot be printed at all.
+
+   `keys` are the defaults, not the current values. The current values live in
+   `shortcutOverrides`, so Reset is one assignment rather than a walk over
+   everything. */
+const SHORTCUTS = [
+  { id: 'playPause', label: 'bar.play', keys: ['Space', 'K'] },
+  { id: 'seekBack', label: 'bar.back', keys: ['ArrowLeft'] },
+  { id: 'seekForward', label: 'bar.forward', keys: ['ArrowRight'] },
+  { id: 'volumeUp', label: 'bar.volumeUp', keys: ['ArrowUp'] },
+  { id: 'volumeDown', label: 'bar.volumeDown', keys: ['ArrowDown'] },
+  { id: 'previous', label: 'bar.previous', keys: [','] },
+  { id: 'next', label: 'bar.next', keys: ['.'] },
+  { id: 'mute', label: 'bar.mute', keys: ['M'] },
+  { id: 'loop', label: 'bar.loop', keys: ['L'] },
+  { id: 'autoplay', label: 'bar.autoplay', keys: ['A'] },
+  { id: 'fitDefault', label: 'bar.fitDefault', keys: ['D'] },
+  { id: 'fitCrop', label: 'bar.fitCrop', keys: ['C'] },
+  { id: 'fitStretch', label: 'bar.fitStretch', keys: ['S'] },
+  { id: 'fullscreen', label: 'bar.fullscreen', keys: ['F'] },
+  { id: 'controls', label: 'bar.controls', keys: ['H'] },
+  { id: 'panel', label: 'bar.panel', keys: ['P'] },
+  { id: 'open', label: 'bar.open', keys: ['O'] },
+  { id: 'addFolder', label: 'bar.addFolder', keys: ['Shift+O'] },
+  { id: 'clear', label: 'panel.clearTitle', keys: ['Shift+X'] },
+  { id: 'undo', label: 'bar.undo', keys: ['Shift+Z'] },
+  { id: 'settings', label: 'bar.settings', keys: ['Ctrl+,'] },
+] as const;
+
+type ShortcutId = typeof SHORTCUTS[number]['id'];
+
+let shortcutOverrides: Partial<Record<ShortcutId, string[]>> = {};
+
+/* What a shortcut is bound to right now: the override if there is one, the
+   default otherwise. */
+function keysOf(id: ShortcutId): readonly string[] {
+  return shortcutOverrides[id] || SHORTCUTS.find((s) => s.id === id)!.keys;
+}
+
+/* The key as a person reads it: "Ctrl+," rather than "ctrl+," and "Shift+X"
+   rather than "shift+x". Used in the settings table, the tooltips and the
+   menu, so the three cannot spell a key three different ways. */
+function prettyKey(key: string): string {
+  const parts = key.split('+');
+  const last = parts.pop() as string;
+  /* Spelled the way a keyboard is labelled, not the way the DOM calls it. The
+     arrows are drawn rather than named, because "ArrowLeft" in a table of
+     shortcuts is a sentence about the DOM and not an instruction. */
+  const named: Record<string, string> = {
+    ArrowLeft: '\u2190', ArrowRight: '\u2192', ArrowUp: '\u2191', ArrowDown: '\u2193',
+    ' ': 'Space', Control: 'Ctrl', Ctrl: 'Ctrl', Meta: 'Ctrl', Command: 'Ctrl',
+    Escape: 'Esc', Shift: 'Shift', Alt: 'Alt', AltGraph: 'AltGr',
+    Enter: 'Enter', Tab: 'Tab', Backspace: 'Backspace', Delete: 'Del',
+  };
+  /* A modifier keeps its own spelling rather than being shouted: "CTRL+," is
+     not a keyboard label, and "Ctrl+," is. */
+  const mods = parts.map((p) => named[p] || p);
+  const tail = named[last] || (last.length === 1 ? last.toUpperCase() : last);
+  return [...mods, tail].join('+');
+}
+
+/* A binding, as one comparable string: "Control+," , "Shift+X", "Space".
+
+   Two things have to agree before a key counts as the same binding - the stored
+   one and the one just pressed - so both are put through here.
+
+   The stored form already carries its modifiers ("Shift+X"), and the pressed one
+   carries them on the event (e.key is "x", e.shiftKey is true). Normalising both
+   to the same spelling is the whole job, and it has to handle the stored form
+   explicitly: reading "Shift+X" as a key called Shift+X and then prepending
+   Shift again gives "Shift+Shift+X", which matches nothing. That is why
+   Shift+X and every other modified binding stopped working when the dispatch
+   became table-driven - the letters came back one at a time, the modified keys
+   never did.
+
+   Modifiers are emitted in a fixed order, so Ctrl+Shift+A and Shift+Ctrl+A are
+   one binding written two ways rather than two bindings, which would let a
+   person assign both and find that one of them never fires. */
+const MODIFIER_ORDER = ['Control', 'Alt', 'Shift'] as const;
+
+/* How a modifier is spelled in the table, and how it is spelled elsewhere.
+   "Ctrl+,", "Control+," and a command key held on a Mac are one binding, and
+   without this they are three - so the one in the table matched nothing at all
+   and the key silently did nothing. */
+const MODIFIER_ALIASES: Record<string, string> = {
+  Ctrl: 'Control',
+  Control: 'Control',
+  Meta: 'Control',
+  Cmd: 'Control',
+  Command: 'Control',
+  Super: 'Control',
+  Alt: 'Alt',
+  Option: 'Alt',
+  Shift: 'Shift',
+};
+
+/* How one key is spelled in the table, and how the DOM spells the same key. A
+   table of bindings that said " " instead of "Space" would be unreadable, and a
+   table that said "Escape" would not match the key the browser sends. Both are
+   the same key, so both spellings fold to one before anything is compared. */
+const SPACING_ALIASES: Record<string, string> = {
+  ' ': 'Space',
+  Space: 'Space',
+  Spacebar: 'Space',
+  Escape: 'Escape',
+  Esc: 'Escape',
+  Left: 'ArrowLeft',
+  Right: 'ArrowRight',
+  Up: 'ArrowUp',
+  Down: 'ArrowDown',
+  ArrowLeft: 'ArrowLeft',
+  ArrowRight: 'ArrowRight',
+  ArrowUp: 'ArrowUp',
+  ArrowDown: 'ArrowDown',
+  Del: 'Delete',
+  Return: 'Enter',
+};
+
+function normaliseBinding(binding: string): string {
+  const parts = binding.split('+');
+  const key = (parts.pop() as string) || '';
+  const mods = MODIFIER_ORDER.filter((m) =>
+    parts.some((p) => MODIFIER_ALIASES[p] === m));
+  /* A single letter has no meaningful case, and e.key does not gain one just
+     because Shift is held. Named keys keep theirs exactly. */
+  const folded = key.length === 1 ? key.toUpperCase() : key;
+  /* "Space" and " " are the same key. The table spells it the way a person
+     reads it, because a table of bindings that said " " would be unreadable;
+     e.key says the other thing, because that is what the DOM calls it. Neither
+     spelling is wrong, so both fold to one. The same goes for "Esc", which the
+     table prints and the event calls "Escape". */
+  const canonical = SPACING_ALIASES[folded] || folded;
+  /* Shift is already in a symbol key: "!" is Shift+1 on every layout, so
+     "Shift+!" is the same key twice and would otherwise never match. */
+  const dropShift = mods.includes('Shift') && key.length === 1 && !/[a-z0-9]/i.test(key);
+  return [...mods.filter((m) => !(dropShift && m === 'Shift')), canonical].join('+');
+}
+
+/* The binding a keypress means, from the event alone. */
+function bindingFromEvent(event: KeyboardEvent): string {
+  const key = typeof event.key === 'string' ? event.key : '';
+  const mods = [
+    event.ctrlKey || event.metaKey ? 'Control' : '',
+    event.altKey ? 'Alt' : '',
+    event.shiftKey ? 'Shift' : '',
+  ].filter(Boolean);
+  return normaliseBinding([...mods, key].join('+'));
+}
+
+/* What a stored binding is, spelled the same way. */
+function normalise(key: string): string {
+  return normaliseBinding(key);
+}
+
+/* Does this binding belong to anything? Used before accepting a new one, so a
+   person is told what already has it instead of finding out by pressing. */
+function ownerOf(binding: string): ShortcutId | null {
+  const wanted = normalise(binding);
+  for (const entry of SHORTCUTS) {
+    if (keysOf(entry.id).some((key) => normalise(key) === wanted)) return entry.id;
+  }
+  return null;
+}
+
+function setShortcut(id: ShortcutId, keys: string[]): { ok: true } | { ok: false; owner: ShortcutId } {
+  const clash = keys.map((k) => ownerOf(k)).find((owner) => owner && owner !== id);
+  if (clash) return { ok: false, owner: clash };
+  shortcutOverrides[id] = keys;
+  paintShortcutLabels();
+  saveShortcuts();
+  return { ok: true };
+}
+
+function resetShortcuts(): void {
+  shortcutOverrides = {};
+  paintShortcutLabels();
+  saveShortcuts();
+}
+
+function currentShortcuts(): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const entry of SHORTCUTS) out[entry.id] = keysOf(entry.id).slice();
+  return out;
+}
+
+/* The three places a key is written down: the tooltip on the control, the menu
+   item, and the settings table. All three are painted from the table, so a
+   reassignment shows up in the tooltip the moment it is made - which is what the
+   user asked for, and what could not happen while each had its own copy. */
+/* The tooltip for a control: its label, then whatever is bound now.
+
+   Four things used to write this string - the markup, the translations, the
+   icon sync, and the settings table - and they disagreed. This is the only one.
+
+   A label that depends on state (Mute / Unmute, Enter / Leave fullscreen) is
+   named here rather than read from the markup, because the markup only knows one
+   of the two and the other is what the user is looking at. */
+const STATE_LABELS: Record<string, () => string | null> = {
+  mute: () => ($('mute').classList.contains('muted') ? t('bar.unmute' as never) : t('bar.mute' as never)),
+  fullscreen: () => (media.fullscreen ? t('bar.fullscreenExit' as never) : t('bar.fullscreen' as never)),
+};
+
+/* The tooltips whose words depend on state rather than on a binding. */
+function paintStateTooltips() {
+  for (const id of Object.keys(STATE_LABELS)) paintShortcutLabel(id);
+}
+
+function paintShortcutLabels() {
+  for (const entry of SHORTCUTS) paintShortcutLabel(entry.id);
+}
+
+/* One control's tooltip. Split out so the frequent path - a state change - can
+   touch two controls instead of walking the whole table and the document. */
+function paintShortcutLabel(id: string) {
+  {
+    const entry = SHORTCUTS.find((e) => e.id === id);
+    if (!entry) return;
+    const keys = keysOf(entry.id);
+    const suffix = keys.length ? ` (${keys.map(prettyKey).join(', ')})` : '';
+    for (const el of document.querySelectorAll<HTMLElement>(`[data-shortcut="${entry.id}"]`)) {
+      const stateful = STATE_LABELS[entry.id];
+      let label = '';
+      if (stateful) {
+        label = stateful() || '';
+      } else {
+        const base = el.getAttribute('data-i18n-title');
+        const translated = base ? t(base as never) : el.title;
+        /* Any key already in the string is dropped before the current one is
+           added, so a repaint replaces rather than accumulates. */
+        label = translated.replace(/\s*\([^)]*\)\s*$/, '') || translated;
+      }
+      el.title = label + suffix;
+    }
+  }
+}
+
+/* Shortcuts are saved with everything else, so a reassignment survives a
+   restart. A separate key rather than a field in prefs, because they are not a
+   preference - they are how the preferences are reached. */
+function saveShortcuts() {
+  try {
+    /* Only the overrides, not the whole table. A file that listed every action
+       would carry on describing bindings the user has since been shown are not
+       the defaults, and would grow with every action added later. */
+    localStorage.setItem('mediatools.shortcuts', JSON.stringify(shortcutOverrides));
+  } catch (err) {
+    console.warn('[app] could not save the shortcuts:', err);
+  }
+}
+
+function loadShortcuts() {
+  try {
+    const raw = localStorage.getItem('mediatools.shortcuts');
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Record<string, string[]>;
+    /* Only keys that are still actions, and only values that are strings, so a
+       hand-edited or stale file cannot put a non-key where a key belongs and
+       break every lookup. */
+    const known = new Set<string>(SHORTCUTS.map((entry) => entry.id));
+    for (const [id, keys] of Object.entries(parsed)) {
+      if (known.has(id) && Array.isArray(keys) && keys.every((k) => typeof k === 'string')) {
+        shortcutOverrides[id as ShortcutId] = keys;
+      }
+    }
+  } catch (err) {
+    console.warn('[app] could not read the saved shortcuts, using the defaults:', err);
+  }
+}
+
 function syncIcons(playing?: boolean) {
   const isPlaying = playing === undefined ? media.playing : !!playing;
   const muted = media.muted || media.volume === 0;
@@ -991,7 +1272,16 @@ function syncIcons(playing?: boolean) {
   /* the toggles announce their ACTION, so the accessible name has to follow the
      state: "Mute" while muted would be a lie */
   $('mute').setAttribute('aria-label', muted ? t('bar.unmute') : t('bar.mute'));
-  $('mute').title = muted ? t('bar.unmuteKey') : t('bar.muteKey');
+  /* The tooltip is not written here. paintShortcutLabels owns it, because writing
+     it here was a fourth place the binding was spelled out and the one that won:
+     syncIcons runs on every play, pause and volume change, so it replaced the
+     tooltip with a bare "Unmute" and dropped the key.
+
+     Only the two controls whose label depends on state, rather than the whole
+     table. syncIcons runs on every state change and a full repaint walks the
+     document, which is what turned a 30-file track change from 800ms into
+     5000ms - one slow thing repeated, rather than one slow thing. */
+  paintStateTooltips();
   $('play').setAttribute('aria-label', isPlaying ? t('bar.pause') : t('bar.play'));
   $('loop').setAttribute('aria-pressed', String(loop));
   $('autoplay').setAttribute('aria-pressed', String(autoStart));
@@ -1089,6 +1379,148 @@ media.on('pause', syncIconsFromEvent);
 media.onFullscreenChange(syncIconsFromEvent);
 syncIcons();
 
+/* ---------------- the shortcut table in Settings ---------------- */
+
+/* Click a cell, press a key, Escape cancels.
+
+   A table rather than a free-text field, because a shortcut is not something a
+   person types - it is something they press. And the capture is a real keypress,
+   so a cell cannot be given something the keyboard cannot produce: "Ctrl+;" is
+   not a shortcut, and typing it used to be the only way this could be set.
+
+   A binding already in use is refused, and the row that has it is named. Silently
+   taking it would leave two actions on one key with no way to tell which runs. */
+let capturing: { id: ShortcutId; row: HTMLElement; cell: HTMLElement } | null = null;
+
+function renderShortcutTable() {
+  const body = document.getElementById('shortcut-rows');
+  if (!body) return;
+  body.textContent = '';
+
+  for (const entry of SHORTCUTS) {
+    const row = document.createElement('tr');
+    row.dataset.shortcutRow = entry.id;
+
+    const name = document.createElement('th');
+    name.textContent = t(entry.label as never);
+    row.appendChild(name);
+
+    const cell = document.createElement('td');
+    const button = document.createElement('button');
+    button.className = 'key-cell';
+    button.type = 'button';
+    button.dataset.shortcutCell = entry.id;
+    button.textContent = keysOf(entry.id).map(prettyKey).join(', ') || '\u2014';
+    cell.appendChild(button);
+    row.appendChild(cell);
+
+    body.appendChild(row);
+  }
+
+  /* The click handler is attached once, below, not here. This function runs
+     again every time a binding changes, and a listener added on each run would
+     stack - so one click began four captures, and the last one won, which looked
+     like the first click doing nothing. */
+}
+
+function beginCapture(id: ShortcutId, cell: HTMLElement) {
+  endCapture();
+  capturing = { id, row: cell.closest('tr') as HTMLElement, cell };
+  cell.textContent = t('settings.shortcutsPress' as never);
+  cell.classList.add('capturing');
+  /* Focused, so the next keypress goes here without a click. */
+  (cell as HTMLElement).focus?.();
+}
+
+function endCapture() {
+  if (!capturing) return;
+  capturing.cell.classList.remove('capturing');
+  capturing.cell.textContent = keysOf(capturing.id).map(prettyKey).join(', ') || '\u2014';
+  capturing = null;
+}
+
+/* One click listener for the whole table, and one key listener for the capture -
+   rather than twenty of each, attached and detached on every render. Delegated,
+   so the rows themselves can be thrown away and rebuilt freely. */
+document.getElementById('shortcut-rows')?.addEventListener('click', (e) => {
+  const button = (e.target as HTMLElement).closest<HTMLElement>('[data-shortcut-cell]');
+  if (!button || !button.dataset.shortcutCell) return;
+  beginCapture(button.dataset.shortcutCell as ShortcutId, button);
+});
+
+document.addEventListener('keydown', (e) => {
+  if (!capturing) return;
+  e.preventDefault();
+  e.stopPropagation();
+
+  if (e.key === 'Escape') {
+    const back = capturing.cell;
+    endCapture();
+    (back as HTMLElement).focus?.();
+    return;
+  }
+
+  /* A modifier on its own is not a shortcut. Someone reaching for Ctrl+A has not
+     chosen A yet, and binding it to "Ctrl" would take the key from everything. */
+  if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
+
+  const id = capturing.id;
+  const binding = bindingFromEvent(e);
+  const result = setShortcut(id, [binding]);
+  if (!result.ok) {
+    /* Said plainly, and the old binding is left alone. Taking the key would leave
+       two actions on it with no way to know which runs. */
+    const hint = document.getElementById('shortcut-hint');
+    if (hint) {
+      hint.textContent = t(('settings.shortcutsTaken' as never)) + ' \u2014 ' + t((SHORTCUTS.find((s2) => s2.id === result.owner)!.label as never));
+      hint.classList.add('is-error');
+    }
+    endCapture();
+    return;
+  }
+
+  const hint = document.getElementById('shortcut-hint');
+  if (hint) {
+    hint.textContent = t('settings.shortcutsSaved' as never);
+    hint.classList.remove('is-error');
+  }
+  endCapture();
+  renderShortcutTable();
+  /* The focus is on a cell that no longer exists after the re-render, so it goes
+     back to the row it came from. */
+  const again = document.querySelector(`[data-shortcut-cell="${id}"]`) as HTMLElement | null;
+  again?.focus?.();
+}, true);
+
+/* Rendered here, at the bottom of the script, rather than only inside the
+   restore path. `restore` is async - it awaits the shell - so a table rendered
+   only there does not exist until the saved state has arrived, and the dialog can
+   be opened before then. Rendered with the defaults, and repainted once the saved
+   bindings are loaded. */
+renderShortcutTable();
+/* Every control's tooltip is repainted at the end of boot, after every label has
+   been written. Painting it earlier loses: the translations apply `title` to
+   every element with data-i18n-title, and the tooltip is one of them, so a paint
+   that came first was silently undone and the key was simply absent from the
+   control. Three paints - here, on a reassignment, and on a language change -
+   because those are the only three moments a label or a binding changes. */
+function repaintShortcutLabels() {
+  paintShortcutLabels();
+}
+
+const resetButton = document.getElementById('shortcut-reset');
+if (resetButton) {
+  resetButton.onclick = () => {
+    resetShortcuts();
+    renderShortcutTable();
+    const hint = document.getElementById('shortcut-hint');
+    if (hint) {
+      hint.textContent = t('settings.shortcutsReset' as never);
+      hint.classList.remove('is-error');
+    }
+  };
+}
+
 /* ---------------- the application menu ---------------- */
 
 /* The menu sends a named command and this does the same thing the button does,
@@ -1162,7 +1594,13 @@ if (window.MediaShell && typeof window.MediaShell.onMenuCommand === 'function') 
    the shell sends it through, so exercising it here exercises the real route
    rather than a parallel one that could drift. */
 if (typeof window.MediaMenu === 'undefined') {
-  window.MediaMenu = { send: runMenuCommand };
+  window.MediaMenu = {
+    send: runMenuCommand,
+    /* What every action is bound to right now. The menu reads it so its
+       accelerators follow a reassignment instead of going stale. */
+    get bindings() { return currentShortcuts(); },
+    shortcuts: () => SHORTCUTS.map((entry) => ({ id: entry.id, label: entry.label, keys: keysOf(entry.id).slice() })),
+  };
 }
 
 /* drop: window = add + play, sidebar = add only */
@@ -1369,18 +1807,53 @@ $('close-side').onclick = () => setList(false);
    a control has focus - which is why L and C stopped working. */
 document.addEventListener('keydown', (e) => {
   /* e.key is absent on some synthetic and IME key events */
-  const k = typeof e.key === 'string' ? e.key.toLowerCase() : '';
+  const k = typeof e.key === 'string' ? e.key : '';
 
-  /* Ctrl+, is read BEFORE the modifier guard below, and it has to be: that guard
-     exists so a browser or desktop shortcut is not swallowed by the app, and it
-     returns on any modifier. Sitting under it, the key was unreachable - the one
-     shortcut the app had with a modifier in it could never fire, and nothing
-     said so. Which is the whole reason it is worth writing down. */
-  if (k === ',' && (e.ctrlKey || e.metaKey)) {
-    if (clearModal.hidden) {
-      if (settings.isOpen()) return settings.close();
-      return settings.toggle();
+  /* Ctrl+, is read before the modifier guard and has to be: the guard exists so
+     a browser or window-manager shortcut is not swallowed, and it returns on any
+     modifier. Sitting under it, the one shortcut with a modifier in it could
+     never fire, and nothing said so. It is looked up in the table like every
+     other key, so it can be reassigned like every other key. */
+  const binding = bindingFromEvent(e);
+
+  if (!clearModal.hidden) {
+    if (k.toLowerCase() === 'escape') {
+      dismissClear();
+      if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
+      return;
     }
+    if (k === 'Enter' && !inClearDialog(e.target)) {
+      dismissClear();
+      if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
+    }
+    return;
+  }
+
+  /* Which action this key is for, according to the table and the overrides.
+
+     The table spells letters the way a keyboard does - P, not p - so the lookup
+     folds case. e.key is case-sensitive and the table is not, and a lookup that
+     compares them literally matches nothing at all for every letter: the whole
+     keyboard went dead the moment the dispatch stopped being a chain of
+     `k === 'p'`, where the lowercase came from the same expression on both
+     sides.
+
+     A single letter has no meaningful case, so folding it is safe. A named key
+     is compared exactly, because "ArrowLeft" and "arrowleft" would otherwise be
+     two bindings. */
+  let action: ShortcutId | null = null;
+  for (const entry of SHORTCUTS) {
+    const matched = keysOf(entry.id).some((key) => normalise(key) === binding);
+    if (matched) {
+      action = entry.id;
+      break;
+    }
+  }
+
+  if (action === 'settings') {
+    if (settings.isOpen()) return settings.close();
+    settings.toggle();
+    repaintShortcutLabels();
     return;
   }
 
@@ -1389,70 +1862,37 @@ document.addEventListener('keydown', (e) => {
      make the app feel like it had captured the keyboard. */
   if (e.metaKey || e.ctrlKey || e.altKey) return;
 
+  /* Case-insensitive, because these three compare a name and the rest of the
+     handler folds case for the table. They used to be lowercase because the key
+     was lowercased once at the top of the handler; the table does its own
+     folding, so that went, and with it every Escape comparison. */
+  const isEscape = k.toLowerCase() === 'escape';
+  if (isEscape && settings.isOpen()) return settings.close();
+  if (isEscape && !helpModal.hidden) return setHelp(false);
+
   /* Dialogs and form controls own the keyboard while they are up. Without this
      M muted the video behind the settings dialog, arrow keys changed the volume
      while a <select> was open, and Space could not scroll the instructions. */
   const typing = (e.target as HTMLElement).closest?.('input, select, textarea, [contenteditable="true"]');
-
-  if (!clearModal.hidden) {
-    if (k === 'escape') {
-      dismissClear();
-      if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
-      return;
-    }
-    /* Enter on a focused button is the button's own click, so it is left alone.
-       Escape cancels, and so does a Tab to Cancel followed by Return - which is
-       the safe direction to land in. */
-    if (k === 'enter' && !inClearDialog(e.target)) {
-      dismissClear();
-      if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
-    }
-    /* Everything else belongs to the dialog's own controls. */
-    return;
-  }
-  if (k === 'escape' && settings.isOpen()) return settings.close();
-  if (k === 'escape' && !helpModal.hidden) return setHelp(false);
-
-  /* The info dialog is reached from the Info menu item, not from a key. It had
-     ? and I, which was a letter nobody would guess and which collided with
-     typing; both are gone, so nothing on the keyboard is spent on it. */
   if (settings.isOpen() || typing) return;
 
-  /* let the library's own sliders handle their arrow keys */
-  if (media.ownsArrowKey(e.target) && k.startsWith('arrow')) return;
+  /* the library's own sliders handle their arrow keys */
+  if (media.ownsArrowKey(e.target) && k.startsWith('Arrow')) return;
 
   /* A focused playlist row handles its own Enter, Space and arrows. This
      listener is in the capture phase, so without this it consumed them first
      and the row was unreachable by keyboard - the row handler never ran. */
-  if ((e.target as HTMLElement).closest?.('#list li') && (k === 'enter' || k === ' ' || k.startsWith('arrow'))) return;
+  const inRow = (e.target as HTMLElement).closest?.('#list li');
+  if (inRow && (k === 'Enter' || k === ' ' || k.startsWith('Arrow'))) return;
 
-  if (k === 'h') return setUi(!stage.classList.contains('ui'));
-  if (k === 'p') return setList(!stage.classList.contains('list'));
-  if (k === 'escape' && stage.classList.contains('list')) return setList(false);
-  if (k === ',') return step(-1);
-  if (k === '.') return step(1);
-  if (FITS[k]) return setFit(FITS[k]);
-  if (k === 'l') return toggleLoop();
-  if (k === 'a') return toggleAutoStart();
-  if (k === 'x' && e.shiftKey) {
-    clearReturnFocus = document.activeElement as HTMLElement | null;
-    return askToClear();
-  }
-  if (k === 'z' && e.shiftKey) return restoreCleared();
-  /* O and Shift+O, so the two tooltips that name them are true. They were
-     written first and the keys never bound, which is worse than no shortcut
-     claim at all: a tooltip promising a key that does nothing teaches the user
-     the tooltips are unreliable. */
-  if (k === 'o' && e.shiftKey) return addFolder();
-  if (k === 'o') return openFiles();
-  if (k === 'm') return media.toggleMute();
-  if (k === 'f') return media.toggleFullscreen();
+  if (isEscape && stage.classList.contains('list')) return setList(false);
+  if (!action) return;
 
-  if (k === ' ' || k === 'enter' || k === 'k') {
-    /* Space always means play/pause, even when a control still holds focus:
-       otherwise the browser re-activates that button instead. Focus is only
-       dropped for the control-bar case this was reported about, so keyboard
-       navigation elsewhere is not destroyed. */
+  /* Space is play/pause even when a control still holds focus: otherwise the
+     browser re-activates that button instead. Focus is only dropped for the
+     control-bar case this was reported about, so keyboard navigation elsewhere
+     is not destroyed. */
+  if (action === 'playPause') {
     const focused = e.target as HTMLElement | null;
     if (focused && focused !== document.body && focused.closest?.('#bar') && typeof focused.blur === 'function') {
       focused.blur();
@@ -1460,24 +1900,41 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     e.stopPropagation();
     if (stage.dataset.kind === 'image') return step(1);
-    toggle();
-    return;
+    return toggle();
   }
-  if (k === 'arrowleft') {
+
+  if (action === 'seekBack' || action === 'seekForward') {
     if (stage.dataset.kind === 'image') return;
-    media.seekBy(-SEEK_STEP);
+    media.seekBy(action === 'seekBack' ? -SEEK_STEP : SEEK_STEP);
     e.preventDefault();
     return;
   }
-  if (k === 'arrowright') {
-    if (stage.dataset.kind === 'image') return;
-    media.seekBy(SEEK_STEP);
+
+  if (action === 'volumeUp' || action === 'volumeDown') {
+    media.setVolume(media.volume + (action === 'volumeUp' ? VOL_STEP : -VOL_STEP));
     e.preventDefault();
     return;
   }
-  if (k === 'arrowup' || k === 'arrowdown') {
-    media.setVolume(media.volume + (k === 'arrowup' ? VOL_STEP : -VOL_STEP));
-    e.preventDefault();
+
+  switch (action) {
+    case 'previous': return step(-1);
+    case 'next': return step(1);
+    case 'mute': return media.toggleMute();
+    case 'loop': return toggleLoop();
+    case 'autoplay': return toggleAutoStart();
+    case 'fitDefault': return setFit('contain');
+    case 'fitCrop': return setFit('cover');
+    case 'fitStretch': return setFit('stretch');
+    case 'fullscreen': return media.toggleFullscreen();
+    case 'controls': return setUi(!stage.classList.contains('ui'));
+    case 'panel': return setList(!stage.classList.contains('list'));
+    case 'open': return openFiles();
+    case 'addFolder': return addFolder();
+    case 'clear':
+      clearReturnFocus = document.activeElement as HTMLElement | null;
+      return askToClear();
+    case 'undo': return restoreCleared();
+    default: return;
   }
 }, true);
 
@@ -1488,8 +1945,19 @@ async function restore() {
 
   /* language + brand colour + logo first: the strings and the styles both
      depend on them */
+  /* Repainted now that the saved bindings are in. The table was already rendered
+     once at the bottom of this file, before the await, so the dialog is never
+     empty if it is opened early - and so the labels on the controls exist
+     before the saved state arrives. */
+  loadShortcuts();
+  renderShortcutTable();
+
   settings.load(state);
   if (state?.fit) stage.dataset.fit = state.fit;
+
+  /* After settings.load, which applies the translations and writes every
+     data-i18n-title. Painting before it was undone by the paint after it. */
+  repaintShortcutLabels();
 
   setFit(stage.dataset.fit);
   /* The bar is shown unless it was explicitly hidden: `!!state.ui` left a
@@ -1542,6 +2010,10 @@ const zeroTime = () => fmt(0);
 (window.I18n as I18nModule).onChange(() => {
   syncIcons();
   syncToggleTitles();
+  /* After the translations are applied, because apply() writes every
+     data-i18n-title - and the tooltip is one of those. Painting before it was
+     silently undone, and the key vanished from the control. */
+  paintShortcutLabels();
   /* the readout is refreshed by the next time event; the placeholder is not,
      because with nothing loaded there is no time event to come */
   if (!items.length || stage.dataset.kind === 'image') {

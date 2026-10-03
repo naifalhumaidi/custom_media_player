@@ -980,6 +980,145 @@ describe('defects the final audit found', () => {
     expect(seen).toEqual([]);
   });
 
+  /* ---- reassigning a shortcut ---- */
+
+  /* `app.$` is getElementById, so the cell is found by its attribute rather than
+     by an id it does not have - one cell per action, addressed by which action it
+     belongs to. */
+  const cellFor = (id) =>
+    app.document.querySelector(`[data-shortcut-cell="${id}"]`);
+  /* Opens Settings, clicks the cell, presses the key. The dialog has to be open:
+     its controls are inside it, and clicking one while it is closed is clicking
+     something nobody can see. */
+  const rebind = async (id, key, mods) => {
+    if (!app.settingsOpen()) {
+      app.key(',', { ctrlKey: true });
+      await app.settle(1);
+    }
+    cellFor(id).click();
+    await app.settle(1);
+    app.key(key, mods);
+    await app.settle(1);
+  };
+
+  /* Leave the dialog, so a keypress means what it would mean in use. */
+  const leaveSettings = async () => {
+    if (app.settingsOpen()) {
+      app.$('settings-close').click();
+      await app.settle(1);
+    }
+  };
+
+  it('the settings dialog lists every action with its key', async () => {
+    app = await createApp();
+    app.key(',', { ctrlKey: true });
+    await app.settle(1);
+    const rows = app.document.querySelectorAll('#shortcut-rows tr');
+    expect(rows.length).toBe(app.window.MediaMenu.shortcuts().length);
+    expect(rows.length).toBeGreaterThan(15);
+    /* the key is written the way a person reads it, not as the DOM spells it */
+    expect(cellFor('playPause').textContent).toBe('Space, K');
+    expect(cellFor('seekBack').textContent).toContain('\u2190');
+    expect(cellFor('settings').textContent).toBe('Ctrl+,');
+  });
+
+  it('a reassigned key does the new thing, and the old one stops', async () => {
+    app = await createApp();
+    await rebind('loop', 'b');
+    /* The settings dialog is closed first, and that is the point: while it is
+       open the dialog owns the keyboard, so a key pressed there is not the
+       player's. This is the behaviour every dialog has, and the reason the
+       reassignment is tested from outside it. */
+    await leaveSettings();
+    expect(app.settingsOpen()).toBe(false);
+    /* the new key works */
+    app.key('b');
+    await app.settle(1);
+    expect(app.$('loop').classList.contains('on')).toBe(true);
+    app.key('b');
+    await app.settle(1);
+    expect(app.$('loop').classList.contains('on')).toBe(false);
+    /* and the old one does nothing at all */
+    app.key('l');
+    await app.settle(1);
+    expect(app.$('loop').classList.contains('on')).toBe(false);
+  });
+
+  it('the tooltip follows the reassignment', async () => {
+    app = await createApp();
+    const button = app.$('mute');
+    /* The key in the tooltip is the table's, spelled as a keyboard does - so it
+       is M, not the lowercase m the translation used to hardcode. */
+    expect(button.title).toBe('Mute (M)');
+    await rebind('mute', 'b');
+    /* The word is Unmute here because the probe mutes the element while it reads
+       durations, and it stays muted. What is being checked is the key. */
+    expect(button.title).toMatch(/^(Mute|Unmute) \(B\)$/);
+    expect(button.title).not.toContain('(M)');
+  });
+
+  it('Escape cancels a capture and changes nothing', async () => {
+    app = await createApp();
+    const before = cellFor('mute').textContent;
+    cellFor('mute').click();
+    await app.settle(1);
+    expect(cellFor('mute').textContent).not.toBe(before);
+    app.key('Escape');
+    await app.settle(1);
+    expect(cellFor('mute').textContent).toBe(before);
+  });
+
+  it('a key already in use is refused, and says what has it', async () => {
+    app = await createApp();
+    const before = cellFor('mute').textContent;
+    await rebind('mute', 'l');
+    expect(cellFor('mute').textContent).toBe(before);
+    const hint = app.$('shortcut-hint');
+    expect(hint.classList.contains('is-error')).toBe(true);
+    /* and it names the action, rather than just refusing */
+    expect(hint.textContent.length).toBeGreaterThan(3);
+  });
+
+  it('Reset puts every key back', async () => {
+    app = await createApp();
+    await rebind('loop', 'b');
+    await rebind('mute', 'n');
+    app.$('shortcut-reset').click();
+    await app.settle(1);
+    expect(cellFor('loop').textContent).toBe('L');
+    expect(cellFor('mute').textContent).toBe('M');
+    await leaveSettings();
+    app.key('l');
+    await app.settle(1);
+    expect(app.$('loop').classList.contains('on')).toBe(true);
+  });
+
+  /* The persistence is checked against the saved bytes rather than a second
+     createApp: each call builds a brand new JSDOM with a brand new
+     localStorage, so "reload" here would be testing a different browser, and the
+     binding would be gone for reasons that have nothing to do with the app. */
+  it('a reassignment is written where it will be read from', async () => {
+    app = await createApp();
+    await rebind('loop', 'b');
+    const saved = app.window.localStorage.getItem('mediatools.shortcuts');
+    expect(saved).toBeTruthy();
+    /* Only the overrides, not every action: a file listing all twenty would
+       still describe bindings the user has since been shown are not defaults,
+       and would grow with every action added later. */
+    expect(JSON.parse(saved)).toEqual({ loop: ['B'] });
+  });
+
+  it('a stored binding that names no action is ignored, not obeyed', async () => {
+    app = await createApp();
+    app.window.localStorage.setItem('mediatools.shortcuts',
+      JSON.stringify({ nonsense: ['Q'], loop: 'not-an-array' }));
+    app = await createApp();
+    /* neither key was taken, so the defaults still work */
+    app.key('l');
+    await app.settle(1);
+    expect(app.$('loop').classList.contains('on')).toBe(true);
+  });
+
   /* A new video must not start at full volume. Reported as: "when I add a new
      video it starts with full volume even if the volume bar is small or even if
      it is muted".
