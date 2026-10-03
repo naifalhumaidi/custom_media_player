@@ -27,11 +27,31 @@ Desktop shells, headless only:
 
     ./tests/e2e/desktop.sh --walkthrough          # Tauri
     ./tests/e2e/electron-desktop.sh --walkthrough # Electron
-    tests/e2e/electron-run.sh                     # Electron, for a person
+    ./run-app.sh                                 # Electron, on a person's real desktop
 
 Both runners isolate the saved state, so a run starts from an empty playlist and
 is reproducible. Both are reasonably expensive — several seconds of real video
 playback each — so run one, read it, and decide. Do not loop.
+
+## Never open a window on the user's screen
+
+This has happened twice, and both times it landed in the middle of work the user
+was doing. Any window this agent starts must be on a throwaway framebuffer:
+
+    tests/e2e/electron-desktop.sh   # Xvfb :98, --ozone-platform=x11
+    tests/e2e/desktop.sh
+
+`./run-app.sh` is the one exception and it is not for the agent. It is the
+launcher the user runs themselves, and it must never be used to verify anything.
+
+Two things make this fail while looking fine:
+
+- Chromium prefers Wayland whenever WAYLAND_DISPLAY is set, and does not care
+  that DISPLAY points at a framebuffer. Unset it outright - not only when it is
+  empty - and pass --ozone-platform=x11 as well, so the claim is a switch and
+  not a promise.
+- A stale `shells/electron/dist/` is found by the shell before the repo `dist/`
+  and silently serves old code. It must not exist.
 
 ## The artefacts
 

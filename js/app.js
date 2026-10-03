@@ -165,6 +165,12 @@ async function probeAll(batch) {
   await Promise.all([worker(), worker(), worker()]);
 }
 __name(probeAll, "probeAll");
+function existingIndexOf(item) {
+  if (!item) return -1;
+  const by = item.path ? (it) => it && it.path === item.path : (it) => it && it.name === item.name && it.size === item.size;
+  return items.findIndex(by);
+}
+__name(existingIndexOf, "existingIndexOf");
 function addItems(incoming, play) {
   if (!incoming || !incoming.length) return;
   undo = null;
@@ -175,13 +181,22 @@ function addItems(incoming, play) {
   }
   const fresh = incoming.map((it) => ({ ...it, duration: null, thumb: null, position: 0 }));
   if (!fresh.length) return;
+  const wanted = fresh.filter((it) => existingIndexOf(it) === -1);
+  if (!wanted.length) {
+    const first = existingIndexOf(fresh[0]);
+    if (first >= 0 && !items[first]?.missing) {
+      load(first, true);
+      render();
+    }
+    return;
+  }
   const wasEmpty = items.length === 0;
-  items = items.concat(fresh);
+  items = items.concat(wanted);
   drop.hidden = true;
   renderEmptyState();
-  if (wasEmpty || play) load(wasEmpty ? 0 : items.length - fresh.length, true);
+  if (wasEmpty || play) load(wasEmpty ? 0 : items.length - wanted.length, true);
   else render();
-  runProbes(fresh);
+  runProbes(wanted);
   scheduleSave();
 }
 __name(addItems, "addItems");
@@ -515,6 +530,10 @@ $("clear-cancel").onclick = () => {
   dismissClear();
   if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
 };
+function inClearDialog(target) {
+  return !!clearModal.contains(target);
+}
+__name(inClearDialog, "inClearDialog");
 clearModal.addEventListener("click", (e) => {
   if (e.target === clearModal) {
     dismissClear();
@@ -567,7 +586,7 @@ media.on("time", ({ currentTime }) => {
   if (cur) cur.textContent = fmt(currentTime);
   if (dur) dur.textContent = Number.isFinite(d) && d > 0 ? fmt(d) : zeroTime();
 });
-still.addEventListener("click", () => step(1));
+still.addEventListener("click", (e) => e.stopPropagation());
 media.on("pause", scheduleSave);
 media.on("play", clearNotice);
 media.on("play", scheduleSave);
@@ -814,7 +833,12 @@ document.addEventListener("keydown", (e) => {
   const k = typeof e.key === "string" ? e.key.toLowerCase() : "";
   const typing = e.target.closest?.('input, select, textarea, [contenteditable="true"]');
   if (!clearModal.hidden) {
-    if (k === "escape" || k === "enter") {
+    if (k === "escape") {
+      dismissClear();
+      if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
+      return;
+    }
+    if (k === "enter" && !inClearDialog(e.target)) {
       dismissClear();
       if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
     }

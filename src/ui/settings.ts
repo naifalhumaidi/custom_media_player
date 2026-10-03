@@ -297,7 +297,15 @@ import type { I18nModule, SavedState, SettingsModule } from '../types.js';
         const max = Math.max(r, g, b);
         const min = Math.min(r, g, b);
         const light = (max + min) / 2;
-        if (light < floor.light || light > 236 || max - min < floor.sat) continue;
+        /* The pale end is discounted, not excluded. It used to be cut at 236,
+           on the reasoning that a near-white mark carries no brand information -
+           which is true, and is also why "I changed the logo to a white one, it
+           didn't use its color" happened. A white mark was excluded by the
+           filter, the second pass relaxed the *saturation* floor but not this
+           one, so it sampled the nearest thing it could find and applied a
+           colour that was not on the logo at all. Better a pale answer from the
+           mark itself than a confident answer from somewhere else. */
+        if (light < floor.light || light > 252 || max - min < floor.sat) continue;
         const key = `${r >> 4},${g >> 4},${b >> 4}`;
         const bucket = buckets.get(key) || { n: 0, r: 0, g: 0, b: 0 };
         bucket.n += 1;
@@ -322,7 +330,12 @@ import type { I18nModule, SavedState, SettingsModule } from '../types.js';
         /* Vivid, and not so light it disappears against the dark chrome. The
            light end is discounted rather than dropped: a pale brand colour is
            still the brand colour. */
-        const score = (max - min) * (lightness(r, g, b) > 200 ? 0.2 : 1);
+        /* Discounted rather than excluded, and never below a third: a white or
+           cream mark has almost no saturation to score with, so a multiplier
+           small enough to rank it below everything else is the same as dropping
+           it. */
+        const pale = lightness(r, g, b) > 200;
+        const score = (max - min) * (pale ? 0.4 : 1) + (pale ? 8 : 0);
         if (score > bestScore) {
           bestScore = score;
           bestKey = key;

@@ -152,18 +152,19 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
         img().src = item.url;
         return;
       }
-      applyHeld();
       onSuperseded(["loaded-metadata", "can-play"], () => {
         sourceReady = true;
         if (pendingSeek > 0) {
           el().currentTime = pendingSeek;
           pendingSeek = 0;
         }
+        applyHeld();
         startIfWanted();
       });
       el().load = "eager";
       el().src = [{ src: item.url, type: item.mime || "video/mp4" }];
       el().viewType = kind;
+      applyHeld();
       el().autoPlay = !!autoplay;
       if (autoplay) el().paused = false;
     },

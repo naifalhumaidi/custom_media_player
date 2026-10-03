@@ -88,7 +88,13 @@ fn the_state_write_is_staged_before_it_is_committed() {
 
 /* A directory read comes back in whatever order the filesystem feels like.
    A playlist that reshuffles between launches looks like a bug, so the
-   order is imposed here rather than left to the caller. */
+   order is imposed here rather than left to the caller.
+
+   This asks `list_folder` rather than reading the directory itself, which is
+   the point: it used to reimplement a single read_dir in the test, so it
+   asserted a one-level listing that the function had also been doing - and both
+   were wrong in the same direction at the same time, which is why the nesting
+   bug below went unnoticed. */
 #[test]
 fn folder_listing_is_sorted_case_insensitively() {
     let dir = scratch("folder");
@@ -97,21 +103,77 @@ fn folder_listing_is_sorted_case_insensitively() {
     }
     fs::create_dir_all(dir.join("subdir")).unwrap();
 
-    let mut found: Vec<String> = fs::read_dir(&dir)
-        .unwrap()
-        .filter_map(Result::ok)
-        .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
-        .map(|e| e.path().to_string_lossy().into_owned())
-        .collect();
-    found.sort_by_key(|p| p.to_lowercase());
-
+    let found = list_folder(dir.to_string_lossy().into_owned()).unwrap();
     let names: Vec<String> = found
         .iter()
         .map(|p| p.rsplit('/').next().unwrap().to_string())
         .collect();
     assert_eq!(names, vec!["apple.mp4", "Banana.mp4", "notes.txt", "Zebra.mp4"]);
-    /* and the sub-directory is not offered as a file */
+    /* and a directory is never offered as a playable file */
     assert!(!found.iter().any(|p| p.ends_with("subdir")));
+}
+
+/* The bug, as reported: "add folder sometimes adds one image only if there is
+   nested folders instead of direct media files". The old code kept only the
+   entries that were files, so a subdirectory - and everything in it - was
+   dropped. */
+#[test]
+fn folder_listing_walks_into_subfolders() {
+    let dir = scratch("nested");
+    fs::write(dir.join("top.mp4"), b"x").unwrap();
+    fs::create_dir_all(dir.join("one")).unwrap();
+    fs::write(dir.join("one/second.mp4"), b"x").unwrap();
+    fs::create_dir_all(dir.join("one/deeper")).unwrap();
+    fs::write(dir.join("one/deeper/third.mp4"), b"x").unwrap();
+
+    let found = list_folder(dir.to_string_lossy().into_owned()).unwrap();
+    let names: Vec<String> = found
+        .iter()
+        .map(|p| p.rsplit('/').next().unwrap().to_string())
+        .collect();
+    assert_eq!(names.len(), 3, "got {names:?}");
+    for want in ["top.mp4", "second.mp4", "third.mp4"] {
+        assert!(names.iter().any(|n| n == want), "missing {want} in {names:?}");
+    }
+}
+
+/* A symlink pointing at an ancestor is the way a walk never ends. Not following
+   them is what makes the depth cap a second line of defence rather than the
+   only one. */
+#[test]
+fn a_symlink_loop_ends_the_walk() {
+    let dir = scratch("loop");
+    fs::write(dir.join("clip.mp4"), b"x").unwrap();
+    let sub = dir.join("sub");
+    fs::create_dir_all(&sub).unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&dir, sub.join("back")).unwrap();
+
+    let found = list_folder(dir.to_string_lossy().into_owned()).unwrap();
+    assert_eq!(found.len(), 1, "the loop was followed: {found:?}");
+}
+
+/* A folder the user cannot read is not a reason to lose the rest. */
+#[test]
+fn an_unreadable_subfolder_does_not_lose_the_others() {
+    let dir = scratch("unreadable");
+    fs::write(dir.join("readable.mp4"), b"x").unwrap();
+    let locked = dir.join("locked");
+    fs::create_dir_all(&locked).unwrap();
+    fs::write(locked.join("inside.mp4"), b"x").unwrap();
+    let mut perms = fs::metadata(&locked).unwrap().permissions();
+    use std::os::unix::fs::PermissionsExt;
+    perms.set_mode(0o000);
+    fs::set_permissions(&locked, perms).unwrap();
+
+    let found = list_folder(dir.to_string_lossy().into_owned()).unwrap();
+    fs::set_permissions(&locked, fs::metadata(&locked).unwrap().permissions()).unwrap();
+
+    let names: Vec<String> = found
+        .iter()
+        .map(|p| p.rsplit('/').next().unwrap().to_string())
+        .collect();
+    assert_eq!(names, vec!["readable.mp4"]);
 }
 
 #[test]

@@ -270,10 +270,6 @@ import type { BridgeEvents } from '../types.js';
         return;
       }
 
-      /* Before the first metadata event, so a video starts at the volume the
-         listener chose rather than snapping to full one frame in. */
-      applyHeld();
-
       /* installed BEFORE the source is attached, so the very first metadata
          event is caught rather than the next one */
       onSuperseded(['loaded-metadata', 'can-play'], () => {
@@ -282,12 +278,29 @@ import type { BridgeEvents } from '../types.js';
           el().currentTime = pendingSeek;
           pendingSeek = 0;
         }
+        /* Here, and not before the src was set.
+
+           It used to run above, one line before `el().src = [...]`. The
+           library resets volume when a new source is attached, so every setting
+           written beforehand was undone a line later: a new video started at
+           full volume, unmuted, whatever the volume bar said. Reported as
+           "when I add a new video it starts with full volume even if the volume
+           bar is small or even if it is muted".
+
+           Re-applied on `can-play` too rather than only `loaded-metadata`.
+           Some sources report metadata and then finish setting up, and a setting
+           written between those two moments is lost the same way. */
+        applyHeld();
         startIfWanted();
       });
 
       el().load = 'eager';
       el().src = [{ src: item.url, type: item.mime || 'video/mp4' }];
       el().viewType = kind;
+
+      /* And once more immediately, because the element may already have been
+         given a source by the assignment above and this costs nothing. */
+      applyHeld();
 
       /* autoPlay (not play()) because the library owns the load lifecycle:
          calling play() right after swapping src is ignored until the new

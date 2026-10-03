@@ -919,13 +919,111 @@ describe('defects the final audit found', () => {
     expect(app.$('help-modal').hidden).toBe(true);
   });
 
-  it('clicking a still image moves on, as the instructions promise', async () => {
+  /* Removed on request: a click on a picture used to move to the next item.
+     The control bar sits over the bottom of the image, so a click reaching for
+     the volume or the scrubber was skipping the track. Space, the Right arrow
+     and the Next button all still move on. */
+  it('clicking a still image does NOT move on', async () => {
     app = await createApp();
     await dropOnStage([IMAGE(), VIDEO()]);
     expect(app.stage.dataset.kind).toBe('image');
     app.$('still').dispatchEvent(new app.window.MouseEvent('click', { bubbles: true }));
     await app.settle(1);
+    expect(app.stage.dataset.kind).toBe('image');
+    /* and the keys that do move on, still do */
+    app.key('.');
+    await app.settle(1);
     expect(app.stage.dataset.kind).toBe('video');
+  });
+
+  /* It still swallows the click, deliberately: without a handler the event falls
+     through to the player's gesture, which would toggle play on a medium with no
+     play state. */
+  it('a click on a still image does not reach the play gesture', async () => {
+    app = await createApp();
+    await dropOnStage([IMAGE(), VIDEO()]);
+    const seen = [];
+    app.document.addEventListener('click', () => seen.push('reached the document'));
+    app.$('still').dispatchEvent(new app.window.MouseEvent('click', { bubbles: true }));
+    await app.settle(1);
+    expect(seen).toEqual([]);
+  });
+
+  /* A new video must not start at full volume. Reported as: "when I add a new
+     video it starts with full volume even if the volume bar is small or even if
+     it is muted".
+
+     The app wrote the settings before assigning the source, and the library
+     reset them a line later - so the order was the bug, not the setting. */
+  it('a new video keeps the volume the listener chose', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO(), VIDEO2()]);
+    app.window.MediaBridge.setVolume(0.3);
+    await app.settle(1);
+    expect(app.player.volume).toBeCloseTo(0.3, 2);
+
+    app.key('.');
+    await app.settle(2);
+    expect(app.player.volume).toBeCloseTo(0.3, 2);
+  });
+
+  it('a new video stays muted when the listener muted it', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO(), VIDEO2()]);
+    app.window.MediaBridge.toggleMute();
+    await app.settle(1);
+    expect(app.player.muted).toBe(true);
+
+    app.key('.');
+    await app.settle(2);
+    expect(app.player.muted).toBe(true);
+  });
+
+  /* The volume bar is the control the report named, so the test presses that
+     rather than calling the bridge - the same route a person takes. */
+  it('the volume bar sets a level that survives the next track', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO(), VIDEO2()]);
+    app.$('volume').value = '0.25';
+    app.$('volume').dispatchEvent(new app.window.Event('input', { bubbles: true }));
+    await app.settle(1);
+    expect(app.player.volume).toBeCloseTo(0.25, 2);
+    app.key('.');
+    await app.settle(2);
+    expect(app.player.volume).toBeCloseTo(0.25, 2);
+  });
+
+  /* Dropping a file already in the list. Reported as: it pauses, then the next
+     time it starts, then it pauses. The cause was that a second row was added
+     and loaded, and loading a source the element already holds produces no new
+     metadata event - so the autoplay that was asked for never arrived and
+     whether it played came down to whatever the previous load left behind. */
+  it('dropping a file that is already in the playlist does not add a second row', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO(), VIDEO2()]);
+    expect(app.rows()).toHaveLength(2);
+    await dropOnStage([VIDEO()]);
+    await app.settle(1);
+    expect(app.rows()).toHaveLength(2);
+    expect(app.names()).toEqual(['a.mp4', 'b.mp4']);
+  });
+
+  it('dropping a duplicate plays it, and the player ends up playing', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO(), VIDEO2()]);
+    await dropOnStage([VIDEO2()]);
+    await app.settle(2);
+    /* the second row is now the current one, and it is actually playing */
+    expect(app.rows()[1].className).toMatch(/on|current/);
+    expect(app.player.paused).toBe(false);
+  });
+
+  it('a drop that is partly new still adds the new ones', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO()]);
+    await dropOnStage([VIDEO(), app.file('c.mp4', 'video/mp4')]);
+    await app.settle(1);
+    expect(app.names()).toEqual(['a.mp4', 'c.mp4']);
   });
 
   it('the arrow keys get out of a focused remove button', async () => {

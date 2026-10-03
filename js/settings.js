@@ -188,7 +188,7 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
         const max = Math.max(r, g, b);
         const min = Math.min(r, g, b);
         const light = (max + min) / 2;
-        if (light < floor.light || light > 236 || max - min < floor.sat) continue;
+        if (light < floor.light || light > 252 || max - min < floor.sat) continue;
         const key = `${r >> 4},${g >> 4},${b >> 4}`;
         const bucket = buckets.get(key) || { n: 0, r: 0, g: 0, b: 0 };
         bucket.n += 1;
@@ -209,7 +209,8 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
         const b = bucket2.b / bucket2.n;
         const max = Math.max(r, g, b);
         const min = Math.min(r, g, b);
-        const score = (max - min) * (lightness(r, g, b) > 200 ? 0.2 : 1);
+        const pale = lightness(r, g, b) > 200;
+        const score = (max - min) * (pale ? 0.4 : 1) + (pale ? 8 : 0);
         if (score > bestScore) {
           bestScore = score;
           bestKey = key;

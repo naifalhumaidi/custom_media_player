@@ -256,9 +256,14 @@
       </header>
       <div class="modal-body single">
         <p id="clear-body" class="confirm-body" data-i18n="clear.body">Every file will be removed from the list. The files themselves are not deleted.</p>
+        <!-- Cancel first in the source, so it is first in the tab order and
+             first to hold the focus. Arrow keys move between them and Enter
+             activates whichever is focused, which is what two real buttons in a
+             real dialog already do - the keydown handler no longer swallows the
+             keys its own children handle. -->
         <div class="confirm-row">
-          <button id="clear-ok" class="btn txt primary" type="button" data-i18n="clear.ok">Clear it</button>
           <button id="clear-cancel" class="btn txt" type="button" data-i18n="clear.cancel">Cancel</button>
+          <button id="clear-ok" class="btn txt danger" type="button" data-i18n="clear.ok">Clear it</button>
         </div>
       </div>
     </div>

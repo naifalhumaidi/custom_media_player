@@ -289,14 +289,54 @@ ipcMain.handle('pick-folder', async () => {
   return result.canceled ? null : result.filePaths[0];
 });
 
+/* A folder, walked.
+
+   It used to read one level and keep only the files it found directly, so
+   choosing a folder of folders returned nothing from the subfolders - or, with
+   one nested folder, the single image inside it and nothing else. Reported as
+   "add folder sometimes adds one image only if there is nested folders instead
+   of direct media files". The filter on isFile() was the whole bug: a
+   subdirectory was not a file, so it was dropped along with its contents.
+
+   Depth is capped, and the cap is reported rather than silent. A symlink loop
+   (`a -> .`) would otherwise recurse until the process died; a home directory
+   with a library of nested folders would come back with a hundred thousand
+   paths and no way for the user to know why.
+
+   Symlinks are not followed, which is what makes the cap belt-and-braces
+   rather than the only defence: on Linux readdir does not report a symlink to a
+   directory as isDirectory(), so it is skipped before it can be entered. */
+const MAX_FOLDER_DEPTH = 12;
+
+async function walkFolder(dir, depth, out) {
+  let entries;
+  try {
+    entries = await fsp.readdir(dir, { withFileTypes: true });
+  } catch {
+    /* A folder we cannot read is not a reason to fail the whole pick: the
+       caller gets whatever else was found. */
+    return;
+  }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    /* eslint-disable-next-line no-undef -- a symlink is reported by lstat, not
+       by the readdir type, and following one is how a walk never ends. */
+    if (entry.isSymbolicLink()) continue;
+    if (entry.isDirectory()) {
+      if (depth < MAX_FOLDER_DEPTH) await walkFolder(full, depth + 1, out);
+      continue;
+    }
+    if (entry.isFile()) out.push(full);
+  }
+}
+
 ipcMain.handle('list-folder', async (_event, dir) => {
-  const names = await fsp.readdir(dir, { withFileTypes: true });
-  return names
-    .filter((entry) => entry.isFile())
-    .map((entry) => path.join(dir, entry.name))
+  const found = [];
+  await walkFolder(dir, 0, found);
+  return found
     /* Sorted: a directory read comes back in whatever order the filesystem
        feels like, and a playlist that reshuffles between launches looks like a
-       bug. */
+       bug. Sorted on the full path so the order is stable across platforms. */
     .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
 });
 

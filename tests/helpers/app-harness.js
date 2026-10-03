@@ -76,6 +76,24 @@ export function defineFakeLibrary(window) {
       this.#ready = false;
       this.#paused = true;
       this.#autoPlay = false;
+      /* And it resets the volume and the mute, which is the whole reason the
+         volume bug was fixable at all.
+
+         Vidstack re-applies its own defaults when a source is attached, so
+         anything the app wrote beforehand is undone a line later. The fake
+         never did that, which is why "a new video starts at full volume even
+         when muted" was not reproducible here and had to be found by hand - the
+         test double and the bug were wrong in opposite directions, so neither
+         could show the other.
+
+         Setting a src of nothing does NOT reset them: clearing the playlist
+         leaves a media element with no source, and its volume is still the
+         listener's. */
+      if (this.#src.length) {
+        this.#volume = 1;
+        this.#muted = false;
+        this.#emit('volume-change', { detail: { volume: 1 } });
+      }
       if (!this.#src.length) return;
       const announce = () => {
         if (!this.#src.length) return;
@@ -184,6 +202,25 @@ export function defineFakeLibrary(window) {
      an element that is merely never upgraded leaves the app talking to a bare
      element whose `src` is undefined. */
   window.customElements.define('media-player', FakeMediaElement);
+
+  /* The bridge reaches the real media element with `querySelector('video,
+     audio')`, not through the player, because that is how it applies the
+     listener's volume and mute to whatever is actually loaded. jsdom's <video>
+     cannot decode and does not implement volume the same way, so the fake
+     answers that query too - otherwise the settings are written to an element
+     that ignores them and every test passes whatever the source does.
+
+     Only when nothing else matches, so a test that puts its own <video> in the
+     page still gets it. */
+  const realQuery = window.document.querySelector.bind(window.document);
+  window.document.querySelector = (selector) => {
+    if (selector === 'video, audio' || selector === 'video,audio') {
+      const found = realQuery(selector);
+      if (found) return found;
+      return window.document.getElementById('media');
+    }
+    return realQuery(selector);
+  };
   for (const tag of [
     'media-time', 'media-gesture', 'media-audio-track',
     'media-play-button', 'media-mute-button', 'media-seek-button',

@@ -262,6 +262,30 @@ async function probeAll(batch) {
 
 /* ---------------- playlist ---------------- */
 
+/* Already in the playlist?
+
+   Reported as "when I drop the same video again it pauses, then the next time
+   it starts, then it pauses". Dropping the same file twice added a second row
+   for it and loaded that row, and a load of a source the element already holds
+   is a no-op as far as the library is concerned: no new metadata event, so the
+   autoplay that was asked for never arrives, and whether it played or sat still
+   came down to the state the previous load happened to leave behind. That is
+   the alternation.
+
+   The fix is not to make the load more reliable. Dropping a file you already
+   have should not add it twice: the user dropped it once, they can see it in the
+   list, and the useful thing to do is go to it. Which is what this does. */
+function existingIndexOf(item) {
+  if (!item) return -1;
+  /* A path is the identity on the desktop, where the same file has one name for
+     its whole life. In a browser tab there is no path, so the name is all there
+     is - which is not much, but it is what the user can see in the list. */
+  const by = item.path
+    ? (it) => it && it.path === item.path
+    : (it) => it && it.name === item.name && it.size === item.size;
+  return items.findIndex(by);
+}
+
 function addItems(incoming, play) {
   if (!incoming || !incoming.length) return;
   /* the list has moved on, so a pending undo would restore a state the user
@@ -276,13 +300,31 @@ function addItems(incoming, play) {
   }
   const fresh = incoming.map((it) => ({ ...it, duration: null, thumb: null, position: 0 }));
   if (!fresh.length) return;
+
+  /* Duplicates are dropped and the rows that were already there are selected
+     instead. Only when every one of them is a duplicate - otherwise the new
+     files would be added and the duplicates ignored, which is what the user
+     meant either way. */
+  const wanted = fresh.filter((it) => existingIndexOf(it) === -1);
+  if (!wanted.length) {
+    /* Every one of them is already here: play the first, which is what a click
+       on its row does. `render()` after the load, because `load` is what marks
+       the current row, and the row has to be painted as current. */
+    const first = existingIndexOf(fresh[0]);
+    if (first >= 0 && !items[first]?.missing) {
+      load(first, true);
+      render();
+    }
+    return;
+  }
+
   const wasEmpty = items.length === 0;
-  items = items.concat(fresh);
+  items = items.concat(wanted);
   drop.hidden = true;
   renderEmptyState();
-  if (wasEmpty || play) load(wasEmpty ? 0 : items.length - fresh.length, true);
+  if (wasEmpty || play) load(wasEmpty ? 0 : items.length - wanted.length, true);
   else render();
-  runProbes(fresh);
+  runProbes(wanted);
   scheduleSave();
 }
 
@@ -741,6 +783,20 @@ $('clear-cancel').onclick = () => {
   if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
 };
 
+/* Arrow keys between the two buttons, and Enter on the focused one.
+
+   Two real buttons in a real DOM already do all of this: Tab moves between them
+   and Enter activates whichever has focus. What was missing was that the DIALOG
+   swallowed the arrow keys - the keydown handler took every key while it was up
+   and returned - so arrow keys did nothing at all inside it.
+
+   Rather than special-case arrows, the dialog stops swallowing keys its own
+   children handle, which is what the handler was already doing for the rest of
+   the app. Tab, arrows, Enter, Space and Escape all reach the buttons. */
+function inClearDialog(target: EventTarget | null): boolean {
+  return !!clearModal.contains(target as Node);
+}
+
 clearModal.addEventListener('click', (e) => {
   /* A click on the backdrop, outside the card, cancels. A click on the card
      itself must not, or the text could not be selected. */
@@ -817,11 +873,18 @@ media.on('time', ({ currentTime }) => {
   if (dur) dur.textContent = Number.isFinite(d) && d > 0 ? fmt(d) : zeroTime();
 });
 
-/* The <img> sits above the player so a click on a picture never reaches the
-   library's play/pause gesture. A still image has no play/pause to speak of,
-   so a click on one moves on - the same thing Space does, which is what the
-   instructions promise. */
-still.addEventListener('click', () => step(1));
+/* The <img> sits above the player, so a click on a picture never reaches the
+   library's play/pause gesture.
+
+   It used to advance to the next item on a click, which was removed on request:
+   the control bar sits over the bottom of the picture, and a click reaching
+   for the volume or the scrubber was landing on the image and skipping the
+   track. Space, Right and the Next button all move on, and nothing is lost.
+
+   It still swallows the click, deliberately. Without a handler the event falls
+   through to the player's own gesture, which would toggle play on a medium that
+   has no play state. */
+still.addEventListener('click', (e) => e.stopPropagation());
 
 media.on('pause', scheduleSave);
 /* A notice describes a state the user is in; it is retired when the media
@@ -1214,10 +1277,19 @@ document.addEventListener('keydown', (e) => {
   const typing = (e.target as HTMLElement).closest?.('input, select, textarea, [contenteditable="true"]');
 
   if (!clearModal.hidden) {
-    if (k === 'escape' || k === 'enter') {
+    if (k === 'escape') {
+      dismissClear();
+      if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
+      return;
+    }
+    /* Enter on a focused button is the button's own click, so it is left alone.
+       Escape cancels, and so does a Tab to Cancel followed by Return - which is
+       the safe direction to land in. */
+    if (k === 'enter' && !inClearDialog(e.target)) {
       dismissClear();
       if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
     }
+    /* Everything else belongs to the dialog's own controls. */
     return;
   }
   if (k === 'escape' && settings.isOpen()) return settings.close();

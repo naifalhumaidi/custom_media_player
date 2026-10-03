@@ -129,22 +129,61 @@ async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
         .map(|p| p.to_string_lossy().into_owned()))
 }
 
-/* One level only, and no filtering by type: the caller already knows how to
-   decide what is playable, and one source of truth for that decision is the
-   whole point of js/mime.js. A recursive walk is a different feature with a
-   progress state attached to it. */
+/* No filtering by type: the caller already knows how to decide what is
+   playable, and one source of truth for that decision is the whole point of
+   js/mime.js. */
+
+/* A folder, walked.
+
+   It used to read one level and keep only the files it found directly, so a
+   folder of folders came back empty - or, with one nested folder, the single
+   image inside it and nothing else. The `is_file()` filter was the whole bug: a
+   subdirectory is not a file, so it was dropped along with everything under it.
+
+   Depth is capped so a symlink loop or a very deep tree ends the walk instead of
+   running until the process dies. Symlinks are not followed, which is what makes
+   the cap belt-and-braces: `file_type` does not follow them either, so a link to
+   a directory reports is_symlink and is skipped before it can be entered.
+
+   A folder that cannot be read is skipped rather than failing the whole pick, so
+   the user still gets everything else they chose. */
+const MAX_FOLDER_DEPTH: usize = 12;
+
+fn walk_folder(dir: &Path, depth: usize, out: &mut Vec<String>) {
+    if depth > MAX_FOLDER_DEPTH {
+        return;
+    }
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        /* Unreadable subfolder: keep going. The user chose the parent, and
+           everything readable in it is still what they asked for. */
+        Err(_) => return,
+    };
+    for entry in entries.filter_map(Result::ok) {
+        let file_type = match entry.file_type() {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        let path = entry.path();
+        if file_type.is_symlink() {
+            continue;
+        }
+        if file_type.is_dir() {
+            walk_folder(&path, depth + 1, out);
+        } else if file_type.is_file() {
+            out.push(path.to_string_lossy().into_owned());
+        }
+    }
+}
+
 #[tauri::command]
 fn list_folder(dir: String) -> Result<Vec<String>, String> {
     let root = Path::new(&dir);
     if !root.is_dir() {
         return Err(format!("not a folder: {dir}"));
     }
-    let mut out: Vec<String> = fs::read_dir(root)
-        .map_err(|e| format!("cannot read {dir}: {e}"))?
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().map(|t| t.is_file()).unwrap_or(false))
-        .map(|entry| entry.path().to_string_lossy().into_owned())
-        .collect();
+    let mut out: Vec<String> = Vec::new();
+    walk_folder(root, 0, &mut out);
     /* Sorted, because a directory read comes back in whatever order the
        filesystem feels like, and a playlist that reshuffles between launches
        looks like a bug. */
