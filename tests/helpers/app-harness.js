@@ -60,6 +60,63 @@ export function defineFakeLibrary(window) {
     viewType = 'unknown';
     keyShortcuts = null;
 
+    /* The <video> inside the player, which is a different object with its own
+       position.
+
+       In a real page these are two elements: `<media-player>` for the library's
+       controls, `<video>` for the picture. The library keeps its own copy of the
+       playhead and does not follow a seek the app performs directly - the video
+       moves and the player's report stays where it was. Here they were one
+       object, so a bridge that read a stale copy looked exactly like one that
+       read the playhead, and the bug survived every unit test. Found by the final
+       pass, driving a real window.
+
+       They move together until `goStale()`, which is the ordinary case and keeps
+       the other 200-odd tests meaningful. */
+    /* Only the position is independent. Everything else the bridge reads off the
+       media element - how long it is, how loud, whether it is muted - is the same
+       value the player holds, read live, because that is how a real <video> and
+       the <media-player> around it behave. */
+    mediaEl = (() => {
+      const self = this;
+      return {
+        currentTime: 0,
+        get duration() { return self.duration; },
+        get paused() { return self.paused; },
+        /* Volume and mute pass straight through in both directions: the bridge
+           writes them to the media element when a clip loads, so they have to be
+           settable here or the write throws. */
+        get volume() { return self.volume; },
+        set volume(v) { self.volume = v; },
+        get muted() { return self.muted; },
+        set muted(v) { self.muted = v; },
+      };
+    })();
+
+    staleCurrentTime = null;
+    #reportedTime = NaN;
+
+    /* What the player reports, which is what it holds until it goes stale. */
+    get currentTime() { return this.staleCurrentTime ? this.#reportedTime : this.#currentTime; }
+    set currentTime(v) {
+      /* A stale player stops following: the value lands on the video, which is
+         where a seek actually goes, and the report stays where it was. */
+      if (this.staleCurrentTime) {
+        this.mediaEl.currentTime = v;
+        return;
+      }
+      this.#currentTime = v;
+      this.mediaEl.currentTime = v;
+      this.#emit('time-update', { detail: { currentTime: v } });
+    }
+
+    /* Freeze the report at the current position, the way the real library's does
+       once the app has seeked behind its back. */
+    goStale() {
+      this.#reportedTime = this.#currentTime;
+      this.staleCurrentTime = true;
+    }
+
     get src() { return this.#src; }
     set src(value) {
       this.#src = Array.isArray(value) ? value : (value ? [value] : []);
@@ -115,11 +172,6 @@ export function defineFakeLibrary(window) {
     get ready() { return this.#ready; }
     get paused() { return this.#paused; }
     set paused(value) { if (!value) this.play(); }
-    get currentTime() { return this.#currentTime; }
-    set currentTime(value) {
-      this.#currentTime = value;
-      this.#emit('time-update', { detail: { currentTime: value } });
-    }
     get duration() { return this.#duration; }
     set duration(value) { this.#duration = value; }
     get volume() { return this.#volume; }
@@ -217,7 +269,10 @@ export function defineFakeLibrary(window) {
     if (selector === 'video, audio' || selector === 'video,audio') {
       const found = realQuery(selector);
       if (found) return found;
-      return window.document.getElementById('media');
+      /* The video inside the player, not the player. A real page has both and
+         this answers for the one that decodes. */
+      const player = window.document.getElementById('media');
+      return (player && player.mediaEl) || player;
     }
     return realQuery(selector);
   };

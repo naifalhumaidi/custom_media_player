@@ -154,6 +154,31 @@ import type { BridgeEvents } from '../types.js';
      time rather than a fresh one per load. */
   const liveEl = (): any => document.querySelector('video, audio');
 
+  /* Where the playhead really is.
+
+     The player element's own `currentTime` is not it. Measured, with the video
+     genuinely at 4.0s after a seek:
+
+         player.currentTime   8      <- stale, does not track the media
+         video.currentTime    4      <- the truth
+
+     The library keeps that value for its own controls and does not follow a seek
+     the app performed directly. Reading it here is what made a second press of
+     the arrow key land in the wrong place - the app computed its step from a
+     position the video had already left - and it is why the reported position and
+     the visible frame could disagree.
+
+     The live element is the truth; the player is the fallback for a moment when
+     there is no media element yet, which is the empty playlist and a still
+     image. */
+  function playhead(): number {
+    const live = liveEl();
+    const fromLive = live ? Number(live.currentTime) : NaN;
+    if (Number.isFinite(fromLive)) return fromLive;
+    const fromPlayer = Number(el().currentTime);
+    return Number.isFinite(fromPlayer) ? fromPlayer : 0;
+  }
+
   /* Push both settings at whatever is loaded. Called after every source change,
      because a new media element - or the same one with a new source - starts at
      the browser's defaults and would otherwise start at full volume, unmuted,
@@ -381,7 +406,7 @@ import type { BridgeEvents } from '../types.js';
     ticket() { return currentLoad; },
 
     get playing() { return !el().paused; },
-    get currentTime() { return el().currentTime || 0; },
+    get currentTime() { return playhead(); },
     get duration() { return el().duration; },
     get volume() { return heldVolume !== null ? heldVolume : el().volume; },
     get muted() { return heldMuted !== null ? heldMuted : el().muted; },
@@ -416,15 +441,24 @@ import type { BridgeEvents } from '../types.js';
        would make a single deliberate press feel broken, which is worse than the
        problem being solved. */
     seekBy(delta) {
-      const media = el() as HTMLVideoElement & { fastSeek?: (time: number) => void };
-      const d = media.duration;
+      /* The media element, not the player. `fastSeek` lives on the media element;
+         the player has no such method, so the call was quietly skipped and every
+         seek fell through to assigning `currentTime` on the player - which moves
+         the video and leaves the player reporting where it was, which is the same
+         staleness as above, reached by a different route.
+
+         Falling back to the player is kept for the case where no media element
+         exists at all. */
+      const media = (liveEl() || el()) as HTMLVideoElement & { fastSeek?: (time: number) => void };
+      const d = Number(media.duration);
       if (!Number.isFinite(d)) return;
 
       const now = Date.now();
       const repeating = seekTimer !== undefined && (now - lastSeekAt) < SEEK_COALESCE_MS;
       /* Repeats build on the target already queued, so holding the key travels
          the full distance instead of collapsing to a single step. */
-      const base = repeating && pendingSeekTo !== null ? pendingSeekTo : media.currentTime;
+      /* From the playhead, not from the player's copy of it - see playhead(). */
+      const base = repeating && pendingSeekTo !== null ? pendingSeekTo : playhead();
       const target = Math.min(Math.max(base + delta, 0), d);
 
       const apply = (to: number) => {

@@ -895,7 +895,30 @@ media-time { color: inherit; font: inherit; }
    `:focus-within` rather than `:focus`: a label is not focusable, so the ring has
    to come from the input inside it. That is the only way a keyboard user can see
    where they are, since the file dialog takes the focus away as soon as it opens. */
-label.btn.txt { cursor: pointer; user-select: none; }
+/* A <label> standing in for a button.
+
+   `display: inline-flex` is the whole point, and it was missing. A label is
+   inline by default, so it lays its own content out on a text baseline while a
+   button - inline-block - centres its own. The two came out the same height and
+   three pixels apart on the vertical, which is exactly the "they are not aligned"
+   that was reported, and it came from the element type rather than from anything
+   about the sizes. Align-items and justify-content finish the job so the text is
+   centred in the box the same way it is in the button beside it. */
+label.btn.txt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  line-height: normal;
+  /* No margin. `.field label` carries a 7px bottom margin for a label that sits
+     above its control, and this label is not above anything - it is a button
+     beside another button. Inside a row with `align-items: center` a 7px bottom
+     margin lifts the box by three and a half pixels, which is exactly the
+     "they are not aligned" that was reported, and it survived the display change
+     because the cause was the margin and not the layout. */
+  margin: 0;
+}
 label.btn.txt:active { transform: translateY(1px); }
 label.btn.txt:focus-within {
   color: var(--enabled-fg);

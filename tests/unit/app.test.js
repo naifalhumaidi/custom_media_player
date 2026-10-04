@@ -409,16 +409,24 @@ describe('the transport', () => {
     app.player.reportedDuration = 600;
     await dropOnStage([VIDEO()]);
     await app.settle(1);
+    /* Asserted on the video, not on the player.
+
+       The seek the app performs lands on the media element, and the library's own
+       copy of the position does not follow it - which is the whole reason the
+       bridge reads the video. Asserting on the player here would be asserting on
+       a value that in a real page stops agreeing the moment the app seeks, and the
+       check would then be about the fake rather than about the seek. */
+    const at = () => app.player.mediaEl.currentTime;
     app.player.currentTime = 60;
     app.key('ArrowRight'); await app.settle(1);
-    expect(app.player.currentTime).toBe(70);
+    expect(at()).toBe(70);
     app.key('ArrowLeft'); await app.settle(1);
-    expect(app.player.currentTime).toBe(60);
+    expect(at()).toBe(60);
     /* and never past either end */
     app.key('ArrowLeft'); app.key('ArrowLeft'); app.key('ArrowLeft');
     app.key('ArrowLeft'); app.key('ArrowLeft'); app.key('ArrowLeft');
     app.key('ArrowLeft'); await app.settle(1);
-    expect(app.player.currentTime).toBe(0);
+    expect(at()).toBe(0);
   });
 
   it('m mutes, and the control says what it will do next', async () => {

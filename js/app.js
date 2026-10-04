@@ -543,6 +543,18 @@ function inClearDialog(target) {
   return !!clearModal.contains(target);
 }
 __name(inClearDialog, "inClearDialog");
+function clearButtons() {
+  return Array.from(clearModal.querySelectorAll("button")).filter((b) => !b.hidden && !b.disabled);
+}
+__name(clearButtons, "clearButtons");
+function moveClearFocus(step2) {
+  const buttons = clearButtons();
+  if (!buttons.length) return;
+  const here = buttons.indexOf(document.activeElement);
+  const next = here < 0 ? step2 > 0 ? 0 : buttons.length - 1 : (here + step2 + buttons.length) % buttons.length;
+  buttons[next].focus();
+}
+__name(moveClearFocus, "moveClearFocus");
 clearModal.addEventListener("click", (e) => {
   if (e.target === clearModal) {
     dismissClear();
@@ -1004,8 +1016,26 @@ const MENU_ACTIONS = {
   "play-pause": /* @__PURE__ */ __name(() => media.toggle(), "play-pause"),
   "previous": /* @__PURE__ */ __name(() => step(-1), "previous"),
   "next": /* @__PURE__ */ __name(() => step(1), "next"),
-  "settings": /* @__PURE__ */ __name(() => settings.toggle(), "settings"),
-  "info": /* @__PURE__ */ __name(() => setHelp(true), "info"),
+  /* One dialog at a time.
+  
+       Both of these could be open at once, and they could: opening Info while
+       Settings was up left two modal dialogs stacked, and the one on top could be
+       dismissed to reveal another underneath that the person had then forgotten
+       about. Escape closes whichever is on top, so the state underneath survived -
+       which is the worst shape for a modal pair, because neither dialog is
+       reachable by its own close button any more.
+  
+       So opening one closes the other. Not "hides" - closes, properly, through the
+       same function its own close button uses, so there is one way out of each and
+       both are the same. */
+  "settings": /* @__PURE__ */ __name(() => {
+    if (!helpModal.hidden) setHelp(false);
+    settings.toggle();
+  }, "settings"),
+  "info": /* @__PURE__ */ __name(() => {
+    if (settings.isOpen()) settings.close();
+    setHelp(true);
+  }, "info"),
   "toggle-panel": /* @__PURE__ */ __name(() => setList(!stage.classList.contains("list")), "toggle-panel"),
   "toggle-controls": /* @__PURE__ */ __name(() => setUi(!stage.classList.contains("ui")), "toggle-controls"),
   "fit-contain": /* @__PURE__ */ __name(() => setFit("contain"), "fit-contain"),
@@ -1197,6 +1227,10 @@ document.addEventListener("keydown", (e) => {
     if (k.toLowerCase() === "escape") {
       dismissClear();
       if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
+      return;
+    }
+    if (k === "ArrowLeft" || k === "ArrowRight" || k === "ArrowUp" || k === "ArrowDown") {
+      moveClearFocus(k === "ArrowRight" || k === "ArrowDown" ? 1 : -1);
       return;
     }
     if (k === "Enter" && !inClearDialog(e.target)) {

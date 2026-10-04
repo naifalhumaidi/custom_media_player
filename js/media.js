@@ -84,6 +84,14 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
   let heldVolume = null;
   let heldMuted = null;
   const liveEl = /* @__PURE__ */ __name(() => document.querySelector("video, audio"), "liveEl");
+  function playhead() {
+    const live2 = liveEl();
+    const fromLive = live2 ? Number(live2.currentTime) : NaN;
+    if (Number.isFinite(fromLive)) return fromLive;
+    const fromPlayer = Number(el().currentTime);
+    return Number.isFinite(fromPlayer) ? fromPlayer : 0;
+  }
+  __name(playhead, "playhead");
   function applyHeld() {
     for (const target of [el(), liveEl()]) {
       if (!target) continue;
@@ -241,7 +249,7 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
       return !el().paused;
     },
     get currentTime() {
-      return el().currentTime || 0;
+      return playhead();
     },
     get duration() {
       return el().duration;
@@ -282,12 +290,12 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
            would make a single deliberate press feel broken, which is worse than the
            problem being solved. */
     seekBy(delta) {
-      const media = el();
-      const d = media.duration;
+      const media = liveEl() || el();
+      const d = Number(media.duration);
       if (!Number.isFinite(d)) return;
       const now = Date.now();
       const repeating = seekTimer !== void 0 && now - lastSeekAt < SEEK_COALESCE_MS;
-      const base = repeating && pendingSeekTo !== null ? pendingSeekTo : media.currentTime;
+      const base = repeating && pendingSeekTo !== null ? pendingSeekTo : playhead();
       const target = Math.min(Math.max(base + delta, 0), d);
       const apply = /* @__PURE__ */ __name((to) => {
         try {

@@ -837,18 +837,39 @@ $('clear-cancel').onclick = () => {
   if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
 };
 
-/* Arrow keys between the two buttons, and Enter on the focused one.
-
-   Two real buttons in a real DOM already do all of this: Tab moves between them
-   and Enter activates whichever has focus. What was missing was that the DIALOG
-   swallowed the arrow keys - the keydown handler took every key while it was up
-   and returned - so arrow keys did nothing at all inside it.
-
-   Rather than special-case arrows, the dialog stops swallowing keys its own
-   children handle, which is what the handler was already doing for the rest of
-   the app. Tab, arrows, Enter, Space and Escape all reach the buttons. */
+/* Whether the key landed inside the dialog rather than on the backdrop. */
 function inClearDialog(target: EventTarget | null): boolean {
   return !!clearModal.contains(target as Node);
+}
+
+/* The two buttons, in the order they appear, and the focus moving along them.
+
+   The order is read from the DOM rather than written out, so a third button is
+   included without this being told, and the movement cannot go out of step with
+   what is actually on screen.
+
+   Arrows are handled here because HTML does not do them: focus moves between
+   buttons with Tab, and the arrow keys are for toolbars and menus. Two real
+   buttons in a real dialog therefore had working Tab and working Enter and
+   nothing else. Up and down are accepted alongside left and right because a
+   person will try both, and a dead key is a worse answer than either. Wrapping,
+   because the two are a set and Tab is. */
+function clearButtons(): HTMLElement[] {
+  return Array.from(clearModal.querySelectorAll<HTMLElement>('button'))
+    .filter((b) => !b.hidden && !(b as HTMLButtonElement).disabled);
+}
+
+function moveClearFocus(step: number) {
+  const buttons = clearButtons();
+  if (!buttons.length) return;
+  const here = buttons.indexOf(document.activeElement as HTMLElement);
+  /* From nowhere - focus was outside the buttons, or on the backdrop - start at
+     one end rather than an arbitrary one, and going forward lands on Cancel,
+     which is the safe direction. */
+  const next = here < 0
+    ? (step > 0 ? 0 : buttons.length - 1)
+    : (here + step + buttons.length) % buttons.length;
+  buttons[next].focus();
 }
 
 clearModal.addEventListener('click', (e) => {
@@ -1588,8 +1609,26 @@ const MENU_ACTIONS = {
   'play-pause': () => media.toggle(),
   'previous': () => step(-1),
   'next': () => step(1),
-  'settings': () => settings.toggle(),
-  'info': () => setHelp(true),
+  /* One dialog at a time.
+
+     Both of these could be open at once, and they could: opening Info while
+     Settings was up left two modal dialogs stacked, and the one on top could be
+     dismissed to reveal another underneath that the person had then forgotten
+     about. Escape closes whichever is on top, so the state underneath survived -
+     which is the worst shape for a modal pair, because neither dialog is
+     reachable by its own close button any more.
+
+     So opening one closes the other. Not "hides" - closes, properly, through the
+     same function its own close button uses, so there is one way out of each and
+     both are the same. */
+  'settings': () => {
+    if (!helpModal.hidden) setHelp(false);
+    settings.toggle();
+  },
+  'info': () => {
+    if (settings.isOpen()) settings.close();
+    setHelp(true);
+  },
   'toggle-panel': () => setList(!stage.classList.contains('list')),
   'toggle-controls': () => setUi(!stage.classList.contains('ui')),
   'fit-contain': () => setFit('contain'),
@@ -1868,6 +1907,19 @@ document.addEventListener('keydown', (e) => {
       if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();
       return;
     }
+
+    /* Arrows move between the buttons, and it was asked for. HTML does not do
+       this on its own: focus moves between buttons with Tab, and the arrow keys
+       are for toolbars and menus. Both directions are accepted, because a person
+       will try all four and a dead key is a worse answer than a wrong one. */
+    if (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'ArrowUp' || k === 'ArrowDown') {
+      moveClearFocus(k === 'ArrowRight' || k === 'ArrowDown' ? 1 : -1);
+      return;
+    }
+
+    /* Enter belongs to the focused button, so it is not intercepted. On the
+       backdrop - which should not happen, because focus starts on a button - it
+       cancels, because cancelling is the safe direction. */
     if (k === 'Enter' && !inClearDialog(e.target)) {
       dismissClear();
       if (clearReturnFocus && clearReturnFocus.focus) clearReturnFocus.focus();

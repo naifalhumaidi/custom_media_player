@@ -55,6 +55,68 @@ describe('load sequencing', () => {
     expect(app.player.src).toHaveLength(0);
   });
 
+  /* The playhead is read from the media element, not from the player.
+
+     The player element keeps its own copy of `currentTime` for its own controls
+     and does not follow a seek the app performs directly: with the video
+     genuinely at 4.0s, the player still reported 8. So `seekBy` computed its
+     step from a position the video had already left, and a second press landed
+     in the wrong place. Found by the final pass, in a real window, because the
+     fake player and the real one were wrong in the same direction and neither
+     could show the other.
+
+     Reproduced here by making the player stale on purpose, which is exactly what
+     the real library does. */
+  it('seeks from where the video actually is, not from where the player thinks', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO()]);
+    await app.settleAll();
+
+    /* The video inside the player, and the player's own report of the same
+       playhead - two values, because they disagree in the real library. */
+    const video = app.player.mediaEl;
+    app.player.currentTime = 8;
+    /* Move the video behind the player's back, then let the player stop
+       following. That is the state a seek performed by the app leaves behind,
+       and it is the one the bug could not be seen in. */
+    video.currentTime = 3;
+    app.player.goStale();
+    await app.settle(1);
+
+    expect(app.player.currentTime).toBe(8);
+
+    /* The bridge must agree with the video, not with the player. */
+    expect(app.window.MediaBridge.currentTime).toBeCloseTo(3, 1);
+
+    app.window.MediaBridge.seekBy(1);
+    await app.settle(2);
+    expect(app.window.MediaBridge.currentTime).toBeCloseTo(4, 0);
+    expect(video.currentTime).toBeCloseTo(4, 0);
+    /* and the player's report stayed where it was, which is what made the bug
+       invisible: with the two in step, every seek test passes whatever the
+       bridge reads. */
+    expect(app.player.currentTime).toBe(8);
+  });
+
+  /* And backwards, because "from the end of the clip" is where a stale base hurts
+     most: the target is negative and clamps to zero, so a wrong base turns the
+     seek into a no-op. */
+  it('seeks backwards from the end of the clip', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO()]);
+    await app.settleAll();
+    app.window.MediaBridge.pause();
+
+    app.window.MediaBridge.seekBy(app.window.MediaBridge.duration);
+    await app.settle(2);
+    const atEnd = app.window.MediaBridge.currentTime;
+    expect(atEnd).toBeGreaterThan(0);
+
+    app.window.MediaBridge.seekBy(-3);
+    await app.settle(2);
+    expect(app.window.MediaBridge.currentTime).toBeLessThan(atEnd - 1);
+  });
+
   it('clear() stops an in-flight load from resuming', async () => {
     app = await createApp();
     await dropOnStage([VIDEO()]);
