@@ -74,6 +74,23 @@ mkdir -p "$XDG_CONFIG_HOME"
 
 export DISPLAY=":$DISPLAY_NUM"
 
+# The probe file the walkthrough drops on the app.
+
+# Without it the journeys that drop, play, seek and pause return early, leaving no
+# line behind them - and the verdict then reads "FAIL - 6 problems" for journeys
+# that were never attempted, which points at the app when the cause is the command
+# line. Defaulted to the fixture when it is there, and said out loud when it is not,
+# so a run either tests those journeys or says why it could not.
+if [ -z "${MT_PROBE_FILE:-}" ]; then
+  if [ -e "$ROOT/tests/e2e/media/clip.mp4" ]; then
+    MT_PROBE_FILE="$ROOT/tests/e2e/media/clip.mp4"
+    export MT_PROBE_FILE
+  else
+    echo "electron-desktop: no probe file; tests/e2e/media/clip.mp4 is missing." >&2
+    echo "electron-desktop: run tests/e2e/make-media.sh, or set MT_PROBE_FILE." >&2
+  fi
+fi
+
 # Chromium prefers Wayland whenever WAYLAND_DISPLAY is set, and it does not care
 # that DISPLAY points at a framebuffer. Leaving it set meant a run of this script
 # opened a real window on the user's compositor - on their desktop, following

@@ -28,6 +28,14 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
+/* How long a page script may take. A minute suited a suite that drove a handful
+   of journeys; the final pass drives a few hundred checks with real playback and
+   real dialogs between them, and cutting it short would report a timeout where
+   there is none - which looks exactly like a broken app.
+
+   Named rather than written twice, so the two cannot disagree. */
+const SCRIPT_TIMEOUT_MS = Number(process.env.MT_SCRIPT_TIMEOUT_MS || 5 * 60 * 1000);
+
 const PORT = Number(process.env.MT_TEST_PORT) || 8123;
 const SERVE_DIR = path.join(__dirname, '..', 'media');
 const TYPES = { '.mp4': 'video/mp4', '.png': 'image/png', '.mp3': 'audio/mpeg', '.js': 'text/javascript' };
@@ -143,14 +151,14 @@ async function runScript(win, srcPath) {
             Promise.resolve(window.__DONE).then(() => resolve(window.__RESULT), (e) => resolve({ steps: [['THREW', String(e && e.message)]] }));
             return;
           }
-          if (Date.now() - started > 60000) { reject(new Error('script never started')); return; }
+          if (Date.now() - started > ${SCRIPT_TIMEOUT_MS}) { reject(new Error('script never started')); return; }
           setTimeout(poll, 50);
         };
         poll();
       };
       s.onerror = () => reject(new Error('script failed to load'));
       document.head.appendChild(s);
-      setTimeout(() => reject(new Error('script timed out')), 60000);
+      setTimeout(() => reject(new Error('script timed out')), ${SCRIPT_TIMEOUT_MS});
     })`, true);
   fs.rmSync(path.join(SERVE_DIR, name), { force: true });
   return result;
