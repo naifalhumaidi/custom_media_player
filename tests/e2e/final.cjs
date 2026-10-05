@@ -58,7 +58,24 @@ async function main() {
   const failures = [];
   const notes = [];
 
+  /* A page that died part way through used to be reported as a pass.
+
+     The steps it had managed to write were counted, the ones after the throw were
+     never written, and the summary said "PASSED all 11 checks" with a green exit -
+     because the throw itself was recorded as a note, and notes are not verdicts.
+     The same mistake as the shortcuts, one level up: the one line that said
+     something had gone wrong was the one line nothing counted.
+
+     So a throw is a failure, and a run that wrote far fewer steps than it should
+     has failed too. Both are silent otherwise, which is the whole problem. */
+  const threw = out.steps.find(([name]) => name === 'THREW');
+  if (threw) {
+    console.log(`  FAIL the page threw before it finished`);
+    console.log(`       ${threw[1]}`);
+  }
+
   for (const [name, value] of out.steps) {
+    if (name === 'THREW') continue;
     if (isCheck(value)) {
       if (value.ok) {
         pass++;
@@ -108,10 +125,19 @@ async function main() {
     for (const line of said.slice(0, 25)) console.log(`       ${line.slice(0, 160)}`);
   }
 
+  /* A floor, not a fixed number: the count grows as checks are added, and a suite
+     that fails halfway through must not be able to pass by writing a few. */
+  const FLOOR = 150;
+  if (!threw && pass < FLOOR) {
+    console.log(`  FAIL only ${pass} checks ran, which is far fewer than there are`);
+    failures.push('the suite did not finish');
+  }
+  if (threw) failures.push('the page threw');
+
   console.log('');
   /* Spoken the way the other suites speak, so `run.sh` reports this one
      identically to the rest rather than as a blank beside them. */
-  console.log(failures.length ? `FAILED ${failures.length} of ${pass + failures.length}` : `PASSED all ${pass} checks`);
+  console.log(failures.length ? `FAILED ${failures.length} problems` : `PASSED all ${pass} checks`);
   if (failures.length) {
     console.log('  failed:');
     for (const f of failures) console.log(`    - ${f}`);

@@ -63,7 +63,10 @@ const expect = {
      matches. A translated "مسافة" would name something that cannot be pressed,
      which is why the tooltip takes its key from the shortcut table rather than
      from the translation. */
-  'ar: play tooltip': 'تشغيل / إيقاف (Space, K)',
+  /* The mark for a key with nothing printed on it, in both languages. The
+     spacebar carries no character, so "Space" was the one label describing the
+     key instead of showing it. */
+  'ar: play tooltip': 'تشغيل / إيقاف (\u2423, K)',
   'ar: close tooltip': 'إغلاق (Esc)',
   'ar: language label': 'اللغة',
   /* The logo field's label is longer now - it says what the mark is for, not
@@ -73,7 +76,10 @@ const expect = {
   'ar: colour label': 'اللغة | الشعار في نافذة البداية | تغيير الشعار | لون الهوية',
   'ar: select options': 'English/العربية',
   'ar: shortcut table is arabic': true,
-  'ar: shortcut rows': 21,
+  /* 22, because Add Files is in the table now. It always had a menu item with a
+     key written down beside it; being in the table is what lets the menu read
+     that key instead of keeping its own copy. */
+  'ar: shortcut rows': 22,
   'en: dir back to ltr': 'ltr',
   'en: loop tooltip when on': 'Loop playlist (L) — on',
   'en: first duration': '0:08',

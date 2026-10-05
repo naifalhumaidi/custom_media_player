@@ -83,7 +83,14 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
   __name(onSuperseded, "onSuperseded");
   let heldVolume = null;
   let heldMuted = null;
-  const liveEl = /* @__PURE__ */ __name(() => document.querySelector("video, audio"), "liveEl");
+  const liveEl = /* @__PURE__ */ __name(() => {
+    const player2 = el();
+    const candidates = player2 && typeof player2.querySelectorAll === "function" ? Array.from(player2.querySelectorAll("video, audio")) : Array.from(document.querySelectorAll("video, audio"));
+    const withSource = candidates.filter((c) => c && (c.currentSrc || c.src || c.querySelector?.("source")));
+    const pool = withSource.length ? withSource : candidates;
+    if (pool.length) return pool[pool.length - 1];
+    return document.querySelector("video, audio");
+  }, "liveEl");
   function playhead() {
     const live2 = liveEl();
     const fromLive = live2 ? Number(live2.currentTime) : NaN;
@@ -245,14 +252,26 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
     ticket() {
       return currentLoad;
     },
+    /* Whether it is playing, asked of the media element rather than the player.
+    
+           The same staleness as `currentTime`, one level over: the player's own
+           `paused` does not follow what the app did to the media, so this reported
+           "playing" for a clip that had ended and was sitting paused at zero. The
+           pause glyph, the auto-start decision and every check that asks whether
+           something is playing were all reading that. */
     get playing() {
-      return !el().paused;
+      const live2 = liveEl();
+      return live2 ? !live2.paused : !el().paused;
     },
     get currentTime() {
       return playhead();
     },
+    /* The length, from the media element for the same reason: the player's copy
+       is its own, and the two disagree once the app has seeked. */
     get duration() {
-      return el().duration;
+      const live2 = liveEl();
+      const fromLive = live2 ? Number(live2.duration) : NaN;
+      return Number.isFinite(fromLive) ? fromLive : el().duration;
     },
     get volume() {
       return heldVolume !== null ? heldVolume : el().volume;
@@ -265,8 +284,18 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
     },
     play,
     pause,
+    /* Which way round, asked of the media element.
+    
+           `el().paused` is the player's copy, and it does not follow what the app did
+           to the media - the same staleness as `playing` and `currentTime`. So Space
+           asked the player, was told the clip was paused, called play() on a clip that
+           was already playing, and did nothing at all. The transport's most-used key
+           was inert whenever the player's state had drifted, and it drifted every time
+           a track ended or the app seeked behind the library's back. */
     toggle() {
-      if (el().paused) play();
+      const live2 = liveEl();
+      const paused = live2 ? live2.paused : el().paused;
+      if (paused) play();
       else pause();
     },
     /* Seeking is by keyframe, and a burst of seeks becomes one.

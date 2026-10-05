@@ -1024,9 +1024,18 @@ describe('defects the final audit found', () => {
     const rows = app.document.querySelectorAll('#shortcut-rows tr');
     expect(rows.length).toBe(app.window.MediaMenu.shortcuts().length);
     expect(rows.length).toBeGreaterThan(15);
-    /* the key is written the way a person reads it, not as the DOM spells it */
-    expect(cellFor('playPause').textContent).toBe('Space, K');
+    /* The key is written the way the cap is printed, not the way the DOM names
+       it. "Space" is the one label that describes a key rather than showing it:
+       the spacebar carries no character, so it gets the mark for a blank. The
+       comma key carries two characters and shows both, shifted first, because
+       that is the order they are read off the cap. */
+    expect(cellFor('playPause').textContent).toBe('\u2423, K');
     expect(cellFor('seekBack').textContent).toContain('\u2190');
+    expect(cellFor('previous').textContent).toBe('< ,');
+    expect(cellFor('next').textContent).toBe('> .');
+    /* Under a modifier the second character is dropped: "Ctrl+< ," is unreadable
+       and says less than "Ctrl+,", because with the modifier in front there is
+       no doubt which of the two characters is meant. */
     expect(cellFor('settings').textContent).toBe('Ctrl+,');
   });
 

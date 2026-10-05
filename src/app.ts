@@ -497,8 +497,11 @@ function toggle() {
 
 
 function syncToggleTitles() {
-  $('loop').title = loop ? t('bar.loopOn') : t('bar.loopKey');
-  $('autoplay').title = autoStart ? t('bar.autoplayKey') : t('bar.autoplayOff');
+  /* Through paintShortcutLabel, so the key is added the same way as everywhere
+     else and comes from the table. Assigning the title here is what let the key go
+     missing, and what would let it go stale after a reassignment. */
+  paintShortcutLabel('loop');
+  paintShortcutLabel('autoplay');
   /* the on/off state is a flat tint on screen, which conveys nothing to a
      screen reader, so it has to be stated as well */
   $('loop').setAttribute('aria-pressed', String(loop));
@@ -1077,6 +1080,7 @@ const SHORTCUTS = [
   { id: 'controls', label: 'bar.controls', keys: ['H'] },
   { id: 'panel', label: 'bar.panel', keys: ['P'] },
   { id: 'open', label: 'bar.open', keys: ['O'] },
+  { id: 'addFiles', label: 'panel.add', keys: ['Ctrl+Shift+O'] },
   { id: 'addFolder', label: 'bar.addFolder', keys: ['Shift+O'] },
   { id: 'clear', label: 'panel.clearTitle', keys: ['Shift+X'] },
   { id: 'undo', label: 'bar.undo', keys: ['Shift+Z'] },
@@ -1099,20 +1103,48 @@ function keysOf(id: ShortcutId): readonly string[] {
 function prettyKey(key: string): string {
   const parts = key.split('+');
   const last = parts.pop() as string;
-  /* Spelled the way a keyboard is labelled, not the way the DOM calls it. The
-     arrows are drawn rather than named, because "ArrowLeft" in a table of
-     shortcuts is a sentence about the DOM and not an instruction. */
+  /* Spelled the way a keyboard is labelled, not the way the DOM calls it.
+
+     A keycap carries a character, not a name. "Previous (,)" is a sentence about
+     the DOM's key name; what a person looks for on the key is the character, and
+     on a US layout that key is printed with two of them - the shifted one above
+     and the one it makes below. Both are shown, shifted first, because that is
+     the order they are read off the cap.
+
+     The keys with nothing printed get the typographic mark for a blank instead
+     of a word: the spacebar says nothing at all, and "Space" is the one label
+     that describes the key rather than showing it. */
   const named: Record<string, string> = {
     ArrowLeft: '\u2190', ArrowRight: '\u2192', ArrowUp: '\u2191', ArrowDown: '\u2193',
-    ' ': 'Space', Control: 'Ctrl', Ctrl: 'Ctrl', Meta: 'Ctrl', Command: 'Ctrl',
+    ' ': '\u2423', Space: '\u2423', Spacebar: '\u2423',
+    Control: 'Ctrl', Ctrl: 'Ctrl', Meta: 'Ctrl', Command: 'Ctrl',
     Escape: 'Esc', Shift: 'Shift', Alt: 'Alt', AltGraph: 'AltGr',
     Enter: 'Enter', Tab: 'Tab', Backspace: 'Backspace', Delete: 'Del',
+
+    /* The punctuation keys, as the caps are printed: shifted glyph first, then
+       the one it makes, because that is the order they are read off the cap. */
+    ',': '< ,', '.': '> .', '/': '? /', ';': ': ;', "'": '" \'',
+    '[': '{ [', ']': '} ]', '-': '_ -', '=': '+ =', '\\': '| \\',
+    '`': '~ `',
+  };
+
+  /* The same caps, showing only the character the binding actually presses.
+
+     Used when a modifier comes first. "Ctrl+< ," is unreadable and says less
+     than "Ctrl+," - with the modifier in front there is no ambiguity about which
+     of the two characters on the cap is meant, so the second one is noise. On
+     its own, "Previous (,)" is ambiguous, which is why it shows both. */
+  const baseOnly: Record<string, string> = {
+    ',': ',', '.': '.', '/': '/', ';': ';', "'": "'",
+    '[': '[', ']': ']', '-': '-', '=': '=', '\\': '\\', '`': '`',
   };
   /* A modifier keeps its own spelling rather than being shouted: "CTRL+," is
      not a keyboard label, and "Ctrl+," is. */
   const mods = parts.map((p) => named[p] || p);
-  const tail = named[last] || (last.length === 1 ? last.toUpperCase() : last);
-  return [...mods, tail].join('+');
+  const glyph = parts.length
+    ? (baseOnly[last] || named[last])
+    : (named[last] || (last.length === 1 ? last.toUpperCase() : last));
+  return [...mods, glyph].join('+');
 }
 
 /* A binding, as one comparable string: "Control+," , "Shift+X", "Space".
@@ -1254,6 +1286,18 @@ function currentShortcuts(): Record<string, string[]> {
 const STATE_LABELS: Record<string, () => string | null> = {
   mute: () => ($('mute').classList.contains('muted') ? t('bar.unmute' as never) : t('bar.mute' as never)),
   fullscreen: () => (media.fullscreen ? t('bar.fullscreenExit' as never) : t('bar.fullscreen' as never)),
+  /* Loop and auto-start belong here too, and not because their wording varies -
+     it does, so much - but because they were being written by hand somewhere else.
+
+     `syncToggleTitles` used to assign their titles directly from the translation
+     table, which is the one thing that must never carry a key: the key comes from
+     the shortcut table, so a reassignment has to be able to change it. Two of the
+     four strings had the key typed into them and two did not, and the ones that
+     did not lost it the moment the toggle was pressed - pressing Loop took "(A)"
+     off the Auto-start button on screen. Found by a check that had been passing
+     for the wrong reason. */
+  loop: () => (loop ? t('bar.loopOn' as never) : t('bar.loop' as never)),
+  autoplay: () => (autoStart ? t('bar.autoplayOn' as never) : t('bar.autoplayOff' as never)),
 };
 
 /* The tooltips whose words depend on state rather than on a binding. */
@@ -1637,6 +1681,11 @@ const MENU_ACTIONS = {
   fullscreen: () => media.toggleFullscreen(),
   'toggle-loop': () => toggleLoop(),
   'toggle-autoplay': () => toggleAutoStart(),
+  /* Mute had no menu item at all, so on the desktop it was a shortcut with
+     nothing to show for it: the key worked and no menu said so. Every other
+     transport control is in the Playback menu, and this is the one that was
+     missing from it. */
+  'toggle-mute': () => media.toggleMute(),
 } as const;
 
 /* The two states the menu shows as checkmarks. Read from the page and sent back
@@ -1649,6 +1698,12 @@ function publishMenuState() {
     shell.menuState({
       loop: $('loop').classList.contains('on'),
       autoplay: $('autoplay').classList.contains('on'),
+      mute: media.muted,
+      /* The bindings as well as the states, because the menu's accelerators come
+         from this table and a key reassigned in Settings has to reach the menu or
+         the menu goes on naming the old one. The shell compares them and rebuilds
+         only when they differ. */
+      shortcuts: currentShortcuts(),
     });
   } catch { /* the shell is on its way out; nothing to do */ }
 }
@@ -1973,6 +2028,7 @@ document.addEventListener('keydown', (e) => {
      while a <select> was open, and Space could not scroll the instructions. */
   const typing = (e.target as HTMLElement).closest?.('input, select, textarea, [contenteditable="true"]');
   if (settings.isOpen() || typing) return;
+
 
   /* the library's own sliders handle their arrow keys */
   if (media.ownsArrowKey(e.target) && k.startsWith('Arrow')) return;

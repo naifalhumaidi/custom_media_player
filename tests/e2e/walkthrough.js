@@ -84,7 +84,13 @@
     const stage = document.getElementById('stage');
     if (!shell || !stage) return { dispatched: false, why: 'no shell or no stage' };
 
-    shell.dropFilesForTest([path]);
+    /* Flattened, because this helper takes one path or a list of them and the
+       shell call was wrapping whatever it was given in another list. Handed an
+       array it received [[a, b]] - one entry that was itself a list - so a
+       two-file drop reached the shell as one unusable item and the playlist came
+       back with a single row. The DataTransfer below already handled both shapes;
+       only the shell call did not. */
+    shell.dropFilesForTest(Array.isArray(path) ? path : [path]);
 
     /* One File per path. The object is a stand-in - its bytes are never read,
        because the adapter asks the preload for the path and the preload answers
@@ -149,6 +155,12 @@
     }
   };
   const probeFile = String(window.__PROBE_FILE__ || '');
+  /* The second probe file. The shells have always injected it and nothing ever
+     read it, so it sat there unused - and it is the only way to get two rows out
+     of one drop, because dropping the same file twice is refused as a duplicate.
+     Previous and Next need somewhere to step to, and one row cannot show whether
+     they move. */
+  const probeAudio = String(window.__PROBE_MP3__ || '');
 
   /* Sizes a person might plausibly have: a laptop, a small laptop, a
      half-screen window, and the default. The default is the one that was
@@ -742,6 +754,217 @@
     }
   });
 
+  /* ---- every shortcut, pressed, and checked against what it promises ----
+
+     This journey exists because nothing else did, and its absence is how a
+     broken key survived: the browser suite pressed every shortcut, printed what
+     each one did, and recorded the result as a *note* - which the runner prints
+     and never counts. It reported "d=DID NOTHING" on every single run and the
+     suite still said all 206 checks passed, because a note is not a check.
+
+     Two rules make it different. One line per shortcut, named after the id, so
+     the verdict can require every one of them to be there - a journey that
+     cannot test one has to say so rather than quietly skip. And each key is
+     checked against a *specific* expected effect, not against "did anything
+     change": "did anything change" passes a key that toggles the wrong thing and
+     fails a key that was already in the state it was going to be put in.
+
+     It runs in the real app, through the real shell, because that is where keys
+     break. The browser suite cannot see a native menu's accelerator swallow a
+     keystroke before the page is given it, and that is exactly how a working
+     key in the browser becomes a dead key on the desktop. */
+  journey('walkthrough_shortcuts', async () => {
+    const menu = window.MediaMenu;
+    if (!menu || typeof menu.shortcuts !== 'function') {
+      say('walkthrough_shortcuts', 'threw: the page publishes no shortcut table');
+      return;
+    }
+
+    const $ = (id) => document.getElementById(id);
+    const bridge = window.MediaBridge;
+    const rows = () => document.querySelectorAll('#list li');
+    const currentRow = () => [...rows()].findIndex((li) => li.classList.contains('on'));
+    const fit = () => $('stage').dataset.fit;
+
+    /* A raw binding turned into the event a keyboard sends.
+       "Control+," becomes key "," with ctrlKey; "Space" becomes key " ".
+       The app's own spellings, because reading the pretty text back off the
+       settings table would mean guessing what "< ," is meant to be. */
+    const press = (binding) => {
+      const parts = String(binding).split('+');
+      const last = parts.pop();
+      const init = { key: last === 'Space' ? ' ' : last, bubbles: true, cancelable: true };
+      for (const mod of parts) {
+        const m = mod.toLowerCase();
+        if (m === 'ctrl' || m === 'control' || m === 'meta' || m === 'command') init.ctrlKey = true;
+        else if (m === 'shift') init.shiftKey = true;
+        else if (m === 'alt') init.altKey = true;
+      }
+      return (document.activeElement || document)
+        .dispatchEvent(new KeyboardEvent('keydown', init));
+    };
+
+    const clickEl = (el) => el && el.dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+    /* Where each key is put before it is pressed, and what it has to change.
+       Written per shortcut rather than guessed: a probe that watches one value
+       for every key cannot tell a mute from a loop, and both "changed" and
+       "unchanged" are then uninformative. */
+    const PLAN = {
+      playPause:  { setup: async () => { if (bridge.playing) { bridge.pause(); await wait(400); } }, read: () => bridge.playing },
+      seekBack:   { setup: async () => { bridge.pause(); bridge.seekBy(4); await wait(500); }, read: () => bridge.currentTime },
+      seekForward:{ setup: async () => { bridge.pause(); bridge.seekBy(-4); await wait(500); }, read: () => bridge.currentTime },
+      volumeUp:   { setup: async () => { $('volume').value = '0.5'; $('volume').dispatchEvent(new Event('input', { bubbles: true })); await wait(300); }, read: () => Math.round(bridge.volume * 100) },
+      volumeDown: { setup: async () => { $('volume').value = '0.5'; $('volume').dispatchEvent(new Event('input', { bubbles: true })); await wait(300); }, read: () => Math.round(bridge.volume * 100) },
+      previous:   { setup: async () => { clickEl(rows()[rows().length - 1]); await wait(900); }, read: currentRow },
+      next:       { setup: async () => { clickEl(rows()[0]); await wait(900); }, read: currentRow },
+      mute:       { read: () => bridge.muted },
+      loop:       { read: () => $('loop').classList.contains('on') },
+      autoplay:   { read: () => $('autoplay').classList.contains('on') },
+      fitDefault: { setup: async () => { $('stage').dataset.fit = 'stretch'; await wait(200); }, read: fit, want: () => 'contain' },
+      fitCrop:    { setup: async () => { $('stage').dataset.fit = 'contain'; await wait(200); }, read: fit, want: () => 'cover' },
+      fitStretch: { setup: async () => { $('stage').dataset.fit = 'contain'; await wait(200); }, read: fit, want: () => 'stretch' },
+      fullscreen: { read: () => bridge.fullscreen },
+      controls:   { read: () => $('stage').classList.contains('ui') },
+      panel:      { read: () => $('stage').classList.contains('list') },
+      clear:      { read: () => !$('clear-modal').hidden },
+      settings:   { read: () => !$('settings-modal').hidden },
+      undo:       { read: () => rows().length },
+      /* The two that open a native picker. Nothing in the page can report having
+         opened one, so asserting on it would be asserting nothing. They are
+         pressed, and reported as pressed - which is what can honestly be said
+         from here. */
+      open:       { native: true },
+      addFiles:   { native: true },
+      addFolder:  { native: true },
+    };
+
+    /* Build the state this journey needs, rather than inheriting whatever the
+       journey before it left.
+
+       The empty-playlist journey runs just before this one and empties the list
+       on purpose - which is its whole job. Inheriting that left this journey
+       nothing to seek in, nothing to step between and no media to play, and it
+       reported six broken shortcuts that were all one broken setup. That is the
+       same mistake the browser suite made twice: a scenario that does not set up
+       its own state ends up measuring the previous scenario's leftovers.
+
+       Two rows, so Previous and Next have somewhere to go, and one of them
+       playable, so there is a playhead to seek. */
+    if (rows().length < 2) {
+      const both = [probeFile, probeAudio].filter(Boolean);
+      if (!both.length) {
+        say('walkthrough_shortcuts', 'NOT TESTED - no probe file, so nothing for the keys to act on');
+        return;
+      }
+      await dropAFileOnto(both);
+      if (!waitFor(() => rows().length >= 1, 15000, 'a row for the shortcut journey')) {
+        say('walkthrough_shortcuts', 'NOT TESTED - the probe file did not reach the playlist');
+        return;
+      }
+      await wait(1500);
+    }
+
+    /* Previous and Next cannot be shown to work with one row. Said here rather
+       than left to fail as two mystery keys, and it is a failure either way -
+       the verdict treats NOT TESTED as a problem, which is the point: a shortcut
+       nobody could test is not a shortcut that works. */
+    if (rows().length < 2) {
+      say('walkthrough_shortcuts',
+        `NOT TESTED - only ${rows().length} row, and stepping needs two distinct files`);
+      return;
+    }
+
+    const table = menu.shortcuts();
+
+    for (const entry of table) {
+      const plan = PLAN[entry.id];
+      /* One line per shortcut whatever happens, so the verdict's "never
+         reported" rule catches a shortcut nothing was able to test. */
+      const key = 'shortcut_' + entry.id;
+      if (!plan) { say(key, 'NOT TESTED - no plan for this shortcut'); continue; }
+      if (!entry.keys.length) { say(key, 'NOT TESTED - it is bound to nothing'); continue; }
+
+      try {
+        /* Undo works on a cleared playlist, which is what it is for - not on a
+           removed row, so the setup has to clear something and remember how
+           many rows there were. */
+        let undoFrom = 0;
+        if (entry.id === 'undo') {
+          undoFrom = rows().length;
+          press('x'); /* the clear dialog */
+          await wait(600);
+          clickEl($('clear-ok'));
+          await wait(900);
+          if (rows().length) { say(key, 'NOT TESTED - the playlist would not clear'); continue; }
+        } else if (plan.setup) {
+          await plan.setup();
+        }
+
+        const before = plan.read ? plan.read() : null;
+        let threw = '';
+        try {
+          press(entry.keys[0]);
+        } catch (err) {
+          threw = 'threw: ' + (err && err.message);
+        }
+        await wait(650);
+
+        if (threw) {
+          say(key, threw);
+        } else if (plan.native) {
+          say(key, 'pressed ' + entry.keys.join('/') + ' - opens a native picker, nothing in the page to read');
+        } else {
+          const after = plan.read();
+          const want = plan.want ? plan.want() : undefined;
+          if (want !== undefined) {
+            say(key, after === want ? 'ok, set the fit to ' + want : 'DID NOTHING - ' + JSON.stringify(before) + ' -> ' + JSON.stringify(after) + ', wanted ' + want);
+          } else if (JSON.stringify(after) === JSON.stringify(before)) {
+            say(key, 'DID NOTHING - ' + JSON.stringify(before) + ' after ' + entry.keys.join('/'));
+          } else {
+            say(key, 'ok, ' + JSON.stringify(before) + ' -> ' + JSON.stringify(after));
+          }
+        }
+
+        /* Put the app back, so one shortcut's state cannot decide the next one's
+           result. A key left toggled is a key the next check reads as already
+           done. */
+        if (entry.id === 'undo') {
+          say('shortcut_undo_detail', 'restored ' + rows().length + ' of ' + undoFrom);
+        } else if (entry.id === 'clear') {
+          clickEl($('clear-cancel'));
+          await wait(500);
+        } else if (entry.id === 'settings') {
+          clickEl($('settings-close'));
+          await wait(500);
+        } else if (entry.id === 'panel' && $('stage').classList.contains('list')) {
+          press('p');
+          await wait(400);
+        } else if (entry.id === 'controls' && !$('stage').classList.contains('ui')) {
+          $('stage').classList.add('ui');
+          await wait(200);
+        } else if (entry.id === 'fullscreen' && bridge.fullscreen) {
+          press('f');
+          await wait(800);
+        }
+      } catch (err) {
+        say(key, 'threw: ' + (err && err.message ? err.message : String(err)));
+      }
+    }
+
+    /* The count, so a table that shrank is visible even if every remaining key
+       works. Read back off the report rather than off a local tally, because the
+       first version kept a list it never added to and cheerfully reported
+       "0 reported" beside twenty-one lines. */
+    const written = Object.keys(report).filter((k) => k.startsWith('shortcut_')
+      && !k.endsWith('_detail')).length;
+    say('walkthrough_shortcuts_count',
+      `${table.length} in the table, ${Object.keys(PLAN).length} with a plan, ${written} reported`);
+    say('walkthrough_shortcuts',
+      `pressed ${written} of ${table.length} shortcuts in a playlist of ${rows().length}`);
+  });
+
   /* The verdict, once every journey has finished writing.
 
      It used to sleep for a fixed time and then read the report, which is a race
@@ -768,7 +991,17 @@
       'layout_worst', 'walkthrough_drop', 'walkthrough_media_elements',
       'walkthrough_playing', 'walkthrough_duration', 'walkthrough_seek',
       'walkthrough_pause', 'walkthrough_fullscreen', 'walkthrough_missing_rows',
+      'walkthrough_shortcuts', 'walkthrough_shortcuts_count',
     ];
+
+    /* Every shortcut has to have written a line, whatever the table says. Read
+       from the page rather than listed here, so a shortcut added to the table
+       without a plan here is caught rather than passed over. */
+    if (window.MediaMenu && typeof window.MediaMenu.shortcuts === 'function') {
+      for (const entry of window.MediaMenu.shortcuts()) {
+        expected.push('shortcut_' + entry.id);
+      }
+    }
     for (const key of expected) {
       if (!(key in report)) failures.push(key + ' (never reported)');
     }
@@ -789,6 +1022,11 @@
          changed a tooltip without the key working. Both are the whole point of
          the journeys that report them. */
       /open=false/, /THE TOOLTIP DID NOT FOLLOW/, /waiting=false/,
+      /* A key that was pressed and changed nothing, and a shortcut nothing was
+         able to test. Both used to be invisible: the keys were printed by
+         another suite as a note nobody counted, and a shortcut with no plan was
+         simply not mentioned. */
+      /DID NOTHING/, /NOT TESTED/,
     ];
 
     for (const [key, value] of Object.entries(report)) {
@@ -808,6 +1046,20 @@
     /* Left on the window as well, so a shell can read the whole report without
        needing a command to carry it. */
     window.__WALKTHROUGH_REPORT__ = report;
+
+    /* And a flag saying the report is finished being written.
+
+       The shell used to read it after a fixed thirty seconds, which is a race
+       dressed as a wait: adding the shortcut journey - twenty-one keys, each put
+       into a known state, pressed, checked and put back - took the run past
+       thirty seconds, and the shell read a report that had not been written yet
+       and printed nothing at all. No failure, no output, and nothing to tell
+       whether the app was broken or the clock was short.
+
+       The page now says when it is done, and the shell waits for that. A ceiling
+       is still needed for a page that dies mid-run, and it says so rather than
+       reporting an empty report as a result. */
+    window.__WALKTHROUGH_DONE__ = true;
     if (channel) {
       try {
         await channel.invoke('print_diagnostic', { report, done: true });

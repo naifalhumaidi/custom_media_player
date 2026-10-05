@@ -271,7 +271,14 @@ declare global {
          does not stack listeners. */
       onMenuCommand?(handler: (command: string) => void): () => void;
       /** Report the states the menu shows as checkmarks. */
-      menuState?(state: { loop: boolean; autoplay: boolean }): void;
+      menuState?(state: {
+        loop: boolean;
+        autoplay: boolean;
+        mute: boolean;
+        /* The current bindings, so the shell can keep its menu's accelerators
+           honest. Optional: a shell that does not rebuild its menu ignores it. */
+        shortcuts?: Record<string, string[]>;
+      }): void;
     };
 
     /** Present only in the Tauri shell. */

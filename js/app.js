@@ -297,8 +297,8 @@ function toggle() {
 }
 __name(toggle, "toggle");
 function syncToggleTitles() {
-  $("loop").title = loop ? t("bar.loopOn") : t("bar.loopKey");
-  $("autoplay").title = autoStart ? t("bar.autoplayKey") : t("bar.autoplayOff");
+  paintShortcutLabel("loop");
+  paintShortcutLabel("autoplay");
   $("loop").setAttribute("aria-pressed", String(loop));
   $("autoplay").setAttribute("aria-pressed", String(autoStart));
   publishMenuState();
@@ -665,6 +665,7 @@ const SHORTCUTS = [
   { id: "controls", label: "bar.controls", keys: ["H"] },
   { id: "panel", label: "bar.panel", keys: ["P"] },
   { id: "open", label: "bar.open", keys: ["O"] },
+  { id: "addFiles", label: "panel.add", keys: ["Ctrl+Shift+O"] },
   { id: "addFolder", label: "bar.addFolder", keys: ["Shift+O"] },
   { id: "clear", label: "panel.clearTitle", keys: ["Shift+X"] },
   { id: "undo", label: "bar.undo", keys: ["Shift+Z"] },
@@ -683,7 +684,9 @@ function prettyKey(key) {
     ArrowRight: "→",
     ArrowUp: "↑",
     ArrowDown: "↓",
-    " ": "Space",
+    " ": "␣",
+    Space: "␣",
+    Spacebar: "␣",
     Control: "Ctrl",
     Ctrl: "Ctrl",
     Meta: "Ctrl",
@@ -695,11 +698,37 @@ function prettyKey(key) {
     Enter: "Enter",
     Tab: "Tab",
     Backspace: "Backspace",
-    Delete: "Del"
+    Delete: "Del",
+    /* The punctuation keys, as the caps are printed: shifted glyph first, then
+       the one it makes, because that is the order they are read off the cap. */
+    ",": "< ,",
+    ".": "> .",
+    "/": "? /",
+    ";": ": ;",
+    "'": `" '`,
+    "[": "{ [",
+    "]": "} ]",
+    "-": "_ -",
+    "=": "+ =",
+    "\\": "| \\",
+    "`": "~ `"
+  };
+  const baseOnly = {
+    ",": ",",
+    ".": ".",
+    "/": "/",
+    ";": ";",
+    "'": "'",
+    "[": "[",
+    "]": "]",
+    "-": "-",
+    "=": "=",
+    "\\": "\\",
+    "`": "`"
   };
   const mods = parts.map((p) => named[p] || p);
-  const tail = named[last] || (last.length === 1 ? last.toUpperCase() : last);
-  return [...mods, tail].join("+");
+  const glyph = parts.length ? baseOnly[last] || named[last] : named[last] || (last.length === 1 ? last.toUpperCase() : last);
+  return [...mods, glyph].join("+");
 }
 __name(prettyKey, "prettyKey");
 const MODIFIER_ORDER = ["Control", "Alt", "Shift"];
@@ -786,7 +815,19 @@ function currentShortcuts() {
 __name(currentShortcuts, "currentShortcuts");
 const STATE_LABELS = {
   mute: /* @__PURE__ */ __name(() => $("mute").classList.contains("muted") ? t("bar.unmute") : t("bar.mute"), "mute"),
-  fullscreen: /* @__PURE__ */ __name(() => media.fullscreen ? t("bar.fullscreenExit") : t("bar.fullscreen"), "fullscreen")
+  fullscreen: /* @__PURE__ */ __name(() => media.fullscreen ? t("bar.fullscreenExit") : t("bar.fullscreen"), "fullscreen"),
+  /* Loop and auto-start belong here too, and not because their wording varies -
+       it does, so much - but because they were being written by hand somewhere else.
+  
+       `syncToggleTitles` used to assign their titles directly from the translation
+       table, which is the one thing that must never carry a key: the key comes from
+       the shortcut table, so a reassignment has to be able to change it. Two of the
+       four strings had the key typed into them and two did not, and the ones that
+       did not lost it the moment the toggle was pressed - pressing Loop took "(A)"
+       off the Auto-start button on screen. Found by a check that had been passing
+       for the wrong reason. */
+  loop: /* @__PURE__ */ __name(() => loop ? t("bar.loopOn") : t("bar.loop"), "loop"),
+  autoplay: /* @__PURE__ */ __name(() => autoStart ? t("bar.autoplayOn") : t("bar.autoplayOff"), "autoplay")
 };
 function paintStateTooltips() {
   for (const id of Object.keys(STATE_LABELS)) paintShortcutLabel(id);
@@ -1043,7 +1084,12 @@ const MENU_ACTIONS = {
   "fit-stretch": /* @__PURE__ */ __name(() => setFit("stretch"), "fit-stretch"),
   fullscreen: /* @__PURE__ */ __name(() => media.toggleFullscreen(), "fullscreen"),
   "toggle-loop": /* @__PURE__ */ __name(() => toggleLoop(), "toggle-loop"),
-  "toggle-autoplay": /* @__PURE__ */ __name(() => toggleAutoStart(), "toggle-autoplay")
+  "toggle-autoplay": /* @__PURE__ */ __name(() => toggleAutoStart(), "toggle-autoplay"),
+  /* Mute had no menu item at all, so on the desktop it was a shortcut with
+     nothing to show for it: the key worked and no menu said so. Every other
+     transport control is in the Playback menu, and this is the one that was
+     missing from it. */
+  "toggle-mute": /* @__PURE__ */ __name(() => media.toggleMute(), "toggle-mute")
 };
 function publishMenuState() {
   const shell = window.MediaShell;
@@ -1051,7 +1097,13 @@ function publishMenuState() {
   try {
     shell.menuState({
       loop: $("loop").classList.contains("on"),
-      autoplay: $("autoplay").classList.contains("on")
+      autoplay: $("autoplay").classList.contains("on"),
+      mute: media.muted,
+      /* The bindings as well as the states, because the menu's accelerators come
+         from this table and a key reassigned in Settings has to reach the menu or
+         the menu goes on naming the old one. The shell compares them and rebuilds
+         only when they differ. */
+      shortcuts: currentShortcuts()
     });
   } catch {
   }

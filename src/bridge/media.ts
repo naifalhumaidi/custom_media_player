@@ -152,7 +152,42 @@ import type { BridgeEvents } from '../types.js';
   /* The real media element, when there is one. It is created once by the player
      and outlives a cleared playlist, so this returns the same element every
      time rather than a fresh one per load. */
-  const liveEl = (): any => document.querySelector('video, audio');
+  /* The media element belonging to *this* player.
+
+     Scoped to the player on purpose. A document-wide `querySelector('video,
+     audio')` answers with the first match anywhere on the page, and after a track
+     change the page can hold more than one: the reader builds a new media element
+     per source and the old one is not always gone before the new one is asked
+     about. The result was a playhead reading zero while the clip was playing, a
+     seek that appeared to do nothing, and a volume that looked set on an element
+     nobody could hear.
+
+     Scoped first, document-wide only as a fallback, for a moment when the player
+     has not built its element yet. */
+  const liveEl = (): any => {
+    const player = el() as unknown as ParentNode | null;
+    /* Scoped to the player, and among the elements in there, the one that is
+       actually playing something.
+
+       A reader builds a media element per source, and the previous one can still
+       be in the tree for a while. Asking for the first match - or for any single
+       match - can therefore hand back an element that was abandoned mid-playback,
+       still reporting that it is playing. The symptom was exact and very strange:
+       Space always paused and never started, because every toggle believed the
+       clip was already running.
+
+       An element with a source is a loaded one, and the most recently built of
+       those is the current one. */
+    const candidates: any[] = player && typeof (player as Element).querySelectorAll === 'function'
+      ? Array.from((player as Element).querySelectorAll('video, audio'))
+      : Array.from(document.querySelectorAll('video, audio'));
+    const withSource = candidates.filter((c) => c && (c.currentSrc || c.src || c.querySelector?.('source')));
+    const pool = withSource.length ? withSource : candidates;
+    if (pool.length) return pool[pool.length - 1];
+    /* The plain query as a last resort, for a page where the media element is not
+       a descendant of the player at all. */
+    return document.querySelector('video, audio');
+  };
 
   /* Where the playhead really is.
 
@@ -405,9 +440,25 @@ import type { BridgeEvents } from '../types.js';
        would otherwise write it into the incoming item's resume position. */
     ticket() { return currentLoad; },
 
-    get playing() { return !el().paused; },
+    /* Whether it is playing, asked of the media element rather than the player.
+
+       The same staleness as `currentTime`, one level over: the player's own
+       `paused` does not follow what the app did to the media, so this reported
+       "playing" for a clip that had ended and was sitting paused at zero. The
+       pause glyph, the auto-start decision and every check that asks whether
+       something is playing were all reading that. */
+    get playing() {
+      const live = liveEl();
+      return live ? !live.paused : !el().paused;
+    },
     get currentTime() { return playhead(); },
-    get duration() { return el().duration; },
+    /* The length, from the media element for the same reason: the player's copy
+       is its own, and the two disagree once the app has seeked. */
+    get duration() {
+      const live = liveEl();
+      const fromLive = live ? Number(live.duration) : NaN;
+      return Number.isFinite(fromLive) ? fromLive : el().duration;
+    },
     get volume() { return heldVolume !== null ? heldVolume : el().volume; },
     get muted() { return heldMuted !== null ? heldMuted : el().muted; },
     get loop() { return el().loop; },
@@ -415,8 +466,18 @@ import type { BridgeEvents } from '../types.js';
     play,
     pause,
 
+    /* Which way round, asked of the media element.
+
+       `el().paused` is the player's copy, and it does not follow what the app did
+       to the media - the same staleness as `playing` and `currentTime`. So Space
+       asked the player, was told the clip was paused, called play() on a clip that
+       was already playing, and did nothing at all. The transport's most-used key
+       was inert whenever the player's state had drifted, and it drifted every time
+       a track ended or the app seeked behind the library's back. */
     toggle() {
-      if (el().paused) play();
+      const live = liveEl();
+      const paused = live ? live.paused : el().paused;
+      if (paused) play();
       else pause();
     },
 

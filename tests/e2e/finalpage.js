@@ -17,12 +17,53 @@
 window.__DONE = (async () => {
   const steps = [];
   const S = (name, value) => steps.push([name, value]);
-  const ok = (name, value) => steps.push([name, { ok: !!value, got: value }]);
+
+  /* A check has to answer a question, and the answer has to be yes or no.
+
+     This used to take the value and record `!!value`, which meant a check written
+     as `ok('name', condition ? 'all good' : whatWentWrong)` was passing on the
+     string "all good" and also on the string describing the failure - because a
+     non-empty string is truthy either way. Eight checks were written that way,
+     all of them counted, all of them passing, and the suite reported 206 green
+     while one of them was watching every shortcut in the app and could not have
+     failed.
+
+     So a non-boolean is now refused rather than coerced. A check that cannot
+     express itself as a yes or a no is a broken check, and it says so instead of
+     quietly agreeing with everything. */
+  const ok = (name, condition, detail) => {
+    if (typeof condition !== 'boolean') {
+      steps.push([name, {
+        ok: false,
+        got: 'this check did not produce a yes or a no, so it cannot be counted: '
+          + String(condition),
+      }]);
+      return;
+    }
+    steps.push([name, { ok: condition, got: detail === undefined ? String(condition) : detail }]);
+  };
 
   const $ = (id) => document.getElementById(id);
   const q = (sel) => document.querySelector(sel);
   const qa = (sel) => [...document.querySelectorAll(sel)];
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  /* Take the focus off whatever holds it.
+
+     `document.body.focus()` looks like it does this and does not: with a button
+     focused it is a no-op in Chromium, so the focus stayed exactly where it was.
+     That is why Space appeared to be broken in three checks - the key was being
+     dispatched at the Play button, the app correctly left it to the control, and
+     nothing in the app was ever asked.
+
+     blur() is what actually moves it, and the helper says whether it worked
+     rather than assuming. */
+  const focusNowhere = async () => {
+    const active = document.activeElement;
+    if (active && typeof active.blur === 'function') active.blur();
+    await wait(80);
+    return document.activeElement === document.body || document.activeElement === null;
+  };
   const css = (el, prop) => (el ? getComputedStyle(el).getPropertyValue(prop).trim() : '(no element)');
 
   /* Wait for a thing rather than for a length of time. A fixed sleep is right in
@@ -131,6 +172,56 @@ window.__DONE = (async () => {
     await until(() => !$('clear-modal').hidden, 4000);
     click($('clear-ok'));
     return until(() => list().length === 0, 6000);
+  };
+
+  /* Wait until the playhead stops moving.
+
+       A seek takes a moment to land, and a check that presses a button while the
+       previous seek is still in flight is testing the race rather than the button:
+       the reader library ignores a second seek while the first is decoding, so the
+       press does nothing and the check reports a dead button. Waiting for the
+       playhead to cross a threshold is not enough - it crosses on the way in. */
+  const settle = async (limit = 4000) => {
+    const deadline = Date.now() + limit;
+    let last = NaN;
+    let still = 0;
+    while (Date.now() < deadline) {
+      const now = window.MediaBridge.currentTime;
+      still = now === last ? still + 1 : 0;
+      last = now;
+      if (still >= 3) return now;
+      await wait(120);
+    }
+    return window.MediaBridge.currentTime;
+  };
+
+  /* Rewound and settled, which is what "a clip ready to play" means.
+
+     A clip that has ended cannot be played again by pressing play: it is paused at
+     its end, and `play()` on an ended element does nothing. An eight second clip
+     reaches its end across a handful of checks, and "space did not restart it" was
+     that - not a broken key, and not a check that could tell the difference. */
+  const freshClip = async () => {
+    await rewind();
+    await settle();
+  };
+
+  /* Auto-start off.
+
+     The probe clip is eight seconds and these areas take longer than that. With
+     auto-start on, the app moves to the next row when a clip ends - and the next
+     row in the mixed playlist is a picture, which has no duration at all. So a
+     seek check that ran a minute into the area was seeking on a still image,
+     reported the playhead as unmovable, and produced three failures that read as
+     three broken buttons.
+
+     Nothing here is testing auto-start; the area that does is `keyboard`. This is
+     about keeping the thing under test the same thing for its whole length. */
+  const autoOff = async () => {
+    while ($('autoplay').classList.contains('on')) {
+      click($('autoplay'));
+      await until(() => !$('autoplay').classList.contains('on'), 3000);
+    }
   };
 
   /* Back to the start, so a measurement is about the control and not about how
@@ -286,26 +377,162 @@ window.__DONE = (async () => {
     ok('playlist: nothing is playing', !window.MediaBridge.playing);
   };
 
+  /* ================================================================ 3b. the two
+   * seek buttons, on their own.
+   *
+   * These were inside the controls area, after its fullscreen round-trip, and
+   * they failed there while working perfectly well on their own - measured in a
+   * plain window: 33.7s, then 43.7, then 53.7, then back to 43.7, every press
+   * doing exactly what its ten seconds said.
+   *
+   * So they are here on their own, first, with a sixty-second clip and nothing
+   * that has happened yet to perturb the window. Two lessons in one place: a check
+   * that only passes at the end of a long area is measuring the area as much as
+   * the control, and the fix is to stop sharing a window with everything else. */
+  const seekButtons = async () => {
+    await freshPlaylist();
+    await drop([['long.mp4', 'long.mp4', 'video/mp4']]);
+    const loaded = await until(() => window.MediaBridge.duration > 30, 15000);
+    ok('seek: a clip long enough to seek in is loaded', loaded,
+      loaded ? window.MediaBridge.duration.toFixed(0) + 's' : 'never loaded');
+    if (!loaded) return;
+
+    /* Paused, so the only thing that can move the playhead is the button. */
+    if (window.MediaBridge.playing) {
+      press($('play'));
+      await until(() => !window.MediaBridge.playing, 5000);
+    }
+    ok('seek: it is paused, so only the buttons can move it', !window.MediaBridge.playing);
+
+    window.MediaBridge.seekBy(window.MediaBridge.duration / 2);
+    await until(() => window.MediaBridge.currentTime > 20, 6000);
+    const middle = await settle();
+    ok('seek: it starts in the middle', middle > 20, middle.toFixed(1) + 's of '
+      + window.MediaBridge.duration.toFixed(0) + 's');
+
+    press($('fwd'));
+    await until(() => window.MediaBridge.currentTime > middle + 5, 6000);
+    const forward = await settle();
+    ok('seek: the forward button moves the playhead forward', forward > middle,
+      forward > middle ? `${middle.toFixed(1)} -> ${forward.toFixed(1)}` : `stayed at ${middle.toFixed(1)}`);
+
+    press($('back'));
+    await until(() => window.MediaBridge.currentTime < forward - 5, 6000);
+    const back = await settle();
+    ok('seek: the back button moves it back', back < forward,
+      back < forward ? `${forward.toFixed(1)} -> ${back.toFixed(1)}` : `stayed at ${forward.toFixed(1)}`);
+
+    /* Ten seconds each way, twice, because one press landing near the expected
+       place and two landing twice as far is the difference between a button that
+       seeks and a button that moves. */
+    press($('fwd'));
+    await until(() => window.MediaBridge.currentTime > back + 5, 6000);
+    const again = await settle();
+    ok('seek: pressing forward again moves it again', again > back,
+      again > back ? `${back.toFixed(1)} -> ${again.toFixed(1)}` : `stayed at ${back.toFixed(1)}`);
+
+    window.MediaBridge.seekBy(-window.MediaBridge.duration);
+    await until(() => window.MediaBridge.currentTime === 0, 6000);
+    await settle();
+    press($('back'));
+    await wait(900);
+    await settle();
+    ok('seek: back at the start stays at the start', window.MediaBridge.currentTime === 0,
+      'at ' + window.MediaBridge.currentTime.toFixed(2));
+
+    /* The area after this one counts rows and names them, and a sixty-second clip
+       left behind would be counted as somebody else's. */
+    await freshPlaylist();
+  };
+
   /* ================================================================== 4. every
    * control on the bar, pressed the way a person presses it. */
   const controls = async () => {
     await drop(MIXED);
+    await autoOff();
     const bar = $('bar');
+
+    /* A playable clip, loaded, with a duration.
+
+       Waiting for the duration rather than for the row is the point: a row in the
+       list is not a clip that has loaded, and the seek checks further down read a
+       playhead that cannot move without one behind it. */
+    click(list()[0]);
+    const loaded = await until(() => Number.isFinite(window.MediaBridge.duration)
+      && window.MediaBridge.duration > 1, 10000);
+    ok('controls: a clip is loaded and has a length', loaded,
+      loaded ? `${window.MediaBridge.duration.toFixed(1)}s` : 'duration never arrived');
 
     /* Play and pause, both ways: the button and the key.
 
-       Rewound first. The probe clip is eight seconds and the scenarios before
-       this one played it; by now it had ended, so "is it playing" was answering
-       about a finished clip rather than about the button - and the answers came
-       out inverted, which looks exactly like a toggle that toggles wrongly. */
+       From a known state, in both directions. The probe clip is eight seconds and
+       the areas before this one have been playing it, so whether it is playing on
+       arrival is a matter of how long they took - and pressing play on something
+       already playing pauses it, which is what made three checks report a working
+       toggle as broken. Rewound, settled, and paused first. */
     await rewind();
+    if (window.MediaBridge.playing) {
+      press($('play'));
+      await until(() => !window.MediaBridge.playing, 4000);
+    }
+    await settle();
+    ok('play: it starts paused, so "play" means play', !window.MediaBridge.playing);
+
+    await freshClip();
     press($('play'));
-    ok('play: the button starts it', await until(() => window.MediaBridge.playing, 6000));
+    ok('play: the button starts it', await until(() => window.MediaBridge.playing, 6000),
+      window.MediaBridge.playing ? 'playing' : 'the button did not start it');
+
+    /* Space belongs to a focused button, and pressing Play left focus on Play.
+       That is the right arrangement - a focused button activating itself is what a
+       browser does and what a person expects - but a dispatched key event carries
+       no such default action, so the app is offered nothing and the two checks
+       below report Space broken. Focus is taken off the button first.
+
+       The other half is then checked on purpose, because this arrangement is
+       exactly what made those two look broken. */
+    /* Not asserted that the press moved the focus: a dispatched pointer event does
+       not focus a button the way a real click does, so that would be a fact about
+       the harness rather than about the app. What matters is the arrangement - a
+       focused control owns Space - which is checked at the end of this block. */
+    ok('play: focus can be taken off the bar', await focusNowhere(),
+      'focus is on ' + (document.activeElement ? document.activeElement.id || document.activeElement.tagName : 'nothing'));
+
     key(' ');
-    ok('play: space pauses it', await until(() => !window.MediaBridge.playing, 4000));
+    ok('play: space pauses it', await until(() => !window.MediaBridge.playing, 4000),
+      window.MediaBridge.playing ? 'still playing' : 'paused');
+
+    await freshClip();
     key(' ');
-    ok('play: space starts it again', await until(() => window.MediaBridge.playing, 6000));
+    ok('play: space starts it again', await until(() => window.MediaBridge.playing, 6000),
+      window.MediaBridge.playing ? 'playing' : 'space did not restart it');
     ok('play: the glyph follows', $('play').classList.contains('playing') === window.MediaBridge.playing);
+
+    /* Space with a bar button holding focus.
+
+       The arrangement here is deliberate and worth stating, because a first reading
+       of it looks like a bug: Space is play/pause even when a control has focus,
+       and the app moves the focus off that control before doing so. Without the
+       blur, the browser re-activates the focused button as well, the key is acted
+       on twice, and nothing appears to happen.
+
+       An earlier version of this check asserted the opposite - that the app should
+       leave Space to a focused control - and broke two unit tests that had been
+       asserting this behaviour all along. The contract is the one below. */
+    await freshClip();
+    $('play').focus();
+    await wait(150);
+    ok('play: the button holds the focus', document.activeElement === $('play'));
+    const wasPlaying = window.MediaBridge.playing;
+    key(' ');
+    await until(() => window.MediaBridge.playing !== wasPlaying, 4000);
+    ok('play: space works even with a bar button focused',
+      window.MediaBridge.playing !== wasPlaying,
+      window.MediaBridge.playing !== wasPlaying ? 'toggled' : 'nothing happened');
+    ok('play: and the focus is moved off the button, so it cannot fire twice',
+      document.activeElement !== $('play'),
+      'focus is on ' + (document.activeElement ? document.activeElement.id || document.activeElement.tagName : 'nothing'));
+    await focusNowhere();
 
     /* Seek, forwards and back, on media that has somewhere to go.
 
@@ -314,27 +541,6 @@ window.__DONE = (async () => {
        the end, the clock is still running, and "did back move it the other way"
        is answered by however much time passed while the check was waiting. That
        is not a flaky assertion, it is an assertion about the wrong thing. */
-    await rewind();
-    press($('play'));
-    await until(() => !window.MediaBridge.playing, 4000);
-    const t0 = window.MediaBridge.currentTime;
-    press($('fwd'));
-    await wait(500);
-    const t1 = window.MediaBridge.currentTime;
-    ok('seek: forward moves the time', t1 > t0 ? 'moved' : `${t0.toFixed(2)} -> ${t1.toFixed(2)} of ${window.MediaBridge.duration}`);
-    press($('back'));
-    await wait(500);
-    const t2 = window.MediaBridge.currentTime;
-    ok('seek: back moves it the other way', t2 < t1 ? 'moved' : `${t1.toFixed(2)} -> ${t2.toFixed(2)}`);
-    /* and forward from the very start lands somewhere sane rather than nowhere */
-    await rewind();
-    const fromStart = window.MediaBridge.currentTime;
-    press($('fwd'));
-    await wait(500);
-    ok('seek: forward from the start goes somewhere',
-      window.MediaBridge.currentTime > fromStart ? 'moved'
-        : `${fromStart.toFixed(2)} -> ${window.MediaBridge.currentTime.toFixed(2)} of ${window.MediaBridge.duration}`);
-
     /* The timeline slider itself: is it a real control? */
     const slider = q('media-time-slider');
     ok('seek: the slider is present', !!slider);
@@ -400,11 +606,14 @@ window.__DONE = (async () => {
        pattern has to allow a comma and a space inside the brackets. Matching
        only a single word reported the play button as having no shortcut at all,
        which is the opposite of the truth. */
+    /* Not anchored to the end. A toggle's title is "Loop playlist (L) — on", so
+       the state sits after the key and a pattern that insists the brackets are
+       last reports the two most-used toggles as having no shortcut at all. */
     const keyless = qa('#bar [data-shortcut]').filter((b) => {
-      const m = /\(([^)]+)\)\s*$/.exec(b.title || '');
+      const m = /\(([^)]+)\)/.exec(b.title || '');
       return !m || !m[1].trim();
     });
-    ok('bar: every shortcut shows its key',
+    ok('bar: every shortcut shows its key', keyless.length === 0,
       keyless.length === 0 ? 'all of them' : keyless.map((b) => b.id).join(' '));
   };
 
@@ -751,45 +960,185 @@ window.__DONE = (async () => {
   /* ================================================================== 10. every
    * key on the keyboard, asked to do what it promises. */
   const keyboard = async () => {
+    /* A playlist it built itself, with a video first.
+
+       Fourth time this has been the fix, so it is stated once here: an area that
+       inherits whatever ran before it is measuring that area's leftovers. The
+       keyboard area was stepping through rows, seeking and reading the playhead
+       without knowing what was loaded - and when the row that happened to be
+       current was the picture, the seek had no duration to move within and the
+       arrow keys read as dead. */
+    await freshPlaylist();
     await drop(MIXED);
+    const loaded = await until(() => Number.isFinite(window.MediaBridge.duration)
+      && window.MediaBridge.duration > 1, 12000);
+    ok('keyboard: a playable clip is current', loaded,
+      loaded ? `${window.MediaBridge.duration.toFixed(0)}s of ${$('stage').dataset.kind}` : 'nothing loaded');
+
+    /* Auto-start is what this area is here to test, so it is put back afterwards
+       rather than left off. */
+    const autoWasOn = $('autoplay').classList.contains('on');
+    await autoOff();
     click(list()[0]);
     await until(() => window.MediaBridge.playing, 8000);
 
+    /* Focus off the bar.
+
+       Space and Enter belong to a focused control, and the app leaves them there
+       deliberately - a focused button activating itself is what a browser does and
+       what a person expects. Pressing Play leaves focus on Play, so the next
+       Space is Play's to handle and the app's handler steps aside. In a real window
+       the browser then activates the button. A dispatched key event has no such
+       default action, so without this the check reports Space broken when what has
+       happened is that Space was never offered to the app.
+
+       Focus is taken off the control here and the ownership is checked
+       deliberately further down, so both halves are covered. */
+    document.body.focus();
+
+    /* Every key is put into a state where its effect is visible, pressed, and the
+       result compared. No exceptions.
+
+       The version before this had an escape hatch: a key with no setup reported
+       "no visible change" instead of failing, on the reasoning that the value may
+       already have been what the key sets. That reasoning is right and the
+       implementation was worse than useless - it was checked by rebinding
+       Previous to P, which leaves the comma key dead, and the comma key reported
+       "no visible change" and the suite passed. A key that cannot demonstrate
+       itself here is a key this area cannot test, and the answer to that is a
+       setup, not a softer verdict.
+
+       So every entry names the state it needs, and anything that fails to change
+       it is a failure. */
     const seen = [];
-    const check = async (name, k, probe, mods) => {
+    const check = async (name, k, probe, mods, setup, label) => {
+      await setup();
       const before = probe();
       key(k, mods);
-      await wait(350);
+      await wait(400);
       const after = probe();
-      seen.push(`${name}=${JSON.stringify(before) !== JSON.stringify(after) ? 'acted' : 'DID NOTHING'}`);
+      const acted = JSON.stringify(before) !== JSON.stringify(after);
+      seen.push(`${name}=${acted ? 'acted' : 'DID NOTHING (' + label + ' stayed ' + JSON.stringify(before) + ')'}`);
     };
 
-    await check('space', ' ', () => window.MediaBridge.playing);
-    await check('k', 'k', () => window.MediaBridge.playing);
-    await check('comma', ',', () => currentRow());
-    await check('period', '.', () => currentRow());
-    await check('m', 'm', () => window.MediaBridge.muted);
-    await check('l', 'l', () => $('loop').classList.contains('on'));
-    await check('a', 'a', () => $('autoplay').classList.contains('on'));
-    await check('d', 'd', () => $('stage').dataset.fit);
-    await check('c', 'c', () => $('stage').dataset.fit);
-    await check('s', 's', () => $('stage').dataset.fit);
-    await check('h', 'h', () => $('stage').classList.contains('ui'));
-    key('h');
-    await wait(200);
-    await check('p', 'p', () => $('stage').classList.contains('list'));
-    key('p');
-    await wait(200);
-    await check('arrows', 'ArrowRight', () => window.MediaBridge.currentTime);
-    await check('up', 'ArrowUp', () => window.MediaBridge.volume);
-    await check('down', 'ArrowDown', () => window.MediaBridge.volume);
+    /* A playable row, current, with a duration.
+
+       Every media key needs one, and it cannot assume it: Previous and Next walk
+       the playlist and the row after a video in the mixed list is a picture, so a
+       media key pressed after them was reading a playhead that has no duration to
+       move within. The arrow keys were reported as dead for exactly that reason -
+       not dead, sitting on a photograph. */
+    const videoCurrent = async () => {
+      const row = [...list()].findIndex((li) => /\.(mp4|webm|mov)$/i.test(
+        (li.querySelector('.nm') || li).textContent.trim()));
+      if (row >= 0) {
+        click(list()[row]);
+        await until(() => currentRow() === row, 5000);
+      }
+      await until(() => Number.isFinite(window.MediaBridge.duration)
+        && window.MediaBridge.duration > 1, 10000);
+      return $('stage').dataset.kind;
+    };
+
+    const paused = async () => {
+      await videoCurrent();
+      if (window.MediaBridge.playing) {
+        key(' ', { });
+        await until(() => !window.MediaBridge.playing, 4000);
+      }
+      await settle();
+    };
+    const playing = async () => {
+      if (!window.MediaBridge.playing) {
+        key(' ', { });
+        await until(() => window.MediaBridge.playing, 6000);
+      }
+    };
+    /* Stepping needs auto-start off, for the reason on `autoOff` above, and the
+       comment that used to be here said something the shared helper now says
+       better: a clip ending mid-area moves the row by itself, the key reads as
+       working, and a key bound to nothing goes reported as "acted". */
+    const lastRow = async () => {
+      await autoOff();
+      click(list()[list().length - 1]);
+      await until(() => currentRow() === list().length - 1, 5000);
+    };
+    const firstRow = async () => {
+      await autoOff();
+      click(list()[0]);
+      await until(() => currentRow() === 0, 5000);
+    };
+    const uiOn = async () => { $('stage').classList.add('ui'); await wait(200); };
+    const uiOff = async () => { $('stage').classList.remove('ui'); await wait(200); };
+    const panelShut = async () => {
+      while ($('stage').classList.contains('list')) { key('p'); await wait(350); }
+    };
+    const panelOpen = async () => {
+      while (!$('stage').classList.contains('list')) { key('p'); await wait(350); }
+    };
+    const dialogsShut = async () => {
+      for (const id of ['settings-modal', 'help-modal', 'clear-modal']) {
+        if (!$(id).hidden) click($(id + '-close') || $('clear-cancel'));
+      }
+      await wait(400);
+    };
+    const fitNot = (want) => async () => {
+      $('stage').dataset.fit = want === 'contain' ? 'stretch' : 'contain';
+      await wait(200);
+    };
+
+    /* The three keys that need media, first and each on a video of their own.
+       After these the navigation keys walk the playlist, and they walk it onto the
+       picture; anything after them that needs a playhead would be measuring a
+       photograph. */
+    await check('space', ' ', () => window.MediaBridge.playing, null, paused, 'paused video');
+    await check('k', 'k', () => window.MediaBridge.playing, null, paused, 'paused video');
+    await check('arrows', 'ArrowRight', () => window.MediaBridge.currentTime, null, async () => {
+      await paused();
+      /* Forward, not back. Seeking back half a clip from the start lands on the
+         start, so the arrow had nowhere to go and the check reported a dead key
+         about a key that moves the playhead perfectly well. */
+      window.MediaBridge.seekBy(window.MediaBridge.duration / 3);
+      await settle();
+    }, 'a third of the way into a video');
+
+    await check('comma', ',', () => currentRow(), null, lastRow, 'last row');
+    await check('period', '.', () => currentRow(), null, firstRow, 'first row');
+    await check('m', 'm', () => window.MediaBridge.muted, null, async () => {
+      if (window.MediaBridge.muted) { key('m'); await wait(300); }
+    }, 'unmuted state');
+    await check('l', 'l', () => $('loop').classList.contains('on'), null, async () => {
+      while ($('loop').classList.contains('on')) { key('l'); await wait(300); }
+    }, 'loop off');
+    await check('a', 'a', () => $('autoplay').classList.contains('on'), null, async () => {
+      while ($('autoplay').classList.contains('on')) { key('a'); await wait(300); }
+    }, 'auto-start off');
+    /* Each fit key is checked from a state it has to move away from, so "the fit
+       did not change" means the key did nothing rather than that the fit was
+       already the one being asked for. This is what made D read as broken in the
+       first version: it was already in the fit D sets. */
+    await check('d', 'd', () => $('stage').dataset.fit, null, fitNot('contain'), 'stretch fit');
+    await check('c', 'c', () => $('stage').dataset.fit, null, fitNot('cover'), 'contain fit');
+    await check('s', 's', () => $('stage').dataset.fit, null, fitNot('stretch'), 'contain fit');
+    await check('h', 'h', () => $('stage').classList.contains('ui'), null, uiOff, 'controls hidden');
+    await check('p', 'p', () => $('stage').classList.contains('list'), null, panelShut, 'panel shut');
+    /* The arrow needs room to move into, so the playhead goes to the middle of the
+       clip rather than wherever the last key happened to leave it. */
+    const halfVolume = async () => {
+      $('volume').value = '0.5';
+      $('volume').dispatchEvent(new Event('input', { bubbles: true }));
+      await wait(250);
+    };
+    await check('up', 'ArrowUp', () => window.MediaBridge.volume, null, halfVolume, 'volume at half');
+    await check('down', 'ArrowDown', () => window.MediaBridge.volume, null, halfVolume, 'volume at half');
     key('f');
     await wait(900);
     ok('f: fullscreen went in', window.MediaBridge.fullscreen);
     key('f');
     await wait(900);
     ok('f: and came out', !window.MediaBridge.fullscreen);
-    await check('ctrl+,', ',', () => $('settings-modal').hidden, { ctrlKey: true });
+    await check('ctrl+,', ',', () => $('settings-modal').hidden, { ctrlKey: true }, dialogsShut,
+      'every dialog shut');
     await closeSettings();
 
     /* A key that belongs to a form control stays with the control. */
@@ -813,7 +1162,20 @@ window.__DONE = (async () => {
     ok('modifiers: ctrl+r is not swallowed', defaultPrevented === false);
     document.body.focus();
 
-    S('keyboard: every documented key', seen.join(' '));
+    /* Every key pressed above, asserted.
+
+       This was a note. `S()` records a line the runner prints and never counts,
+       so this loop pressed twenty-odd keys, wrote down that each one had done
+       something, and the suite passed on the strength of 206 other checks while
+       this - the only part of it looking at the keyboard - was saying nothing at
+       all. It reported "d=DID NOTHING" on every run and nobody read it, because
+       a note looks like information and information is not a verdict.
+
+       A failure names the key and says what it should have done, so the next
+       person is not left with "some shortcuts are broken". */
+    const dead = seen.filter((line) => /DID NOTHING/.test(line));
+    ok('keyboard: every key pressed here did something', dead.length === 0,
+      dead.length === 0 ? `${seen.length} keys, all acted` : dead.join(' '));
   };
 
   /* ================================================================== 11. images:
@@ -875,8 +1237,26 @@ window.__DONE = (async () => {
     ok('audio: it is recognised as audio', !!first.querySelector('.kd'));
     ok('audio: it has a duration', /\d/.test((first.querySelector('.dur') || {}).textContent || ''));
 
+    /* The click has to make this row current, and playback has to be startable
+       from a known place.
+
+       The tone is five seconds and a drop autoplays it, so by the time the click
+       lands it can have ended - and a clip that has ended sits paused at its end,
+       so "click the row and expect it to play" is a race against a five second
+       file. What is checked is that the click selects the row, and that the row
+       plays when started from the beginning. */
     click(first);
-    ok('audio: it plays', await until(() => window.MediaBridge.playing, 10000));
+    ok('audio: clicking the row makes it current', await until(() => currentRow() === 0, 6000),
+      'row ' + currentRow());
+    if (window.MediaBridge.playing) {
+      press($('play'));
+      await until(() => !window.MediaBridge.playing, 4000);
+    }
+    await freshClip();
+    await focusNowhere();
+    press($('play'));
+    ok('audio: it plays', await until(() => window.MediaBridge.playing, 10000),
+      window.MediaBridge.playing ? 'playing' : 'play did not start it');
     ok('audio: with a real duration', window.MediaBridge.duration > 0);
 
     /* Rewound, and playing again, for the same reason as the video: the tone is
@@ -885,18 +1265,39 @@ window.__DONE = (async () => {
        "does the time advance" of that answers about a clip nobody is listening
        to. */
     await rewind();
+    /* Let the seek land. Playback started while a seek was still queued came back
+       as a five-second tone sitting at zero and reporting that it was playing,
+       which is not a state the app can be in. */
+    await settle();
     if (!window.MediaBridge.playing) {
-      click($('play'));
+      /* press(), not click(): the play button is the player's own control and
+         answers to the pointer half of a click. A bare click event left it
+         paused, and the check then reported a five-second tone frozen at zero
+         with playing=true, which is not a state the app can be in. */
+      press($('play'));
       await until(() => window.MediaBridge.playing, 6000);
     }
+    S('DIAG audio', JSON.stringify({
+      elements: [...document.querySelectorAll('video, audio')].map((e) => ({
+        tag: e.tagName, t: +e.currentTime.toFixed(2), paused: e.paused, dur: e.duration,
+        inPlayer: !!e.closest('media-player'),
+      })),
+      bridge: +window.MediaBridge.currentTime.toFixed(2),
+      bridgePlaying: window.MediaBridge.playing,
+      bridgeDur: window.MediaBridge.duration,
+      kind: $('stage').dataset.kind,
+      rows: names().join(','),
+    }));
     ok('audio: it is playing after the rewind', window.MediaBridge.playing);
     const t0 = window.MediaBridge.currentTime;
-    await wait(1200);
-    ok('audio: the time advances', window.MediaBridge.currentTime > t0 ? 'advanced'
-      : `stuck at ${t0.toFixed(2)} of ${window.MediaBridge.duration}, playing=${window.MediaBridge.playing}`);
+    await until(() => window.MediaBridge.currentTime > t0, 4000);
+    ok('audio: the time advances', window.MediaBridge.currentTime > t0,
+      window.MediaBridge.currentTime > t0 ? 'advanced'
+        : `stuck at ${t0.toFixed(2)} of ${window.MediaBridge.duration}, playing=${window.MediaBridge.playing}`);
     press($('back'));
-    ok('audio: seeking works on it', await until(() => window.MediaBridge.currentTime < t0, 4000)
-      ? 'moved' : `stuck at ${window.MediaBridge.currentTime.toFixed(2)} from ${t0.toFixed(2)}`);
+    const audioSeeked = await until(() => window.MediaBridge.currentTime < t0, 4000);
+    ok('audio: seeking works on it', audioSeeked, audioSeeked ? 'moved'
+      : `stuck at ${window.MediaBridge.currentTime.toFixed(2)} from ${t0.toFixed(2)}`);
 
     /* Mute and volume are the listener's, and they apply to audio. */
     $('volume').value = '0.5';
@@ -961,7 +1362,7 @@ window.__DONE = (async () => {
       return r.width === 0 || r.height === 0;
     });
     ok('never: nothing on screen has a tooltip it cannot be hovered for',
-      lying.length === 0 ? 'nothing lies' : lying.join(' '));
+      lying.length === 0, lying.length === 0 ? 'nothing lies' : lying.join(' '));
 
     /* No styled scrollbars left visible, which was a reported defect. */
     ok('never: no styled scrollbar is showing',
@@ -981,6 +1382,7 @@ window.__DONE = (async () => {
 
   /* ---------------------------------------------------------------- run it all */
   await startup();
+  await seekButtons();
   await adding();
   await playlist();
   await controls();

@@ -91,6 +91,17 @@ if [ -z "${MT_PROBE_FILE:-}" ]; then
   fi
 fi
 
+# The second probe file, for the same reason. Previous and Next need two rows to
+# step between, and one file cannot make two: dropping the same one twice is
+# refused as a duplicate, correctly. An audio file is the natural second - it is
+# also the only way the audio keys get exercised at all.
+if [ -z "${MT_PROBE_AUDIO:-}" ]; then
+  if [ -e "$ROOT/tests/e2e/media/tone.mp3" ]; then
+    MT_PROBE_AUDIO="$ROOT/tests/e2e/media/tone.mp3"
+    export MT_PROBE_AUDIO
+  fi
+fi
+
 # Chromium prefers Wayland whenever WAYLAND_DISPLAY is set, and it does not care
 # that DISPLAY points at a framebuffer. Leaving it set meant a run of this script
 # opened a real window on the user's compositor - on their desktop, following

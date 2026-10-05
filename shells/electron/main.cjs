@@ -18,6 +18,11 @@
    Tauri build started. */
 
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+
+/* The page's shortcut table, translated into the dialect this menu has to speak.
+   Separate and Electron-free so it can be tested on its own - a wrong answer
+   here is invisible until somebody presses the key. */
+const { accelFor } = require('./accelerators.cjs');
 const path = require('node:path');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
@@ -388,8 +393,36 @@ function toggleItem(command, test) {
   };
 }
 
+/* The accelerators, read from the page's own shortcut table.
+
+   Every accelerator in this menu used to be a hardcoded string, and the comment
+   beside `MediaMenu.bindings` claimed the menu read the table so its keys would
+   follow a reassignment. It did not read anything. Reassigning a key in Settings
+   changed the settings table and the tooltip on the button, and left the menu
+   advertising the old one - so the menu said a shortcut existed, named a key, and
+   pressing that key did nothing. That is the whole of "some shortcuts are broken",
+   and no amount of pressing keys in a browser finds it, because in a browser
+   there is no menu.
+
+   So the table is the only place a key is written down. Each item says which
+   action it is and the key comes from here. An id that is not in the table gets no
+   accelerator rather than a stale one, which is the honest answer: the action is
+   still in the menu, and nothing on screen claims a key for it. */
+function currentBindings() {
+  try {
+    const raw = mainWindow.webContents.executeJavaSync(
+      'JSON.stringify(window.MediaMenu && window.MediaMenu.bindings || {})',
+    );
+    return JSON.parse(raw) || {};
+  } catch {
+    return {};
+  }
+}
+
 function buildMenu() {
   const { Menu, MenuItem, app: electronApp } = require('electron');
+  const B = currentBindings();
+  lastMenuShortcuts = JSON.stringify(B);
 
   /* Read by the page, so an item can be greyed out when the thing it names is
      not there - Clear in a browser tab, Add a folder where there are no paths. */
@@ -414,13 +447,20 @@ function buildMenu() {
     {
       label: 'File',
       submenu: [
-        { label: 'Open Files', accelerator: 'CmdOrCtrl+O', click: send('open-files') },
-        { label: 'Add Files', accelerator: 'CmdOrCtrl+Shift+O', click: send('add-files') },
-        { label: 'Add Folder', click: send('add-folder'), enabled: can('openFolder') },
+        { label: 'Open Files', accelerator: accelFor(B, 'open'), click: send('open-files') },
+        { label: 'Add Files', accelerator: accelFor(B, 'addFiles'), click: send('add-files') },
+        { label: 'Add Folder', accelerator: accelFor(B, 'addFolder'), click: send('add-folder'), enabled: can('openFolder') },
         { type: 'separator' },
         {
           label: 'Clear Playlist',
-          accelerator: 'CmdOrCtrl+Shift+X',
+          /* Was CmdOrCtrl+Shift+X, hardcoded, while the page has always bound
+             Shift+X. So the menu named a key that the page did not answer to,
+             and the key the page did answer to was not in the menu. Two spellings
+             of one action and neither one led to the other - pressing the
+             advertised key worked, because the menu handled it, and pressing the
+             documented key also worked, because the page handled it, which is
+             exactly why nobody could tell the two apart until the keys moved. */
+          accelerator: accelFor(B, 'clear'),
           click: send('clear-playlist'),
           /* Only where a playlist can outlive the session. A clear button that
              throws everything away for nothing is worse than no clear button. */
@@ -435,30 +475,33 @@ function buildMenu() {
       submenu: [
         {
           label: 'Play / Pause',
-          accelerator: 'Space',
+          accelerator: accelFor(B, 'playPause'),
           /* Registered as an accelerator rather than handled here, because the
              page already owns Space and owns it correctly - including the rule
              that a focused control gets it first. Two handlers would fire. */
           registerAccelerator: true,
           click: send('play-pause'),
         },
-        { label: 'Previous', accelerator: ',', registerAccelerator: true, click: send('previous') },
-        { label: 'Next', accelerator: '.', registerAccelerator: true, click: send('next') },
-        { type: 'separator' },
-        { label: 'Settings', accelerator: 'CmdOrCtrl+,', click: send('settings') },
+        { label: 'Previous', accelerator: accelFor(B, 'previous'), registerAccelerator: true, click: send('previous') },
+        { label: 'Next', accelerator: accelFor(B, 'next'), registerAccelerator: true, click: send('next') },
+        /* No Settings here. It is a top-level item of its own - that was the
+           decision, not an accident - and giving it a second accelerator in a
+           submenu registered CmdOrCtrl+, twice. Electron keeps the last
+           registration, so the Edit copy was unreachable and the menu showed the
+           same key on two items. */
       ],
     },
     {
       label: 'View',
       submenu: [
-        { label: 'Show Playlist', accelerator: 'P', click: send('toggle-panel') },
-        { label: 'Show Controls', accelerator: 'H', click: send('toggle-controls') },
+        { label: 'Show Playlist', accelerator: accelFor(B, 'panel'), click: send('toggle-panel') },
+        { label: 'Show Controls', accelerator: accelFor(B, 'controls'), click: send('toggle-controls') },
         { type: 'separator' },
-        { label: 'Default', accelerator: 'D', click: send('fit-contain') },
-        { label: 'Crop', accelerator: 'C', click: send('fit-cover') },
-        { label: 'Stretch', accelerator: 'S', click: send('fit-stretch') },
+        { label: 'Default', accelerator: accelFor(B, 'fitDefault'), click: send('fit-contain') },
+        { label: 'Crop', accelerator: accelFor(B, 'fitCrop'), click: send('fit-cover') },
+        { label: 'Stretch', accelerator: accelFor(B, 'fitStretch'), click: send('fit-stretch') },
         { type: 'separator' },
-        { label: 'Enter Fullscreen', accelerator: 'F', click: send('fullscreen') },
+        { label: 'Enter Fullscreen', accelerator: accelFor(B, 'fullscreen'), click: send('fullscreen') },
         { type: 'separator' },
         { role: 'reload' },
         { role: 'toggleDevTools' },
@@ -469,17 +512,34 @@ function buildMenu() {
       submenu: [
         {
           label: 'Loop Playlist',
+          /* The id is what the checkmark is set against. Without it
+             `setMenuItemChecked('toggle-loop', ...)` had nothing to find and the
+             menu said "off" for the rest of time, however many times Loop was
+             switched on. Three items and no ids anywhere in this menu. */
+          id: 'toggle-loop',
           type: 'checkbox',
-          accelerator: 'L',
+          accelerator: accelFor(B, 'loop'),
           checked: isOn('window.MediaBridge && window.MediaBridge.loop'),
-          click: send('toggle-loop'),
+          click: toggleItem('toggle-loop'),
         },
         {
           label: 'Auto Start',
+          id: 'toggle-autoplay',
           type: 'checkbox',
-          accelerator: 'A',
+          accelerator: accelFor(B, 'autoplay'),
           checked: isOn('document.getElementById("autoplay").classList.contains("on")'),
-          click: send('toggle-autoplay'),
+          click: toggleItem('toggle-autoplay'),
+        },
+        {
+          /* The one transport control the menu had no item for. Mute is a
+             shortcut with nothing on screen to say so, which is how a key that
+             works ends up looking broken. */
+          label: 'Mute',
+          id: 'toggle-mute',
+          type: 'checkbox',
+          accelerator: accelFor(B, 'mute'),
+          checked: isOn('window.MediaBridge && window.MediaBridge.muted'),
+          click: toggleItem('toggle-mute'),
         },
       ],
     },
@@ -495,7 +555,7 @@ function buildMenu() {
     },
     {
       label: 'Settings',
-      accelerator: 'CmdOrCtrl+,',
+      accelerator: accelFor(B, 'settings'),
       click: send('settings'),
     },
   ];
@@ -586,6 +646,27 @@ async function createWindow() {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.setMenuItemChecked?.('toggle-loop', !!state.loop);
     mainWindow.setMenuItemChecked?.('toggle-autoplay', !!state.autoplay);
+    mainWindow.setMenuItemChecked?.('toggle-mute', !!state.mute);
+
+    /* A reassigned key has to reach the menu. The accelerators are read from the
+       page's table when the menu is built, so a shortcut changed afterwards would
+       leave the menu naming the old key - the same drift this removed, arriving
+       one step later. An accelerator cannot be changed in place, so the menu is
+       built again.
+
+       Only when they actually differ. Rebuilding on every state change would
+       rebuild the menu on every play and pause, and a menu rebuilt under a
+       person's open cursor is a menu that closes. */
+    if (state.shortcuts) {
+      const before = lastMenuShortcuts;
+      const after = JSON.stringify(state.shortcuts);
+      if (before && before !== after) {
+        lastMenuShortcuts = after;
+        buildMenu();
+      } else if (!before) {
+        lastMenuShortcuts = after;
+      }
+    }
   });
   mainWindow.webContents.on('will-navigate', (event, url) => {
     if (url !== mainWindow.webContents.getURL()) event.preventDefault();
@@ -620,23 +701,43 @@ async function createWindow() {
     mainWindow.webContents.executeJavaScript(`${preamble}\n${script}`).catch((err) => {
       console.error('[walkthrough] could not start:', err && err.message);
     });
-    setTimeout(() => {
-      mainWindow.webContents
-        .executeJavaScript('window.__WALKTHROUGH_REPORT__ || {}')
-        .then((report) => {
-          console.log('--- custom media player: walkthrough ---');
-          for (const [key, value] of Object.entries(report)) {
-            console.log(`  ${key.padEnd(28)} ${value}`);
-          }
-          console.log('--- end walkthrough ---');
-          const passed = report.walkthrough_verdict && String(report.walkthrough_verdict).startsWith('PASS');
-          app.exit(passed ? 0 : 1);
-        })
-        .catch((err) => {
-          console.error('[walkthrough] no report:', err && err.message);
-          app.exit(1);
-        });
-    }, 30000);
+    /* Wait for the page to say it has finished, rather than for a length of
+       time. Thirty seconds was a race: the shortcut journey alone runs twenty-one
+       keys, each set up, pressed, checked and put back, and a run that overran
+       the guess produced an empty report and no verdict at all - indistinguishable
+       from a shell that had failed to start the walkthrough.
+
+       The ceiling is still here for a page that dies half way, and hitting it
+       says so instead of printing an empty report as though it were a result. */
+    const CEILING_MS = Number(process.env.MT_WALKTHROUGH_TIMEOUT_MS) || 240000;
+    const startedAt = Date.now();
+    const collect = async () => {
+      const state = await mainWindow.webContents.executeJavaScript(
+        '({ done: !!window.__WALKTHROUGH_DONE__, report: window.__WALKTHROUGH_REPORT__ || {} })',
+      );
+      if (state && state.done && state.report && Object.keys(state.report).length) {
+        const report = state.report;
+        console.log('--- custom media player: walkthrough ---');
+        for (const [key, value] of Object.entries(report)) {
+          console.log(`  ${key.padEnd(30)} ${value}`);
+        }
+        console.log('--- end walkthrough ---');
+        const passed = report.walkthrough_verdict && String(report.walkthrough_verdict).startsWith('PASS');
+        app.exit(passed ? 0 : 1);
+        return;
+      }
+      if (Date.now() - startedAt > CEILING_MS) {
+        console.error(`[walkthrough] the page never finished its report within ${CEILING_MS}ms.`);
+        console.error('[walkthrough] what it had written so far:');
+        for (const [key, value] of Object.entries((state && state.report) || {})) {
+          console.error(`  ${key.padEnd(30)} ${value}`);
+        }
+        app.exit(1);
+        return;
+      }
+      setTimeout(collect, 250);
+    };
+    setTimeout(collect, 500);
   }
 }
 
