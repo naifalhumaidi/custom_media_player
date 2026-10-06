@@ -81,6 +81,40 @@ describe("the desktop menu's shortcuts", () => {
       'these actions are labelled with a string that is not in both languages').toEqual([]);
   });
 
+  /* The top-level items and the letters Alt reaches them by.
+
+     Read out of the source rather than listed here, so a menu that grows a heading
+     is covered without this being told. The shape being looked for is a label that
+     carries its own shortcut as text - "Info (Alt+&I)" - because a menu label is
+     only ever text, and the one thing it is used for here is telling you what the
+     key is. */
+  it('names every top-level item with the key that opens it', () => {
+    const headings = [...MAIN.matchAll(/^ {6}label: '([A-Za-z]+) \(Alt\+&([A-Z])\)',$/gm)]
+      .map((m) => ({ name: m[1], key: m[2] }));
+
+    expect(headings.length,
+      'the menu bar should name its shortcut on every top-level item').toBeGreaterThanOrEqual(6);
+    expect(headings.map((h) => h.name)).toEqual(
+      expect.arrayContaining(['File', 'Edit', 'View', 'Playback', 'Info', 'Settings']));
+  });
+
+  it('gives no two headings the same Alt key', () => {
+    const keys = [...MAIN.matchAll(/^ {6}label: '[A-Za-z]+ \(Alt\+&([A-Z])\)',$/gm)]
+      .map((m) => m[1]);
+    const seen = new Set();
+    const clashes = keys.filter((k) => (seen.has(k) ? true : (seen.add(k), false)));
+    expect(clashes, 'these Alt keys would open two menus at once').toEqual([]);
+  });
+
+  it('does not claim a bare letter that belongs to something else', () => {
+    /* A heading saying "Settings (S)" would send people to S, which is Stretch.
+         Every heading has to name Alt, or the letter in brackets has to be one
+         nothing else is bound to. */
+    const bare = [...MAIN.matchAll(/^ {6}label: '[A-Za-z]+ \(([A-Z])\)',$/gm)].map((m) => m[1]);
+    expect(bare,
+      'these headings show a bare letter that would do something else').toEqual([]);
+  });
+
   it('gives an item no key rather than a stale one', () => {
     expect(accelFor({}, 'mute')).toBeUndefined();
     expect(accelFor({ mute: [] }, 'mute')).toBeUndefined();

@@ -445,7 +445,16 @@ function buildMenu() {
 
   const template = [
     {
-      label: 'File',
+      /* The name carries its own shortcut, which is all a menu label ever was:
+         whatever text goes here is what gets drawn. `&` before the letter is
+         the mnemonic - the character itself is not drawn, the letter after it
+         is underlined while Alt is held - so "Alt+&S" reads as "Alt+S" and
+         opens with Alt+S.
+
+         Alt rather than a bare letter, because a bare letter would be a lie:
+         S is Stretch and P is the playlist, and "Settings (S)" would be
+         claiming a key that does something else entirely. */
+      label: 'File (Alt+&F)',
       submenu: [
         { label: 'Open Files', accelerator: accelFor(B, 'open'), click: send('open-files') },
         { label: 'Add Files', accelerator: accelFor(B, 'addFiles'), click: send('add-files') },
@@ -471,7 +480,7 @@ function buildMenu() {
       ],
     },
     {
-      label: 'Edit',
+      label: 'Edit (Alt+&E)',
       submenu: [
         {
           label: 'Play / Pause',
@@ -492,7 +501,7 @@ function buildMenu() {
       ],
     },
     {
-      label: 'View',
+      label: 'View (Alt+&V)',
       submenu: [
         { label: 'Show Playlist', accelerator: accelFor(B, 'panel'), click: send('toggle-panel') },
         { label: 'Show Controls', accelerator: accelFor(B, 'controls'), click: send('toggle-controls') },
@@ -508,7 +517,7 @@ function buildMenu() {
       ],
     },
     {
-      label: 'Playback',
+      label: 'Playback (Alt+&P)',
       submenu: [
         {
           label: 'Loop Playlist',
@@ -550,11 +559,11 @@ function buildMenu() {
          they browse for. Every application on this desktop - the browser, the
          file manager, the IDE - puts them at the top level, and burying them
          under Help is the thing that makes a menu feel old. */
-      label: 'Info',
+      label: 'Info (Alt+&I)',
       click: send('info'),
     },
     {
-      label: 'Settings',
+      label: 'Settings (Alt+&S)',
       accelerator: accelFor(B, 'settings'),
       click: send('settings'),
     },
