@@ -18,11 +18,6 @@
    Tauri build started. */
 
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
-
-/* The page's shortcut table, translated into the dialect this menu has to speak.
-   Separate and Electron-free so it can be tested on its own - a wrong answer
-   here is invisible until somebody presses the key. */
-const { accelFor } = require('./accelerators.cjs');
 const path = require('node:path');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
@@ -383,195 +378,15 @@ function send(command) {
   };
 }
 
-function toggleItem(command, test) {
-  return () => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.webContents.send('menu-command', command);
-    /* The check mark has to come from the same source as the state, or it drifts
-       the moment either side changes. */
-    if (test) mainWindow.setMenuItemChecked?.(command, !!test());
-  };
-}
 
-/* The accelerators, read from the page's own shortcut table.
-
-   Every accelerator in this menu used to be a hardcoded string, and the comment
-   beside `MediaMenu.bindings` claimed the menu read the table so its keys would
-   follow a reassignment. It did not read anything. Reassigning a key in Settings
-   changed the settings table and the tooltip on the button, and left the menu
-   advertising the old one - so the menu said a shortcut existed, named a key, and
-   pressing that key did nothing. That is the whole of "some shortcuts are broken",
-   and no amount of pressing keys in a browser finds it, because in a browser
-   there is no menu.
-
-   So the table is the only place a key is written down. Each item says which
-   action it is and the key comes from here. An id that is not in the table gets no
-   accelerator rather than a stale one, which is the honest answer: the action is
-   still in the menu, and nothing on screen claims a key for it. */
-function currentBindings() {
-  try {
-    const raw = mainWindow.webContents.executeJavaSync(
-      'JSON.stringify(window.MediaMenu && window.MediaMenu.bindings || {})',
-    );
-    return JSON.parse(raw) || {};
-  } catch {
-    return {};
-  }
-}
-
+/* The shell has no native menu any more, so there is nothing to keep in step with
+   the page - the in-page bar reads the same shortcut table the page writes, and
+   sends the same commands. The one thing a native menu used to provide on its own
+   is a way to quit, which the page now asks for by name. */
 function buildMenu() {
-  const { Menu, MenuItem, app: electronApp } = require('electron');
-  const B = currentBindings();
-  lastMenuShortcuts = JSON.stringify(B);
-
-  /* Read by the page, so an item can be greyed out when the thing it names is
-     not there - Clear in a browser tab, Add a folder where there are no paths. */
-  const can = (name) => {
-    try {
-      return mainWindow.webContents.executeJavaSync(
-        `window.MediaFileSource && window.MediaFileSource.${name} ? true : false`,
-      );
-    } catch {
-      return false;
-    }
-  };
-  const isOn = (expr) => {
-    try {
-      return mainWindow.webContents.executeJavaSync(`!!(${expr})`);
-    } catch {
-      return false;
-    }
-  };
-
-  const template = [
-    {
-      /* The name carries its own shortcut, which is all a menu label ever was:
-         whatever text goes here is what gets drawn. `&` before the letter is
-         the mnemonic - the character itself is not drawn, the letter after it
-         is underlined while Alt is held - so "Alt+&S" reads as "Alt+S" and
-         opens with Alt+S.
-
-         Alt rather than a bare letter, because a bare letter would be a lie:
-         S is Stretch and P is the playlist, and "Settings (S)" would be
-         claiming a key that does something else entirely. */
-      label: 'File (Alt+&F)',
-      submenu: [
-        { label: 'Open Files', accelerator: accelFor(B, 'open'), click: send('open-files') },
-        { label: 'Add Files', accelerator: accelFor(B, 'addFiles'), click: send('add-files') },
-        { label: 'Add Folder', accelerator: accelFor(B, 'addFolder'), click: send('add-folder'), enabled: can('openFolder') },
-        { type: 'separator' },
-        {
-          label: 'Clear Playlist',
-          /* Was CmdOrCtrl+Shift+X, hardcoded, while the page has always bound
-             Shift+X. So the menu named a key that the page did not answer to,
-             and the key the page did answer to was not in the menu. Two spellings
-             of one action and neither one led to the other - pressing the
-             advertised key worked, because the menu handled it, and pressing the
-             documented key also worked, because the page handled it, which is
-             exactly why nobody could tell the two apart until the keys moved. */
-          accelerator: accelFor(B, 'clear'),
-          click: send('clear-playlist'),
-          /* Only where a playlist can outlive the session. A clear button that
-             throws everything away for nothing is worse than no clear button. */
-          enabled: can('canPersist'),
-        },
-        { type: 'separator' },
-        { role: 'quit', label: 'Quit' },
-      ],
-    },
-    {
-      label: 'Edit (Alt+&E)',
-      submenu: [
-        {
-          label: 'Play / Pause',
-          accelerator: accelFor(B, 'playPause'),
-          /* Registered as an accelerator rather than handled here, because the
-             page already owns Space and owns it correctly - including the rule
-             that a focused control gets it first. Two handlers would fire. */
-          registerAccelerator: true,
-          click: send('play-pause'),
-        },
-        { label: 'Previous', accelerator: accelFor(B, 'previous'), registerAccelerator: true, click: send('previous') },
-        { label: 'Next', accelerator: accelFor(B, 'next'), registerAccelerator: true, click: send('next') },
-        /* No Settings here. It is a top-level item of its own - that was the
-           decision, not an accident - and giving it a second accelerator in a
-           submenu registered CmdOrCtrl+, twice. Electron keeps the last
-           registration, so the Edit copy was unreachable and the menu showed the
-           same key on two items. */
-      ],
-    },
-    {
-      label: 'View (Alt+&V)',
-      submenu: [
-        { label: 'Show Playlist', accelerator: accelFor(B, 'panel'), click: send('toggle-panel') },
-        { label: 'Show Controls', accelerator: accelFor(B, 'controls'), click: send('toggle-controls') },
-        { type: 'separator' },
-        { label: 'Default', accelerator: accelFor(B, 'fitDefault'), click: send('fit-contain') },
-        { label: 'Crop', accelerator: accelFor(B, 'fitCrop'), click: send('fit-cover') },
-        { label: 'Stretch', accelerator: accelFor(B, 'fitStretch'), click: send('fit-stretch') },
-        { type: 'separator' },
-        { label: 'Enter Fullscreen', accelerator: accelFor(B, 'fullscreen'), click: send('fullscreen') },
-        { type: 'separator' },
-        { role: 'reload' },
-        { role: 'toggleDevTools' },
-      ],
-    },
-    {
-      label: 'Playback (Alt+&P)',
-      submenu: [
-        {
-          label: 'Loop Playlist',
-          /* The id is what the checkmark is set against. Without it
-             `setMenuItemChecked('toggle-loop', ...)` had nothing to find and the
-             menu said "off" for the rest of time, however many times Loop was
-             switched on. Three items and no ids anywhere in this menu. */
-          id: 'toggle-loop',
-          type: 'checkbox',
-          accelerator: accelFor(B, 'loop'),
-          checked: isOn('window.MediaBridge && window.MediaBridge.loop'),
-          click: toggleItem('toggle-loop'),
-        },
-        {
-          label: 'Auto Start',
-          id: 'toggle-autoplay',
-          type: 'checkbox',
-          accelerator: accelFor(B, 'autoplay'),
-          checked: isOn('document.getElementById("autoplay").classList.contains("on")'),
-          click: toggleItem('toggle-autoplay'),
-        },
-        {
-          /* The one transport control the menu had no item for. Mute is a
-             shortcut with nothing on screen to say so, which is how a key that
-             works ends up looking broken. */
-          label: 'Mute',
-          id: 'toggle-mute',
-          type: 'checkbox',
-          accelerator: accelFor(B, 'mute'),
-          checked: isOn('window.MediaBridge && window.MediaBridge.muted'),
-          click: toggleItem('toggle-mute'),
-        },
-      ],
-    },
-    {
-      /* Standalone, not a submenu item.
-
-         Settings and Info are places a person goes to deliberately, not things
-         they browse for. Every application on this desktop - the browser, the
-         file manager, the IDE - puts them at the top level, and burying them
-         under Help is the thing that makes a menu feel old. */
-      label: 'Info (Alt+&I)',
-      click: send('info'),
-    },
-    {
-      label: 'Settings (Alt+&S)',
-      accelerator: accelFor(B, 'settings'),
-      click: send('settings'),
-    },
-  ];
-
-  const menu = Menu.buildFromTemplate(template);
-  Menu.setApplicationMenu(menu);
-  return menu;
+  const { Menu } = require('electron');
+  Menu.setApplicationMenu(null);
+  ipcMain.on('menu-quit', () => app.quit());
 }
 
 /* ------------------------------------------------------------------ */
@@ -651,32 +466,6 @@ async function createWindow() {
      were at build time, which is "off" - so Loop would show unticked while the
      playlist was looping, and unticking it in the menu would be the only way to
      see the truth. */
-  mainWindow.webContents.on('menu-state', (_e, state) => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.setMenuItemChecked?.('toggle-loop', !!state.loop);
-    mainWindow.setMenuItemChecked?.('toggle-autoplay', !!state.autoplay);
-    mainWindow.setMenuItemChecked?.('toggle-mute', !!state.mute);
-
-    /* A reassigned key has to reach the menu. The accelerators are read from the
-       page's table when the menu is built, so a shortcut changed afterwards would
-       leave the menu naming the old key - the same drift this removed, arriving
-       one step later. An accelerator cannot be changed in place, so the menu is
-       built again.
-
-       Only when they actually differ. Rebuilding on every state change would
-       rebuild the menu on every play and pause, and a menu rebuilt under a
-       person's open cursor is a menu that closes. */
-    if (state.shortcuts) {
-      const before = lastMenuShortcuts;
-      const after = JSON.stringify(state.shortcuts);
-      if (before && before !== after) {
-        lastMenuShortcuts = after;
-        buildMenu();
-      } else if (!before) {
-        lastMenuShortcuts = after;
-      }
-    }
-  });
   mainWindow.webContents.on('will-navigate', (event, url) => {
     if (url !== mainWindow.webContents.getURL()) event.preventDefault();
   });

@@ -313,6 +313,10 @@
   <script src="js/source.js"></script>
   <script src="js/media.js"></script>
   <script src="js/i18n.js"></script>
+  <script src="js/menubar.js"></script>
+  <!-- js/menubar.js before js/app.js because app.js mounts it, the same way
+       js/i18n.js comes first: nothing bundles, so order in this list is the
+       only ordering there is. -->
   <script src="js/settings.js"></script>
   <!-- js/app.js, like every other script here: the compiler writes into js/, and the
        page asked for app.js at the root - a path that only a stale hand-written

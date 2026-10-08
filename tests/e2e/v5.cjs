@@ -81,7 +81,13 @@ const expect = {
      that key instead of keeping its own copy. */
   'ar: shortcut rows': 22,
   'en: dir back to ltr': 'ltr',
-  'en: loop tooltip when on': 'Loop playlist (L) — on',
+  /* The state first, then the key.
+
+     The two used to be the other way round, which meant the string in the
+     translation table carried the key - so a key reassigned in Settings could not
+     reach this tooltip, and two of the four loop/auto-start strings had it typed
+     in while two did not. The key now comes from the table, always. */
+  'en: loop tooltip when on': 'Loop playlist — on (L)',
   'en: first duration': '0:08',
   'ar: duration digits': '٠:٠٨',
   'en: total': '4 items',

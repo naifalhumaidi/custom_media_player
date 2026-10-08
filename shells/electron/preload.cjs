@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld('MediaShell', {
     return () => ipcRenderer.removeListener('menu-command', listener);
   },
   menuState: (state) => ipcRenderer.send('menu-state', state),
+  quit: () => ipcRenderer.send('menu-quit'),
 
   loadState: () => ipcRenderer.invoke('load-state'),
   saveState: (state) => ipcRenderer.invoke('save-state', state),

@@ -24,6 +24,7 @@ export const SCRIPTS = [
   'js/source.js',
   'js/media.js',
   'js/i18n.js',
+  'js/menubar.js',
   'js/settings.js',
   'js/app.js',
 ];
@@ -82,7 +83,24 @@ export function defineFakeLibrary(window) {
       return {
         currentTime: 0,
         get duration() { return self.duration; },
-        get paused() { return self.paused; },
+        /* The element's own play state, which is the truth.
+
+           A separate value from the player's on purpose. The player keeps its own
+           copy, and that copy is what goes stale; the element is what actually
+           plays. Reading the player's copy is how "playing" came back true for a
+           clip sitting paused at zero. */
+        paused: true,
+        /* The URL the element is actually carrying.
+
+           The bridge decides whether it is safe to start this element by asking
+           whether its currentSrc is the URL it asked for. Without this the fake
+           reports no source at all, the bridge stands down every time, and a test
+           for "play reaches the media when the player transport goes stale"
+           passes against code that never asked the media. */
+        get currentSrc() { return self.src && self.src.length ? self.src[self.src.length - 1].src : ''; },
+        get ended() { return false; },
+        get readyState() { return 4; },
+        get networkState() { return 1; },
         /* Volume and mute pass straight through in both directions: the bridge
            writes them to the media element when a clip loads, so they have to be
            settable here or the write throws. */
@@ -90,11 +108,63 @@ export function defineFakeLibrary(window) {
         set volume(v) { self.volume = v; },
         get muted() { return self.muted; },
         set muted(v) { self.muted = v; },
+        /* The element's transport, which always works.
+
+           The bridge acts on the element rather than on the player, because the
+           player's transport went stale in a real window: it returned a promise
+           that resolved and the video did not move. This is the element, so this
+           works - which is the whole point, and what makes the difference
+           observable when the player's is switched off.
+
+           A refusal is still passed on rather than swallowed: a resolved
+           promise here would make a blocked autoplay look like a successful play,
+           and the tests that check the user is told when the browser refuses
+           would pass against a bridge that never reported anything. */
+        play() {
+          self.playCalls++;
+          self.mediaElPlays++;
+          if (self.failOnPlay) return Promise.reject(Object.assign(new Error('blocked'), { name: 'NotAllowedError' }));
+          /* Recorded directly, never through `paused =`: that setter means "start
+             playing", so writing to it from here re-entered the player's own
+             transport - and then a test that meant to prove the bridge avoided
+             the player was measuring the bridge using it. */
+          self.syncMediaPaused(false);
+          this.paused = false;
+          /* A real element announces itself: `play` and `pause` are events the
+             element fires and the library listens for. Without them the controls
+             keep showing the old state - which is exactly the "the button says
+             Play while it is playing" that made this so hard to read. */
+          self.emitMedia('play');
+          return Promise.resolve();
+        },
+        pause() {
+          self.pauseCalls++;
+          self.syncMediaPaused(true);
+          this.paused = true;
+          self.emitMedia('pause');
+        },
       };
     })();
 
     staleCurrentTime = null;
     #reportedTime = NaN;
+
+    /* When set, the PLAYER's own transport stops working while still reporting
+       success - which is what the real one did, and the worst kind of failure to
+       have: not loud, not silent, but lying. `play()` resolved and the video did
+       not move, so every play/pause in the app went through a dead call that
+       looked like it worked.
+
+       Nothing could see it here before, because the fake player's transport
+       always worked, so every unit test passed whatever the bridge read. With
+       this on, the bridge has to reach the media element for playback to move -
+       which is the behaviour under test. */
+    transportGoesStale = false;
+    playerPlayCalls = 0;
+    playerPauseCalls = 0;
+    /* How many times the ELEMENT was asked to play, which is not the same as
+       how many times the player was: the bridge asks the player first. */
+    mediaElPlays = 0;
 
     /* What the player reports, which is what it holds until it goes stale. */
     get currentTime() { return this.staleCurrentTime ? this.#reportedTime : this.#currentTime; }
@@ -171,7 +241,20 @@ export function defineFakeLibrary(window) {
 
     get ready() { return this.#ready; }
     get paused() { return this.#paused; }
-    set paused(value) { if (!value) this.play(); }
+    set paused(value) { if (value) this.#paused = true; else this.play(); }
+
+    /* The media element's play state, recorded on the player without going
+       through `play()`/`pause()`.
+
+       The player keeps a copy of the element's state so the two agree while
+       everything is working, which is what a real player does - and it is the
+       copy that goes stale in a real window, which is why the bridge reads the
+       element instead. Written as a separate method because the `paused` setter
+       means "start playing" and using it here would call the transport. */
+    syncMediaPaused(value) { this.#paused = value; }
+
+    /* The element's own event, heard by the library and by the app. */
+    emitMedia(type) { this.#emit(type, { detail: {} }); }
     get duration() { return this.#duration; }
     set duration(value) { this.#duration = value; }
     get volume() { return this.#volume; }
@@ -189,14 +272,26 @@ export function defineFakeLibrary(window) {
     get autoPlay() { return this.#autoPlay; }
     set autoPlay(value) { this.#autoPlay = value; }
 
+    /* The player's transport.
+
+       Counts its own calls, so a test can tell the two apart, and does nothing
+       at all when `transportGoesStale` is set - while still returning a resolved
+       promise, which is the part that mattered. A transport that fails loudly is
+       easy to notice; this one reported success and changed nothing. */
     play() {
+      this.playerPlayCalls++;
+      if (this.transportGoesStale) return Promise.resolve();
       if (this.failOnPlay) return Promise.reject(Object.assign(new Error('blocked'), { name: 'NotAllowedError' }));
       this.#paused = false;
+      this.mediaEl.paused = false;
       this.#emit('play', { detail: {} });
       return Promise.resolve();
     }
     pause() {
+      this.playerPauseCalls++;
+      if (this.transportGoesStale) return;
       this.#paused = true;
+      this.mediaEl.paused = true;
       this.#emit('pause', { detail: {} });
     }
     canPlayType() { return 'probably'; }
@@ -217,6 +312,11 @@ export function defineFakeLibrary(window) {
     }
     reachEnd() {
       this.currentTime = Number.isFinite(this.#duration) ? this.#duration : 0;
+      /* The clip stops when it ends, and the element is where that shows. The
+         two carry separate play state now, so both have to be told - otherwise
+         the bridge reads a player that has stopped and an element still going. */
+      this.#paused = true;
+      this.mediaEl.paused = true;
       this.#emit('ended', { detail: {} });
     }
   }

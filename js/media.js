@@ -11,6 +11,18 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
   let currentLoad = 0;
   let sourceReady = true;
   const SEEK_COALESCE_MS = 40;
+  const RESCUE_MS = 120;
+  const RESCUE_MAX_PASSES = 25;
+  let rescueHandle = null;
+  let rescuePasses = 0;
+  let wantedUrl = "";
+  let wantedLoad = 0;
+  const stopRescue = /* @__PURE__ */ __name(() => {
+    if (!rescueHandle) return;
+    clearInterval(rescueHandle);
+    rescueHandle = null;
+    rescuePasses = 0;
+  }, "stopRescue");
   let pendingSeekTo = null;
   let seekTimer;
   let lastSeekAt = 0;
@@ -43,24 +55,79 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
     list.push(fn);
     return () => listeners[key] = list.filter((f) => f !== fn);
   }, "on");
-  const play = /* @__PURE__ */ __name(() => {
+  const askElement = /* @__PURE__ */ __name(() => {
+    const live2 = liveEl();
+    if (!live2) return false;
+    if (!wantedUrl || live2.currentSrc !== wantedUrl) return false;
+    if (live2.readyState < 2) return false;
+    try {
+      live2.play();
+      return true;
+    } catch {
+      return false;
+    }
+  }, "askElement");
+  const play = /* @__PURE__ */ __name((duringLoad = false) => {
+    stopRescue();
+    if (duringLoad) {
+      try {
+        const p = el().play();
+        if (p && p.catch) {
+          p.catch((err) => {
+            if (err && err.name === "AbortError") return;
+            emit("blocked", { error: err });
+          });
+        }
+      } catch (err) {
+        emit("blocked", { error: err });
+      }
+      return;
+    }
+    const started = /* @__PURE__ */ __name(() => {
+      const live2 = liveEl();
+      return !!(live2 && !live2.paused);
+    }, "started");
+    const pass = /* @__PURE__ */ __name(() => {
+      if (!rescueHandle) return;
+      if (started() || ++rescuePasses >= RESCUE_MAX_PASSES) {
+        stopRescue();
+        return;
+      }
+      if (wantedLoad !== currentLoad) {
+        stopRescue();
+        return;
+      }
+      askElement();
+    }, "pass");
+    const rescue = /* @__PURE__ */ __name(() => {
+      if (started()) return;
+      if (rescueHandle) return;
+      rescueHandle = setInterval(pass, RESCUE_MS);
+    }, "rescue");
     try {
       const p = el().play();
-      if (p && p.catch) {
-        p.catch((err) => {
+      if (p && p.then) {
+        p.then(rescue, (err) => {
           if (err && err.name === "AbortError") return;
+          rescue();
           emit("blocked", { error: err });
         });
+      } else {
+        rescue();
       }
     } catch (err) {
+      rescue();
       emit("blocked", { error: err });
     }
   }, "play");
-  const pause = /* @__PURE__ */ __name(() => el().pause(), "pause");
+  const pause = /* @__PURE__ */ __name(() => {
+    stopRescue();
+    el().pause();
+  }, "pause");
   const startIfWanted = /* @__PURE__ */ __name(() => {
     if (!wantPlay) return;
     wantPlay = false;
-    play();
+    play(true);
   }, "startIfWanted");
   let live = [];
   function dropLive() {
@@ -154,6 +221,8 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
     load(item, kind, autoplay) {
       dropLive();
       currentLoad = ++loadSeq;
+      wantedLoad = currentLoad;
+      wantedUrl = kind === "image" ? "" : item.url || "";
       sourceReady = false;
       pendingSeek = item.position || 0;
       wantPlay = !!autoplay && kind !== "image";
@@ -199,6 +268,8 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
     clear() {
       dropLive();
       currentLoad = ++loadSeq;
+      wantedLoad = currentLoad;
+      wantedUrl = "";
       sourceReady = false;
       pause();
       wantPlay = false;

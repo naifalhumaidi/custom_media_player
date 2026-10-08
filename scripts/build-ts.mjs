@@ -40,6 +40,7 @@ const ENTRY_POINTS = {
   source: 'src/source/index.ts',
   media: 'src/bridge/media.ts',
   i18n: 'src/ui/i18n.ts',
+  menubar: 'src/ui/menubar.ts',
   settings: 'src/ui/settings.ts',
   app: 'src/app.ts',
 };

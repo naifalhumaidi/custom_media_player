@@ -117,6 +117,115 @@ describe('load sequencing', () => {
     expect(app.window.MediaBridge.currentTime).toBeLessThan(atEnd - 1);
   });
 
+  /* Transport acts on the media element, not on the player.
+
+     Found by the comprehensive e2e pass, in a real window, and it is the worst
+     kind of failure there is: not loud, not silent, but *lying*.
+
+     `player.play()` returned a promise that RESOLVED and the video did not move.
+     The clip stayed paused, and the app reported itself as playing anyway,
+     because a resolved promise is not a rejection and nothing checked what came
+     back. Every play/pause in the app went through it - the Space key, the play
+     button, a row click - so on a clip whose transport had gone stale, none of
+     them did anything and all of them looked like they had.
+
+     The player's transport goes stale after a few track changes in one window.
+     It is not a thing the fakes could show: the fake player's transport worked
+     every time, so every unit test passed whatever the bridge read. The knob
+     below is what makes it reproducible here. */
+  it('play() reaches the media when the player transport goes stale', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO()]);
+    await app.settleAll();
+    app.window.MediaBridge.pause();
+    await app.settle(1);
+    expect(app.window.MediaBridge.playing).toBe(false);
+
+    /* The player's transport now does nothing - it answers, it succeeds, and the
+       clip stays where it was. Exactly as the real one did. */
+    app.player.transportGoesStale = true;
+
+    /* Paused first, and paused on the element, so the state this test is about
+       is real. Going through the bridge's own pause() would not do it: that also
+       goes through the player, so with the player broken the clip would never
+       stop and "play() started it" would be true before play() was ever called.
+       A test that cannot fail is worse than no test. */
+    app.player.mediaEl.pause();
+    await app.settle(1);
+    expect(app.window.MediaBridge.playing,
+      'the setup must leave the clip genuinely paused').toBe(false);
+
+    app.window.MediaBridge.play();
+    /* Long enough for the retry to come round. It checks on a timer rather than
+       once on the spot, because a single check is a coin toss on WHEN it lands -
+       the element is briefly not ready straight after a seek, and a check that
+       arrives in that window concludes nothing is wrong and never looks again. */
+    await app.settle(400);
+
+    /* The player's transport is dead: it answers, it succeeds, it changes
+       nothing. Playback starts anyway, because the bridge noticed the element
+       disagreed with a call that said yes and asked the element as well. A
+       bridge that trusted the promise would have left the clip sitting there -
+       which is precisely how this bug reached a person as "the play button does
+       nothing". */
+    expect(app.window.MediaBridge.playing,
+      'play() did not start playback: it trusted a resolved promise from the dead player transport').toBe(true);
+  });
+
+  it('play() does not second-guess the player mid-load, which would break track changes', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO(), () => app.file('b.mp4', 'video/mp4')]);
+    await app.settleAll();
+
+    /* The load's own autoplay must be left to the library, which owns the
+       provider and the ready lifecycle. A second play() arriving from under it
+       leaves the clip and the player disagreeing about whether it is running -
+       and the outgoing element starts instead of the incoming one.
+
+       This is not hypothetical. With the fallback left on during a load,
+       Previous and Next stopped moving. */
+    const before = app.player.mediaElPlays;
+    const plays = app.player.playerPlayCalls;
+
+    /* Change track. The load's autoplay goes through the same play(), and there
+       the library owns the provider and the ready lifecycle. */
+    app.key('.');
+    await app.settleAll();
+
+    expect(app.player.playerPlayCalls,
+      'the player was not asked to start the incoming clip').toBeGreaterThan(plays);
+    expect(app.player.mediaElPlays,
+      'play() asked the element on top of the player during a load').toBe(before);
+  });
+
+  /* Pause has no fallback, on purpose, and this is here to stop that changing
+     without someone finding out the hard way.
+
+     Only play was ever measured going stale. Pause through the player has always
+     reached the media. Adding a fallback to pause for symmetry looks reasonable
+     and breaks track changes: `load()` pauses the outgoing clip while a source
+     change is in flight, and a fallback that reaches the element in that window
+     reaches the wrong element. With it in, Previous and Next stopped moving - a
+     shortcut that had worked in every previous run, failing only because of a
+     "fix" for a bug pause did not have. */
+  it('pause goes through the player, with no fallback to the element', async () => {
+    app = await createApp();
+    await dropOnStage([VIDEO()]);
+    await app.settleAll();
+    expect(app.window.MediaBridge.playing).toBe(true);
+
+    const before = app.player.playerPauseCalls;
+    app.window.MediaBridge.pause();
+    await app.settle(2);
+
+    expect(app.window.MediaBridge.playing).toBe(false);
+    expect(app.player.playerPauseCalls,
+      'pause() went somewhere other than the player').toBe(before + 1);
+    expect(app.player.playerPlayCalls,
+      'pause() fell back to playing the element, which is the track-change bug').toBe(
+      app.player.playerPlayCalls);
+  });
+
   it('clear() stops an in-flight load from resuming', async () => {
     app = await createApp();
     await dropOnStage([VIDEO()]);

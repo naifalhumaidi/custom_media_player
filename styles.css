@@ -1233,3 +1233,127 @@ tr:has(.key-cell.capturing) th { color: #8f8f8f; }
   background: #7a5a52;
   transform: rotate(-38deg);
 }
+
+/* The menu bar.
+ *
+ * It sits over the stage, the way the control bar does - a strip, not a toolbar
+ * that rearranges the page - so adding it never moved anything else. The only
+ * decoration on a heading is the underline the mnemonic puts under one letter,
+ * because a heading is a button, and the hover background is all that says so.
+ *
+ * The shortcut is not part of the look. It is drawn the same grey the disabled
+ * items use, and only while the item is hovered or focused - because a wall of
+ * keys across every row was the thing that made it ugly, and a person finds a
+ * shortcut the first time they reach for it, not the fifteenth. */
+#menubar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  align-items: stretch;
+  padding: 0 6px;
+  background: rgba(0, 0, 0, 0);
+  transition: background 160ms ease;
+  font-family: inherit;
+  font-size: 13px;
+  color: rgb(225, 225, 225);
+  user-select: none;
+}
+#menubar:hover,
+#menubar:focus-within {
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+}
+
+.menu-wrap { position: relative; }
+
+.menu-head {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: default;
+}
+#menubar:hover .menu-head:hover,
+.menu-head.on {
+  background: rgba(255, 255, 255, 0.12);
+}
+.menu-head u { text-decoration: underline; text-underline-offset: 3px; }
+
+/* The dropdown.
+ *
+ * Hidden by an attribute, so nothing in the page can read as open when it is
+ * not, and a rule never gets focus. The rest is close to the native one: the
+ * label first, the tick in a column of its own so the labels do not shift, and
+ * the key in a fixed-width column on the right. */
+.menu-panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 230px;
+  background: rgb(28, 28, 30);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+  padding: 5px;
+  display: none;
+  z-index: 45;
+}
+.menu-panel[data-open] { display: block; }
+
+.menu-item {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  align-items: center;
+  gap: 4px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: 5px;
+  cursor: default;
+}
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+  outline: none;
+}
+.menu-item.off {
+  color: rgba(255, 255, 255, 0.38);
+  pointer-events: none;
+}
+
+.menu-tick { width: 18px; text-align: center; color: rgb(225, 190, 120); }
+
+/* The key.
+ *
+ * This is the whole change, and it is one rule: the key is drawn the same grey
+ * the disabled items use, and it is invisible until the item is hovered or
+ * focused. A person who is reading reaches for it and finds it; a person who
+ * only wants "Open Files" is not asked to parse a column of keys on every row. */
+.mi-acc {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.38);
+  opacity: 0;
+  transition: opacity 120ms ease;
+  font-variant-numeric: tabular-nums;
+}
+.menu-item:hover .mi-acc,
+.menu-item:focus-visible .mi-acc {
+  opacity: 1;
+}
+
+.menu-rule {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.09);
+  margin: 5px 8px;
+}

@@ -39,6 +39,22 @@ import type { BridgeEvents } from '../types.js';
      repeat, short enough that a deliberate second press still feels separate. */
   const SEEK_COALESCE_MS = 40;
 
+  /* The retry that checks a play actually started, and its bounds. */
+  const RESCUE_MS = 120;
+  const RESCUE_MAX_PASSES = 25;
+  let rescueHandle: ReturnType<typeof setInterval> | null = null;
+  let rescuePasses = 0;
+  /* The URL of the item the bridge asked to play, and the load that asked for
+     it. Together they answer "is this element the one under test?" */
+  let wantedUrl = '';
+  let wantedLoad = 0;
+  const stopRescue = () => {
+    if (!rescueHandle) return;
+    clearInterval(rescueHandle);
+    rescueHandle = null;
+    rescuePasses = 0;
+  };
+
   /* One seek in flight, at most: the target waiting to be applied, and the
      handle that will apply it. */
   let pendingSeekTo: number | null = null;
@@ -79,25 +95,131 @@ import type { BridgeEvents } from '../types.js';
      already handles. Anything else is a real failure - most often autoplay
      being refused because there is no user gesture yet - and the user has to
      hear about it, or the interface sits there claiming to be playing. */
-  const play = () => {
+  /* Ask the element to play, and say whether it took.
+
+     Only ever a fallback. Two things make the element the wrong first choice:
+     the player keeps a copy of the play state that drifts out of step with the
+     media, and while a track is changing there are briefly two elements and only
+     the player knows which is current. Asking the wrong one plays the clip being
+     left behind. */
+  const askElement = (): boolean => {
+    const live = liveEl();
+    if (!live) return false;
+    /* Only ever the element the bridge itself asked to play.
+
+       `sourceReady` was the guard for this and it was wrong. It says the library
+       has reported metadata for the current source, which is not the same
+       question as "is this element the one being played". For an audio source
+       the two came apart, the rescue stood down, and a five second tone sat at
+       0:00 with the app convinced it had started. The URL is the direct answer:
+       it is the thing the bridge assigned, so if the element is carrying it, it
+       is the element in question. */
+    if (!wantedUrl || live.currentSrc !== wantedUrl) return false;
+    if (live.readyState < 2) return false;
+    try {
+      live.play();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  /* Play, then keep checking that it happened.
+
+     The player's transport goes stale after a few track changes in one window:
+     `play()` returns a promise that RESOLVES and the video does not move. Not a
+     rejection - a success that did nothing - so no catch block anywhere can see
+     it, and every play/pause in the app reaches a dead call that looks like it
+     worked. Measured in a real window: `player.play()` resolved, `video.play()`
+     on the element started it, every time.
+
+     A promise that resolves is therefore not trusted. The element's own play
+     state is the check.
+
+     It retries rather than checking once. A single check is a coin toss on WHEN
+     it lands: the element is briefly below HAVE_CURRENT_DATA straight after a
+     seek, and a check that arrives in that window concludes nothing is wrong and
+     never looks again - which is how an audio clip sat at 0:00, paused, with the
+     app quite convinced it had started it. Each pass is a no-op once the element
+     is playing, so the loop only does anything when the player's call really did
+     nothing.
+
+     `pause()` cancels it. Without that, pressing Space to pause while a rescue is
+     outstanding would be undone by the next pass - a fix for "the play button does
+     nothing" that introduced "the pause button does nothing".
+
+     `duringLoad` keeps this out of the load's own autoplay, which is the
+     library's to drive: it owns the provider and the ready lifecycle. A second
+     play() arriving from underneath leaves the clip and the player disagreeing
+     about whether it is running. Not hypothetical - with the rescue left on, the
+     desktop walkthrough's Previous and Next stopped moving, because the rescue
+     landed mid-load and started the outgoing element. */
+  const play = (duringLoad = false) => {
+    stopRescue();
+    if (duringLoad) {
+      try {
+        const p = el().play();
+        if (p && p.catch) {
+          p.catch((err) => {
+            if (err && err.name === 'AbortError') return;
+            emit('blocked', { error: err });
+          });
+        }
+      } catch (err) {
+        emit('blocked', { error: err });
+      }
+      return;
+    }
+
+    /* Nothing to rescue once the element says it is already running. */
+    const started = () => {
+      const live = liveEl();
+      return !!(live && !live.paused);
+    };
+    const pass = () => {
+      if (!rescueHandle) return;
+      if (started() || ++rescuePasses >= RESCUE_MAX_PASSES) {
+        stopRescue();
+        return;
+      }
+      /* A new load supersedes this attempt; there is nothing left to rescue. */
+      if (wantedLoad !== currentLoad) {
+        stopRescue();
+        return;
+      }
+      askElement();
+    };
+    const rescue = () => {
+      if (started()) return;
+      if (rescueHandle) return;
+      rescueHandle = setInterval(pass, RESCUE_MS);
+    };
     try {
       const p = el().play();
-      if (p && p.catch) {
-        p.catch((err) => {
+      if (p && p.then) {
+        p.then(rescue, (err) => {
           if (err && err.name === 'AbortError') return;
+          rescue();
           emit('blocked', { error: err });
         });
+      } else {
+        rescue();
       }
     } catch (err) {
+      rescue();
       emit('blocked', { error: err });
     }
   };
-  const pause = () => el().pause();
+
+  const pause = () => {
+    stopRescue();
+    el().pause();
+  };
 
   const startIfWanted = () => {
     if (!wantPlay) return;
     wantPlay = false;
-    play();
+    play(true);
   };
 
   /* A superseded load must not apply its seek or its autoplay to whatever is
@@ -305,6 +427,8 @@ import type { BridgeEvents } from '../types.js';
     load(item, kind, autoplay) {
       dropLive();
       currentLoad = ++loadSeq;
+      wantedLoad = currentLoad;
+      wantedUrl = kind === 'image' ? '' : (item.url || '');
       sourceReady = false;
       pendingSeek = item.position || 0;
       wantPlay = !!autoplay && kind !== 'image';
@@ -385,6 +509,8 @@ import type { BridgeEvents } from '../types.js';
     clear() {
       dropLive();
       currentLoad = ++loadSeq;
+      wantedLoad = currentLoad;
+      wantedUrl = '';
       sourceReady = false;
       pause();
       wantPlay = false;

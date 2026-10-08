@@ -727,7 +727,7 @@ function prettyKey(key) {
     "`": "`"
   };
   const mods = parts.map((p) => named[p] || p);
-  const glyph = parts.length ? baseOnly[last] || named[last] : named[last] || (last.length === 1 ? last.toUpperCase() : last);
+  const glyph = parts.length ? baseOnly[last] || named[last] || (last.length === 1 ? last.toUpperCase() : last) : named[last] || (last.length === 1 ? last.toUpperCase() : last);
   return [...mods, glyph].join("+");
 }
 __name(prettyKey, "prettyKey");
@@ -1131,7 +1131,18 @@ if (typeof window.MediaMenu === "undefined") {
     get bindings() {
       return currentShortcuts();
     },
-    shortcuts: /* @__PURE__ */ __name(() => SHORTCUTS.map((entry) => ({ id: entry.id, label: entry.label, keys: keysOf(entry.id).slice() })), "shortcuts")
+    /* `pretty` is the same spelling the settings table and the tooltips use.
+    
+           The in-app menu bar needs it, and it must not invent a third way of writing
+           a key down: a menu that said "Ctrl+," where the settings table said "Ctrl+,"
+           would be the same drift that put a hardcoded accelerator in the native menu,
+           one layer down. */
+    shortcuts: /* @__PURE__ */ __name(() => SHORTCUTS.map((entry) => ({
+      id: entry.id,
+      label: entry.label,
+      keys: keysOf(entry.id).slice(),
+      pretty: keysOf(entry.id).map(prettyKey).join(", ")
+    })), "shortcuts")
   };
 }
 let dragTimer;
@@ -1391,6 +1402,7 @@ async function restore() {
   const pending = queued;
   queued = null;
   if (pending) for (const batch of pending) addItems(batch.items, batch.play);
+  mountTheMenuBar();
   if (state?.items?.length && !source.canPersist()) {
     state.items = [];
   }
@@ -1419,6 +1431,19 @@ window.I18n.onChange(() => {
   }
   render();
 });
+function mountTheMenuBar() {
+  const mount = window.MountMenuBar;
+  if (typeof mount !== "function") {
+    console.warn("[app] the menu bar module did not load; there will be no menu bar");
+    return;
+  }
+  try {
+    mount(document.body);
+  } catch (err) {
+    console.warn("[app] the menu bar could not be mounted:", err);
+  }
+}
+__name(mountTheMenuBar, "mountTheMenuBar");
 restore().catch((err) => {
   console.warn("[app] could not restore the saved state:", err);
   ready = true;
@@ -1426,5 +1451,6 @@ restore().catch((err) => {
   queued = null;
   if (pending) for (const batch of pending) addItems(batch.items, batch.play);
   render();
+  mountTheMenuBar();
 });
 //# sourceMappingURL=app.js.map

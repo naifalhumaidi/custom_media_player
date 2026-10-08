@@ -1142,7 +1142,7 @@ function prettyKey(key: string): string {
      not a keyboard label, and "Ctrl+," is. */
   const mods = parts.map((p) => named[p] || p);
   const glyph = parts.length
-    ? (baseOnly[last] || named[last])
+    ? (baseOnly[last] || named[last] || (last.length === 1 ? last.toUpperCase() : last))
     : (named[last] || (last.length === 1 ? last.toUpperCase() : last));
   return [...mods, glyph].join('+');
 }
@@ -1739,7 +1739,18 @@ if (typeof window.MediaMenu === 'undefined') {
     /* What every action is bound to right now. The menu reads it so its
        accelerators follow a reassignment instead of going stale. */
     get bindings() { return currentShortcuts(); },
-    shortcuts: () => SHORTCUTS.map((entry) => ({ id: entry.id, label: entry.label, keys: keysOf(entry.id).slice() })),
+    /* `pretty` is the same spelling the settings table and the tooltips use.
+
+       The in-app menu bar needs it, and it must not invent a third way of writing
+       a key down: a menu that said "Ctrl+," where the settings table said "Ctrl+,"
+       would be the same drift that put a hardcoded accelerator in the native menu,
+       one layer down. */
+    shortcuts: () => SHORTCUTS.map((entry) => ({
+      id: entry.id,
+      label: entry.label,
+      keys: keysOf(entry.id).slice(),
+      pretty: keysOf(entry.id).map(prettyKey).join(', '),
+    })),
   };
 }
 
@@ -2133,6 +2144,10 @@ async function restore() {
   queued = null;
   if (pending) for (const batch of pending) addItems(batch.items, batch.play);
 
+  /* The state has landed, so anything that reads it - the menu bar's ticks and
+     its greyed items - sees the truth. */
+  mountTheMenuBar();
+
   /* Only rebuild a playlist the source can actually resolve. Restoring rows
      that carry no file would put the app on screen with a full list that can
      never play, every duration stuck at "…", and an unhandled rejection from
@@ -2184,6 +2199,23 @@ const zeroTime = () => fmt(0);
   render();
 });
 
+/* The menu bar, mounted here rather than by the page, because it reads the
+   shortcut table this file owns - so it is mounted once that table exists, and
+   after the state is restored, so nothing in it is greyed out for a frame
+   because the playlist had not been read yet. */
+function mountTheMenuBar() {
+  const mount = window.MountMenuBar;
+  if (typeof mount !== 'function') {
+    console.warn('[app] the menu bar module did not load; there will be no menu bar');
+    return;
+  }
+  try {
+    mount(document.body);
+  } catch (err) {
+    console.warn('[app] the menu bar could not be mounted:', err);
+  }
+}
+
 restore().catch((err) => {
   /* A failed restore must not leave the app deaf to every drop. */
   console.warn('[app] could not restore the saved state:', err);
@@ -2192,4 +2224,5 @@ restore().catch((err) => {
   queued = null;
   if (pending) for (const batch of pending) addItems(batch.items, batch.play);
   render();
+  mountTheMenuBar();
 });

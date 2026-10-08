@@ -21,12 +21,11 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-import { toElectronAccelerator, accelFor, oneCharacter } from '../../shells/electron/accelerators.cjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..', '..');
-const MAIN = readFileSync(join(ROOT, 'shells', 'electron', 'main.cjs'), 'utf8');
 const APP = readFileSync(join(ROOT, 'src', 'app.ts'), 'utf8');
+const MENUBAR = readFileSync(join(ROOT, 'src', 'ui', 'menubar.ts'), 'utf8');
 
 /* The table, read out of the source rather than imported: it is a TypeScript
    module that cannot be loaded from here, and a test that keeps its own copy of
@@ -34,7 +33,7 @@ const APP = readFileSync(join(ROOT, 'src', 'app.ts'), 'utf8');
 const tableIds = [...APP.matchAll(/\{ id: '([a-zA-Z]+)', label: '[^']*', keys: \[([^\]]*)\] \}/g)]
   .map((m) => ({ id: m[1], keys: m[2] }));
 
-describe("the desktop menu's shortcuts", () => {
+describe('the in-page menu bar', () => {
   it('has a table to read', () => {
     /* If this fails, the matcher above has drifted from the source and every
        other check in this file is passing for the wrong reason. */
@@ -43,26 +42,35 @@ describe("the desktop menu's shortcuts", () => {
     expect(tableIds.map((e) => e.id)).toContain('mute');
   });
 
-  it('writes no accelerator down by hand', () => {
-    /* A literal accelerator is the whole bug. It cannot be compared with the
-       table, so it drifts the first time a key is reassigned, and nothing else
-       in the build notices. */
-    const literals = [...MAIN.matchAll(/accelerator: '([^']*)'/g)].map((m) => m[1]);
-    expect(literals,
-      'these accelerators are written down instead of read from the shortcut table:\n  '
-      + literals.join('\n  ')).toEqual([]);
+  it('reads every key it shows from the shortcut table', () => {
+    /* The accelerators on the menu are shown from the same spelling the settings
+       page and the tooltips use - the table's. A literal in the menu bar would
+       be a second answer, and two answers is the bug this file exists for. */
+    for (const m of MENUBAR.matchAll(/accel: '([^']+)'/g)) {
+      expect(tableIds.map((e) => e.id),
+        `the menu names accel "${m[1]}", which is not in the table`).toContain(m[1]);
+    }
   });
 
-  it('names only actions that exist in the table', () => {
-    const named = [...MAIN.matchAll(/accelFor\(B, '([^']+)'\)/g)].map((m) => m[1]);
-    expect(named.length,
-      'no menu item reads the table, so the menu cannot follow a reassignment').toBeGreaterThan(10);
+  it('sends only commands the app actually handles', () => {
+    /* A command the app does not know is a menu item that does nothing. The
+       exception is `quit`, which goes to the shell rather than to the page. */
+    /* Quoted (`'open-files':`) and unquoted (`fullscreen:`) alike. */
+    const handled = new Set([...APP.matchAll(/^  '?([a-z-]+)'?:/gm)].map((m) => m[1]));
+    handled.add('quit');
+    for (const m of MENUBAR.matchAll(/command: '([^']+)'/g)) {
+      expect([...handled],
+        `the menu sends "${m[1]}", which nothing in the app handles`).toContain(m[1]);
+    }
+  });
 
-    const known = new Set(tableIds.map((e) => e.id));
-    const unknown = named.filter((id) => !known.has(id));
-    expect(unknown,
-      'the menu asks for a key for an action the table does not have, so it would show none:\n  '
-      + unknown.join('\n  ')).toEqual([]);
+  it('every heading shows its way in through Alt', () => {
+    /* The headings open with Alt+letter. One letter each, and no two the same,
+       because a register of ouvres that share an Alt does not open two menus - it
+       opens whichever the browser liked. */
+    const alts = [...MENUBAR.matchAll(/alt: '([A-Z])'/g)].map((m) => m[1]);
+    expect(alts.length, 'every heading needs an Alt letter').toBeGreaterThanOrEqual(6);
+    expect(new Set(alts).size, 'two headings share an Alt key').toBe(alts.length);
   });
 
   it('names every action with a string that exists in both languages', () => {
@@ -88,79 +96,4 @@ describe("the desktop menu's shortcuts", () => {
      carries its own shortcut as text - "Info (Alt+&I)" - because a menu label is
      only ever text, and the one thing it is used for here is telling you what the
      key is. */
-  it('names every top-level item with the key that opens it', () => {
-    const headings = [...MAIN.matchAll(/^ {6}label: '([A-Za-z]+) \(Alt\+&([A-Z])\)',$/gm)]
-      .map((m) => ({ name: m[1], key: m[2] }));
-
-    expect(headings.length,
-      'the menu bar should name its shortcut on every top-level item').toBeGreaterThanOrEqual(6);
-    expect(headings.map((h) => h.name)).toEqual(
-      expect.arrayContaining(['File', 'Edit', 'View', 'Playback', 'Info', 'Settings']));
-  });
-
-  it('gives no two headings the same Alt key', () => {
-    const keys = [...MAIN.matchAll(/^ {6}label: '[A-Za-z]+ \(Alt\+&([A-Z])\)',$/gm)]
-      .map((m) => m[1]);
-    const seen = new Set();
-    const clashes = keys.filter((k) => (seen.has(k) ? true : (seen.add(k), false)));
-    expect(clashes, 'these Alt keys would open two menus at once').toEqual([]);
-  });
-
-  it('does not claim a bare letter that belongs to something else', () => {
-    /* A heading saying "Settings (S)" would send people to S, which is Stretch.
-         Every heading has to name Alt, or the letter in brackets has to be one
-         nothing else is bound to. */
-    const bare = [...MAIN.matchAll(/^ {6}label: '[A-Za-z]+ \(([A-Z])\)',$/gm)].map((m) => m[1]);
-    expect(bare,
-      'these headings show a bare letter that would do something else').toEqual([]);
-  });
-
-  it('gives an item no key rather than a stale one', () => {
-    expect(accelFor({}, 'mute')).toBeUndefined();
-    expect(accelFor({ mute: [] }, 'mute')).toBeUndefined();
-    expect(accelFor({ mute: ['M'] }, 'mute')).toBe('M');
-  });
-});
-
-describe('translating the table into an Electron accelerator', () => {
-  it('keeps a letter a capital letter', () => {
-    expect(toElectronAccelerator('M')).toBe('M');
-    expect(toElectronAccelerator('F')).toBe('F');
-  });
-
-  it('names the arrows rather than passing the drawing through', () => {
-    expect(toElectronAccelerator('\u2190')).toBe('Left');
-    expect(toElectronAccelerator('\u2193')).toBe('Down');
-  });
-
-  it('names the spacebar', () => {
-    expect(toElectronAccelerator('\u2423')).toBe('Space');
-  });
-
-  it('writes Ctrl as CmdOrCtrl, which is what a Mac wants and a PC accepts', () => {
-    expect(toElectronAccelerator('Ctrl+,')).toBe('CmdOrCtrl+,');
-    expect(toElectronAccelerator('Shift+X')).toBe('Shift+X');
-  });
-
-  it('takes the printable half of a keycap that carries two characters', () => {
-    /* The table prints "< ," for the comma key, shifted first. The binding is the
-       comma: pressing "<" means Shift+comma, which is a different key. */
-    expect(oneCharacter('< ,')).toBe(',');
-    expect(oneCharacter('> .')).toBe('.');
-    expect(toElectronAccelerator('< ,')).toBe(',');
-    expect(toElectronAccelerator('Ctrl+< ,')).toBe('CmdOrCtrl+,');
-  });
-
-  it('translates every binding the table actually ships', () => {
-    const missing = [];
-    for (const entry of tableIds) {
-      const keys = [...entry.keys.matchAll(/'([^']*)'/g)].map((m) => m[1]);
-      for (const key of keys) {
-        const accel = toElectronAccelerator(key);
-        if (!accel) missing.push(`${entry.id}: ${key}`);
-      }
-    }
-    expect(missing,
-      'these bindings would reach the menu with no key at all').toEqual([]);
-  });
 });

@@ -241,6 +241,9 @@ declare global {
     MediaBridge?: MediaBridge;
     MediaFullscreen?: FullscreenHook;
     I18n?: I18nModule;
+    /** The in-app menu bar. Published by js/menubar.js and mounted by app.js,
+     *  because the menu reads the shortcut table app.js owns. */
+    MountMenuBar?: (host: HTMLElement) => void;
     MediaSettings?: SettingsModule;
 
     /** The preload's bridge, present only in the Electron shell. */
