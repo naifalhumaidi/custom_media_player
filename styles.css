@@ -7,20 +7,8 @@
      mismatch was the thing that read as unfinished. */
   --r: 7px;
   --r-lg: 14px;
-  /* The menu bar's height. A variable because the stage is measured against it,
-     and a stage measured against a number typed in a second place is a stage
-     that is wrong the moment one of the two is changed. */
-  --menubar-h: 30px;
 }
 
-/* The window is two rows: the menu bar, then everything else.
-
-   A column, rather than a bar positioned over the top of the stage. Fixed and
-   absolute both left `#stage` starting at the top of the viewport with the bar
-   laid over its first thirty pixels - so the playlist's own header row sat
-   behind the bar, which is the same complaint one level down: a component on top
-   of another component. In the flow, the bar takes its height and the stage
-   takes the rest, and neither can cover the other. */
 html, body {
   margin: 0;
   height: 100%;
@@ -30,30 +18,23 @@ html, body {
   overflow: hidden;
 }
 
-body {
-  /* the dynamic viewport, so a mobile browser's collapsing bar does not leave a
-     strip of black under the stage - the reason the stage used 100dvh */
-  height: 100dvh;
-  display: flex;
-  flex-direction: column;
-}
+/* The whole window.
 
+   There is no menu bar in the page: on the desktop it is the system's own, which
+   is frame chrome and takes its height out of the window before the page is ever
+   given one. This was true before, and an in-page bar briefly made it false -
+   which is why the stage was resized to leave room for a row the system already
+   owns, and why a long playlist needed a `min-height` to stop it pushing the
+   control bar off the bottom. None of that is needed while the page is the whole
+   window. */
 #stage {
   position: relative;
-  width: 100%;
-  flex: 1 1 auto;
-  /* Without this a flex item refuses to shrink below its content, and a long
-     playlist would push the control bar off the bottom of the window. */
-  min-height: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
   background: #000;
   overflow: hidden;
 }
-
-/* Fullscreen is the window and nothing else, so the bar goes with it. Left in
-   place it is a row of chrome over the picture with no title bar to justify it,
-   and because the stage is sized by what is left over, hiding it hands the whole
-   height back in the same breath. */
-body.fs #menubar { display: none; }
 
 /* the player fills the stage; the <video> inside it carries the fit mode */
 #media, #still {
@@ -1290,144 +1271,3 @@ tr:has(.key-cell.capturing) th { color: #8f8f8f; }
   transform: rotate(-38deg);
 }
 
-/* The menu bar.
- *
- * It sits over the stage, the way the control bar does - a strip, not a toolbar
- * that rearranges the page - so adding it never moved anything else. The only
- * decoration on a heading is the underline the mnemonic puts under one letter,
- * because a heading is a button, and the hover background is all that says so.
- *
- * The shortcut is not part of the look. Only on a HEADING, and only while it is
- * pointed at. The items inside a dropdown always show theirs - that is where a
- * person looks for "what key does this do", and hiding it there means reading
- * every row one at a time to find out. */
-#menubar {
-  /* In the flow: the first row of the body. `position: fixed` was tried and put
-     the bar over the stage rather than above it. */
-  flex: 0 0 var(--menubar-h);
-  /* Its own surface. Transparent was what made it read as an overlay rather
-     than as a bar: the video showed through it and the headings floated. */
-  background: #141416;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  align-items: stretch;
-  height: var(--menubar-h);
-  padding: 0 6px;
-  box-sizing: border-box;
-  font-family: inherit;
-  font-size: 13px;
-  color: rgb(225, 225, 225);
-  user-select: none;
-}
-
-.menu-wrap { position: relative; }
-
-.menu-head {
-  appearance: none;
-  background: transparent;
-  border: 0;
-  color: inherit;
-  font: inherit;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 10px;
-  cursor: default;
-}
-.menu-head:hover,
-.menu-head.on {
-  background: rgba(255, 255, 255, 0.12);
-}
-.menu-head u { text-decoration: underline; text-underline-offset: 3px; }
-
-/* The heading's own shortcut, which is the letter Alt reaches it by.
-
-   Hidden until the heading is pointed at, because that is the only time anybody
-   wants it: it tells you the bar can be driven from the keyboard at all, and a
-   row of them across the top is noise the rest of the time. */
-.mh-acc {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
-  opacity: 0;
-  transition: opacity 120ms ease;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.menu-head:hover .mh-acc,
-.menu-head.on .mh-acc,
-.menu-head:focus-visible .mh-acc {
-  opacity: 1;
-}
-
-/* The dropdown.
- *
- * Hidden by an attribute, so nothing in the page can read as open when it is
- * not, and a rule never gets focus. The rest is close to the native one: the
- * label first, the tick in a column of its own so the labels do not shift, and
- * the key in a fixed-width column on the right. */
-.menu-panel {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  min-width: 230px;
-  background: rgb(28, 28, 30);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 8px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
-  padding: 5px;
-  display: none;
-  z-index: 45;
-}
-.menu-panel[data-open] { display: block; }
-
-.menu-item {
-  appearance: none;
-  background: transparent;
-  border: 0;
-  width: 100%;
-  display: grid;
-  grid-template-columns: 18px 1fr auto;
-  align-items: center;
-  gap: 4px;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  padding: 6px 8px;
-  border-radius: 5px;
-  cursor: default;
-}
-.menu-item:hover,
-.menu-item:focus-visible {
-  background: rgba(255, 255, 255, 0.1);
-  outline: none;
-}
-.menu-item.off {
-  color: rgba(255, 255, 255, 0.38);
-  pointer-events: none;
-}
-
-.menu-tick { width: 18px; text-align: center; color: rgb(225, 190, 120); }
-
-/* The key.
-
-   Always drawn. It used to be invisible until the item was pointed at, on the
-   reasoning that a wall of keys was ugly - but this is not a bar of labels, it is
-   a list of actions, and the one question a menu exists to answer is "what does
-   this do and what key is it". Making a person sweep the pointer down every row
-   to find that out is a cost paid on every visit, to buy tidiness on the first. */
-.mi-acc {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.45);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.menu-item:hover .mi-acc,
-.menu-item:focus-visible .mi-acc {
-  color: rgba(255, 255, 255, 0.72);
-}
-
-.menu-rule {
-  height: 1px;
-  background: rgba(255, 255, 255, 0.09);
-  margin: 5px 8px;
-}

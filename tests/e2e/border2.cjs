@@ -33,7 +33,7 @@ async function main() {
 
   /* Which edges are allowed to carry a line, and which must not.
 
-     Three, and no more:
+     Two, and no more:
 
        - the playlist's trailing edge. It is #0a0a0a against a #000 stage, so on
          an empty playlist - both almost entirely black - pressing P looked like
@@ -42,8 +42,6 @@ async function main() {
          only make the panel look narrower than it is.
        - the playlist header's bottom, for the same reason one level in: the rows
          under it are empty on a fresh install.
-       - the menu bar's bottom, because a bar that meets the window with no line
-         between them is a band of a different colour, not a separate row.
 
      Everything else must stay bare. The original rule here was "no styled edge
      anywhere in the chrome", which was right while the panel was invisible and
@@ -57,10 +55,9 @@ async function main() {
     const ALLOWED = {
       '#side': ['InlineEnd'],
       '.side-head': ['Bottom'],
-      '#menubar': ['Bottom'],
     };
     const SIDES = ['Top','Right','Bottom','Left','InlineStart','InlineEnd'];
-    const sels = ['#stage','media-player','media-provider','#side','.side-head','#menubar','#bar','.row','.meta','#play','#loop','#still','#drop','.logo'];
+    const sels = ['#stage','media-player','media-provider','#side','.side-head','#bar','.row','.meta','#play','#loop','#still','#drop','.logo'];
     const styled = sels.map((s) => {
       const e = document.querySelector(s);
       if (!e) return s + ':missing';

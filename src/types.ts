@@ -241,9 +241,6 @@ declare global {
     MediaBridge?: MediaBridge;
     MediaFullscreen?: FullscreenHook;
     I18n?: I18nModule;
-    /** The in-app menu bar. Published by js/menubar.js and mounted by app.js,
-     *  because the menu reads the shortcut table app.js owns. */
-    MountMenuBar?: (host: HTMLElement) => void;
     MediaSettings?: SettingsModule;
 
     /** The preload's bridge, present only in the Electron shell. */
@@ -281,6 +278,20 @@ declare global {
         /* The current bindings, so the shell can keep its menu's accelerators
            honest. Optional: a shell that does not rebuild its menu ignores it. */
         shortcuts?: Record<string, string[]>;
+        /* What this build can actually do, for the items that grey themselves out
+           where the thing they name is not there.
+
+           The shell cannot work this out for itself. It used to ask the page with
+           `executeJavaSync`, which no longer exists in this Electron, and the
+           failure was swallowed - so Add Folder and Clear Playlist were greyed out
+           in the desktop build for as long as the menu existed, and nothing said
+           why. The page knows; it says so here. */
+        capabilities?: {
+          /** The file source can hand back a folder's contents. */
+          openFolder?: boolean;
+          /** The file source can keep a playlist across restarts. */
+          persist?: boolean;
+        };
       }): void;
     };
 

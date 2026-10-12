@@ -24,7 +24,6 @@ export const SCRIPTS = [
   'js/source.js',
   'js/media.js',
   'js/i18n.js',
-  'js/menubar.js',
   'js/settings.js',
   'js/app.js',
 ];

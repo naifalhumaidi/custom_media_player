@@ -1034,93 +1034,39 @@ window.__DONE = (async () => {
     ok('menu: settings opens the dialog', !$('settings-modal').hidden);
     await closeSettings();
 
-    /* --- the bar itself: where it sits, and what it shows ---
+    /* --- there is no menu bar in the page ---
 
-       All three of these are things that were wrong at once and looked fine in
-       isolation. The bar was laid over the top of the window with a transparent
-       background, which put the video underneath it and the playlist's own
-       header behind it - and no single assertion failed, because each was a
-       question about the bar alone and the answer was correct. The question that
-       catches it is about the two of them together. */
-    const barBox = $('menubar').getBoundingClientRect();
-    const stageBox = $('stage').getBoundingClientRect();
-    ok('menu: the bar is above the window, not over it',
-      Math.round(stageBox.top) >= Math.round(barBox.bottom) - 1,
-      'bar ends at ' + Math.round(barBox.bottom) + ', stage starts at ' + Math.round(stageBox.top));
-    ok('menu: the bar has a row of its own',
-      Math.round(barBox.height) > 0 && Math.round(stageBox.height) < window.innerHeight,
-      'bar ' + Math.round(barBox.height) + 'px of ' + window.innerHeight + 'px');
-    ok('menu: the bar is opaque, so nothing shows through it',
-      (() => {
-        const bg = getComputedStyle($('menubar')).backgroundColor;
-        const m = bg.match(/rgba?\(([^)]+)\)/);
-        if (!m) return false;
-        const parts = m[1].split(',').map((n) => parseFloat(n));
-        return parts.length < 4 || parts[3] === 1;
-      })(), getComputedStyle($('menubar')).backgroundColor);
-    /* Before the stage in document order, which is what puts it first in tab
-       order. The mask is a number and `ok()` refuses anything that is not a yes
-       or a no - it cannot tell 4 from true - so it is asked as a question. */
-    ok('menu: it comes first, so Tab reaches it before the controls',
-      !!(($('menubar').compareDocumentPosition($('stage')) & Node.DOCUMENT_POSITION_FOLLOWING)
-        && ($('stage').compareDocumentPosition($('menubar')) & Node.DOCUMENT_POSITION_PRECEDING)));
+       The bar is the system's own. It is frame chrome: it takes its height out
+       of the window before the page is ever given one, and the page cannot draw
+       on it, over it, or beside it.
 
-    /* Every shortcut in a dropdown is drawn from the moment it opens.
+       This was checked the wrong way round before. The bar in the page was drawn
+       with the shortcuts and the heading hover, because a native menu cannot show
+       a heading's key on a pointer - `MenuItem.toolTip` is macOS-only, and
+       `sublabel` with it. It was also, for as long as it existed, a component
+       laid over the top of the window: the video played underneath it and the
+       playlist's own header sat behind it. So the page asserts that there is no
+       bar in it, which is the shape of the thing that has to stay true. */
+    ok('menu: the page draws no bar of its own', !$('#menubar'),
+      'found ' + document.querySelectorAll('[id="menubar"], .menu-head').length + ' bar elements');
+    ok('menu: and no heading markup either', document.querySelectorAll('.menu-head, .menu-panel, .mi-acc').length === 0);
+    ok('menu: the stage is the whole window',
+      Math.round($('stage').getBoundingClientRect().height) >= window.innerHeight - 1,
+      'stage ' + Math.round($('stage').getBoundingClientRect().height) + ' of ' + window.innerHeight + 'px');
 
-       They were hidden until the row was pointed at, on the reasoning that a wall
-       of keys was untidy. That trades a tidy first reading for a cost on every
-       single visit, and the question a menu is opened to answer - what does this
-       do, and what key is it - is the one it refused to answer. */
-    click(document.querySelector('[data-menu="edit"]'));
-    await until(() => !!document.querySelector('[data-panel="edit"][data-open]'), 3000);
-    const itemAccels = [...document.querySelectorAll('[data-panel="edit"] .mi-acc')];
-    ok('menu: every item shows its shortcut without being hovered',
-      itemAccels.length > 0 && itemAccels.every((a) => a.textContent.trim() && parseFloat(getComputedStyle(a).opacity) === 1),
-      itemAccels.map((a) => a.textContent || '(blank)').join(','));
-    /* And they are the table's, not a copy of it.
-
-       Compared against the table rather than against a string written here: a
-       snapshot in the test is a second answer to the same question, and the one
-       that quietly stops being true when a key is reassigned in Settings. The
-       point is that the menu reads the same source as the keyboard does. */
-    const tableKeys = new Set(window.MediaMenu.shortcuts().map((s) => s.pretty));
-    const unknown = itemAccels.map((a) => a.textContent).filter((t) => !tableKeys.has(t));
-    ok('menu: every key shown is one the shortcut table has',
-      unknown.length === 0,
-      unknown.length ? 'not in the table: ' + unknown.join(' | ') : itemAccels.map((a) => a.textContent).join(' | '));
-    ok('menu: none of them is blank',
-      itemAccels.every((a) => a.textContent.trim().length > 0),
-      itemAccels.map((a) => a.textContent).join(' | '));
-    click(document.querySelector('[data-menu="edit"]'));
-
-    /* A heading's own key, on hover only.
-
-       This is the thing the native bar cannot do on Windows or Linux - see the
-       note at the top of src/ui/menubar.ts - and it was silently absent here too:
-       the markup never contained a key to reveal, so the rule that was written for
-       it had nothing to act on. */
-    const heading = document.querySelector('[data-menu="view"]');
-    const headingAcc = heading.querySelector('.mh-acc');
-    ok('menu: a heading carries a shortcut to reveal', !!headingAcc && headingAcc.textContent === 'Alt+V',
-      headingAcc && headingAcc.textContent);
-    ok('menu: and it is hidden until the heading is pointed at',
-      !!headingAcc && parseFloat(getComputedStyle(headingAcc).opacity) === 0,
-      headingAcc && getComputedStyle(headingAcc).opacity);
-
-    /* Whether it appears on a hover.
-
-       `:hover` cannot be reached from a synthetic event, and the alternative -
-       adding a class the app never sets, plus a rule written here to make the
-       assertion pass - would be the test agreeing with itself. So the rule is read
-       out of the stylesheet that actually ships, and asked what it does. */
-    const hoverRule = [...document.styleSheets]
-      .flatMap((sheet) => { try { return [...sheet.cssRules]; } catch { return []; } })
-      .find((r) => r.selectorText && /\.menu-head:hover\s+\.mh-acc/.test(r.selectorText));
-    ok('menu: the sheet reveals a heading key when it is pointed at',
-      !!hoverRule && /opacity:\s*1/.test(hoverRule.style.cssText),
-      hoverRule ? hoverRule.cssText : 'no rule for .menu-head:hover .mh-acc');
-    /* Forced, because a synthetic pointer event does not set :hover and a test
-       that passed on the class instead would be testing the test. */
+    /* What the native menu is built from, which is the only part of it the page
+       owns. The shell asks for these and renders nothing itself: the labels come
+       from the translation table and the keys from the shortcut table, and an
+       action with no entry in either gets no item rather than a broken one. */
+    const named = window.MediaMenu.shortcuts();
+    ok('menu: every shortcut the shell will read is there',
+      named.length >= 22 && named.every((sc) => sc.id && sc.pretty && sc.pretty.trim()),
+      named.filter((sc) => !sc.id || !sc.pretty || !sc.pretty.trim()).map((sc) => sc.id || '(no id)').join(','));
+    const bindings = window.MediaMenu.bindings;
+    const unbindable = named.filter((sc) => !Array.isArray(bindings[sc.id]) || !bindings[sc.id].length);
+    ok('menu: and each one has a key the shell can turn into an accelerator',
+      unbindable.length === 0,
+      unbindable.length ? 'no key for ' + unbindable.map((sc) => sc.id).join(',') : 'all bound');
   };
 
   /* ================================================================== 10. every

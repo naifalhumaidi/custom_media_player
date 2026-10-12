@@ -902,7 +902,6 @@ function syncIcons(playing) {
   $("fs").classList.toggle("on", inFs);
   $("fs").title = inFs ? t("bar.fullscreenExitKey") : t("bar.fullscreenKey");
   $("fs").setAttribute("aria-label", inFs ? t("bar.fullscreenExit") : t("bar.fullscreen"));
-  document.body.classList.toggle("fs", inFs);
   $("mute").setAttribute("aria-label", muted ? t("bar.unmute") : t("bar.mute"));
   paintStateTooltips();
   $("play").setAttribute("aria-label", isPlaying ? t("bar.pause") : t("bar.play"));
@@ -911,7 +910,6 @@ function syncIcons(playing) {
   publishMenuState();
 }
 __name(syncIcons, "syncIcons");
-stage.addEventListener("dblclick", () => media.toggleFullscreen());
 const helpModal = $("help-modal");
 helpModal.hidden = true;
 $("settings-modal").hidden = true;
@@ -1107,6 +1105,7 @@ function publishMenuState() {
   const shell = window.MediaShell;
   if (!shell || typeof shell.menuState !== "function") return;
   try {
+    const fs = window.MediaFileSource;
     shell.menuState({
       loop: $("loop").classList.contains("on"),
       autoplay: $("autoplay").classList.contains("on"),
@@ -1115,7 +1114,11 @@ function publishMenuState() {
          from this table and a key reassigned in Settings has to reach the menu or
          the menu goes on naming the old one. The shell compares them and rebuilds
          only when they differ. */
-      shortcuts: currentShortcuts()
+      shortcuts: currentShortcuts(),
+      capabilities: {
+        openFolder: typeof fs?.openFolder === "function",
+        persist: typeof fs?.canPersist === "function" && !!fs.canPersist()
+      }
     });
   } catch {
   }
@@ -1414,7 +1417,6 @@ async function restore() {
   const pending = queued;
   queued = null;
   if (pending) for (const batch of pending) addItems(batch.items, batch.play);
-  mountTheMenuBar();
   if (state?.items?.length && !source.canPersist()) {
     state.items = [];
   }
@@ -1443,19 +1445,6 @@ window.I18n.onChange(() => {
   }
   render();
 });
-function mountTheMenuBar() {
-  const mount = window.MountMenuBar;
-  if (typeof mount !== "function") {
-    console.warn("[app] the menu bar module did not load; there will be no menu bar");
-    return;
-  }
-  try {
-    mount(document.body);
-  } catch (err) {
-    console.warn("[app] the menu bar could not be mounted:", err);
-  }
-}
-__name(mountTheMenuBar, "mountTheMenuBar");
 restore().catch((err) => {
   console.warn("[app] could not restore the saved state:", err);
   ready = true;
@@ -1463,6 +1452,5 @@ restore().catch((err) => {
   queued = null;
   if (pending) for (const batch of pending) addItems(batch.items, batch.play);
   render();
-  mountTheMenuBar();
 });
 //# sourceMappingURL=app.js.map

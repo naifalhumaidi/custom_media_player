@@ -17,7 +17,7 @@
    A registered scheme is opaque to media elements, which puts us back where the
    Tauri build started. */
 
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
@@ -379,14 +379,235 @@ function send(command) {
 }
 
 
-/* The shell has no native menu any more, so there is nothing to keep in step with
-   the page - the in-page bar reads the same shortcut table the page writes, and
-   sends the same commands. The one thing a native menu used to provide on its own
-   is a way to quit, which the page now asks for by name. */
+/* A checkbox item's click is exactly the same as any other item's: send the
+   command and let the page do the work, then let the page's reply set the tick.
+
+   It used to also try to set the tick here, through `setMenuItemChecked` with an
+   optional-call guard - a method that is not an Electron API, so the call did
+   nothing at all, and it did nothing at all *silently*, which is the one thing a
+   guard written that way is for. Nothing sets a tick from this side of the
+   bridge any more; the page reports state and the menu item is updated in place
+   from that. One source of truth, and it is the one that also owns the state. */
+const toggleItem = (command) => () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('menu-command', command);
+};
+
+/* What the page last told us, and the menu built from it.
+
+   The menu used to ask the page three questions of its own - which keys are
+   bound, whether this build can open a folder, whether it can persist a playlist
+   - using `webContents.executeJavaSync`. That method does not exist in this
+   Electron; `executeJava` went with it, and both were inside a try/catch. So the
+   calls failed silently, every time, and the menu came up with no accelerators on
+   any of its seventeen items and Add Folder and Clear Playlist permanently
+   greyed out. It looked like a menu. It was not one.
+
+   The page already sends `menu-state` on every state change, so it sends what the
+   menu needs in that one message: the bindings, the three checkmarks, and what
+   this build can do. Nothing here reaches into the page, so nothing here can
+   break because the page moved on.
+
+   The first build happens before the page has said anything, and is therefore
+   blank where it will not be blank a moment later - accelerators undefined,
+   nothing greyed out. `menu-state` rebuilds it. `accelerator: undefined` is what
+   Electron wants for "no key"; the alternative, a key left over from an earlier
+   build, is the thing that makes a menu advertise a shortcut that does nothing.
+
+   An action with no entry in the table gets no accelerator rather than a stale
+   one. The action is still in the menu, and nothing on screen claims a key for
+   it - which is the honest answer. */
+let menuState = { shortcuts: {}, capabilities: {} };
+let lastMenuShortcuts = '';
+
+/* On `ipcMain`, not on the window's own webContents.
+
+   A renderer reaches the main process with `ipcRenderer.send`, and that arrives
+   on `ipcMain`. Listening for it on `mainWindow.webContents` - which is what this
+   did for as long as there was a menu - catches nothing at all: the handler simply
+   never ran. So the menu came up with no accelerators on any of its items, its
+   checkmarks frozen at whatever they were when it was built, and Add Folder and
+   Clear Playlist greyed out, and every one of those looked like a deliberate
+   choice. The unit tests passed because they test the accelerator translation,
+   which was always right; what was wrong was that the result was never used.
+
+   On ipcMain rather than the window, so this is registered once however many
+   windows are opened. */
+/* The two checkbox items follow the page. Without this they are whatever they
+   were at build time, which is "off" - so Loop would show unticked while the
+   playlist was looping, and unticking it in the menu would be the only way to
+   see the truth. */
+ipcMain.on('menu-state', (_e, state) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+
+  /* Stored whatever happens next, because the menu below is built from it and
+     a build that ran against a stale copy would put the old keys back. */
+  menuState = {
+    shortcuts: state.shortcuts || {},
+    capabilities: state.capabilities || {},
+    loop: !!state.loop,
+    autoplay: !!state.autoplay,
+    mute: !!state.mute,
+  };
+
+  /* The checkmarks go on the live MenuItem, which updates in place.
+
+     `BrowserWindow.setMenuItemChecked` - which this used to call, behind a `?.`
+     that hid the problem - is not an Electron method at all. It is `undefined`,
+     so the optional call did nothing, and the ticks stayed at whatever the menu
+     was built with. Loop showed unticked while the playlist was looping, and
+     unticking it in the menu was the only way to see the truth. A method that
+     does not exist, called through a guard written to look tolerant, is a method
+     that cannot fail and cannot work.
+
+     In place rather than by rebuilding, because a menu rebuilt under a person's
+     open cursor is a menu that closes, and this arrives on every state change. */
+  const live = Menu.getApplicationMenu();
+  if (live) {
+    for (const [id, on] of [
+      ['toggle-loop', !!state.loop],
+      ['toggle-autoplay', !!state.autoplay],
+      ['toggle-mute', !!state.mute],
+    ]) {
+      const item = live.getMenuItemById(id);
+      if (item) item.checked = on;
+    }
+  }
+
+  /* So the menu is built again, and only when the keys have actually changed -
+     which includes the first message, where they went from none to all of them.
+     Rebuilding on every play and pause would be a menu that closes every time
+     somebody paused. */
+  const after = JSON.stringify(menuState.shortcuts);
+  if (lastMenuShortcuts !== after) buildMenu();
+});
+
 function buildMenu() {
-  const { Menu } = require('electron');
-  Menu.setApplicationMenu(null);
-  ipcMain.on('menu-quit', () => app.quit());
+  const { accelFor } = require('./accelerators.cjs');
+  const B = menuState.shortcuts || {};
+  const caps = menuState.capabilities || {};
+  lastMenuShortcuts = JSON.stringify(B);
+
+  const template = [
+    {
+      label: 'File',
+      submenu: [
+        { label: 'Open Files', accelerator: accelFor(B, 'open'), click: send('open-files') },
+        { label: 'Add Files', accelerator: accelFor(B, 'addFiles'), click: send('add-files') },
+        { label: 'Add Folder', accelerator: accelFor(B, 'addFolder'), click: send('add-folder'), enabled: !!caps.openFolder },
+        { type: 'separator' },
+        {
+          label: 'Clear Playlist',
+          /* Was CmdOrCtrl+Shift+X, hardcoded, while the page has always bound
+             Shift+X. So the menu named a key that the page did not answer to,
+             and the key the page did answer to was not in the menu. Two spellings
+             of one action and neither one led to the other - pressing the
+             advertised key worked, because the menu handled it, and pressing the
+             documented key also worked, because the page handled it, which is
+             exactly why nobody could tell the two apart until the keys moved. */
+          accelerator: accelFor(B, 'clear'),
+          click: send('clear-playlist'),
+          /* Only where a playlist can outlive the session. A clear button that
+             throws everything away for nothing is worse than no clear button. */
+          enabled: !!caps.persist,
+        },
+        { type: 'separator' },
+        { role: 'quit', label: 'Quit' },
+      ],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        {
+          label: 'Play / Pause',
+          accelerator: accelFor(B, 'playPause'),
+          /* Registered as an accelerator rather than handled here, because the
+             page already owns Space and owns it correctly - including the rule
+             that a focused control gets it first. Two handlers would fire. */
+          registerAccelerator: true,
+          click: send('play-pause'),
+        },
+        { label: 'Previous', accelerator: accelFor(B, 'previous'), registerAccelerator: true, click: send('previous') },
+        { label: 'Next', accelerator: accelFor(B, 'next'), registerAccelerator: true, click: send('next') },
+        /* No Settings here. It is a top-level item of its own - that was the
+           decision, not an accident - and giving it a second accelerator in a
+           submenu registered CmdOrCtrl+, twice. Electron keeps the last
+           registration, so the Edit copy was unreachable and the menu showed the
+           same key on two items. */
+      ],
+    },
+    {
+      label: 'View',
+      submenu: [
+        { label: 'Show Playlist', accelerator: accelFor(B, 'panel'), click: send('toggle-panel') },
+        { label: 'Show Controls', accelerator: accelFor(B, 'controls'), click: send('toggle-controls') },
+        { type: 'separator' },
+        { label: 'Default', accelerator: accelFor(B, 'fitDefault'), click: send('fit-contain') },
+        { label: 'Crop', accelerator: accelFor(B, 'fitCrop'), click: send('fit-cover') },
+        { label: 'Stretch', accelerator: accelFor(B, 'fitStretch'), click: send('fit-stretch') },
+        { type: 'separator' },
+        { label: 'Enter Fullscreen', accelerator: accelFor(B, 'fullscreen'), click: send('fullscreen') },
+        { type: 'separator' },
+        { role: 'reload' },
+        { role: 'toggleDevTools' },
+      ],
+    },
+    {
+      label: 'Playback',
+      submenu: [
+        {
+          label: 'Loop Playlist',
+          /* The id is what the checkmark is set against. Without it
+             `setMenuItemChecked('toggle-loop', ...)` had nothing to find and the
+             menu said "off" for the rest of time, however many times Loop was
+             switched on. Three items and no ids anywhere in this menu. */
+          id: 'toggle-loop',
+          type: 'checkbox',
+          accelerator: accelFor(B, 'loop'),
+          checked: !!menuState.loop,
+          click: toggleItem('toggle-loop'),
+        },
+        {
+          label: 'Auto Start',
+          id: 'toggle-autoplay',
+          type: 'checkbox',
+          accelerator: accelFor(B, 'autoplay'),
+          checked: !!menuState.autoplay,
+          click: toggleItem('toggle-autoplay'),
+        },
+        {
+          /* The one transport control the menu had no item for. Mute is a
+             shortcut with nothing on screen to say so, which is how a key that
+             works ends up looking broken. */
+          label: 'Mute',
+          id: 'toggle-mute',
+          type: 'checkbox',
+          accelerator: accelFor(B, 'mute'),
+          checked: !!menuState.mute,
+          click: toggleItem('toggle-mute'),
+        },
+      ],
+    },
+    {
+      /* Standalone, not a submenu item.
+
+         Settings and Info are places a person goes to deliberately, not things
+         they browse for. Every application on this desktop - the browser, the
+         file manager, the IDE - puts them at the top level, and burying them
+         under Help is the thing that makes a menu feel old. */
+      label: 'Info',
+      click: send('info'),
+    },
+    {
+      label: 'Settings',
+      accelerator: accelFor(B, 'settings'),
+      click: send('settings'),
+    },
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+  return menu;
 }
 
 /* ------------------------------------------------------------------ */
@@ -462,10 +683,6 @@ async function createWindow() {
      link to somewhere else would leave the user in a page with no way back. */
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
-  /* The two checkbox items follow the page. Without this they are whatever they
-     were at build time, which is "off" - so Loop would show unticked while the
-     playlist was looping, and unticking it in the menu would be the only way to
-     see the truth. */
   mainWindow.webContents.on('will-navigate', (event, url) => {
     if (url !== mainWindow.webContents.getURL()) event.preventDefault();
   });

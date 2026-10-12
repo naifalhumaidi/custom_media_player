@@ -1401,11 +1401,6 @@ function syncIcons(playing?: boolean) {
   $('fs').classList.toggle('on', inFs);
   $('fs').title = inFs ? t('bar.fullscreenExitKey') : t('bar.fullscreenKey');
   $('fs').setAttribute('aria-label', inFs ? t('bar.fullscreenExit') : t('bar.fullscreen'));
-  /* The menu bar is a row of the window, so fullscreen takes it with the rest.
-     Its height is a variable the stage is measured against, so the two are
-     cleared together - hiding the bar alone would leave the picture starting
-     thirty pixels down with nothing above it. */
-  document.body.classList.toggle('fs', inFs);
   /* the toggles announce their ACTION, so the accessible name has to follow the
      state: "Mute" while muted would be a lie */
   $('mute').setAttribute('aria-label', muted ? t('bar.unmute') : t('bar.mute'));
@@ -1428,8 +1423,13 @@ function syncIcons(playing?: boolean) {
   publishMenuState();
 }
 
-/* double-click anywhere on the picture toggles fullscreen for the whole app */
-stage.addEventListener('dblclick', () => media.toggleFullscreen());
+/* Fullscreen is the F key, the button, and the menu item - and nothing else.
+
+   Double-clicking the picture used to do it as well, and was removed. It was not
+   discoverable (there is no hint anywhere that a double-click does anything), it
+   fires while reaching for a scrub on the timeline, and on a track that is eight
+   seconds long a person trying to pause has no way to know they fullscreened
+   instead. A gesture with no label and a wrong answer is worse than no gesture. */
 
 /* ---------- instructions dialog ---------- */
 
@@ -1722,6 +1722,16 @@ function publishMenuState() {
   const shell = window.MediaShell;
   if (!shell || typeof shell.menuState !== 'function') return;
   try {
+    /* What this build of the shell can actually do.
+
+       The menu used to ask the page these two questions for itself, with
+       `executeJavaSync`. That method does not exist in this Electron any more -
+       `webContents.executeJava` went with it - and because the call was wrapped
+       in a try/catch it failed silently: Add Folder and Clear Playlist were
+       permanently greyed out and nothing said why. The page knows both of these,
+       and it already sends this message, so it says them here instead of the
+       shell reaching into a page it can no longer talk to synchronously. */
+    const fs = (window as any).MediaFileSource;
     shell.menuState({
       loop: $('loop').classList.contains('on'),
       autoplay: $('autoplay').classList.contains('on'),
@@ -1731,6 +1741,10 @@ function publishMenuState() {
          the menu goes on naming the old one. The shell compares them and rebuilds
          only when they differ. */
       shortcuts: currentShortcuts(),
+      capabilities: {
+        openFolder: typeof fs?.openFolder === 'function',
+        persist: typeof fs?.canPersist === 'function' && !!fs.canPersist(),
+      },
     });
   } catch { /* the shell is on its way out; nothing to do */ }
 }
@@ -2171,10 +2185,6 @@ async function restore() {
   queued = null;
   if (pending) for (const batch of pending) addItems(batch.items, batch.play);
 
-  /* The state has landed, so anything that reads it - the menu bar's ticks and
-     its greyed items - sees the truth. */
-  mountTheMenuBar();
-
   /* Only rebuild a playlist the source can actually resolve. Restoring rows
      that carry no file would put the app on screen with a full list that can
      never play, every duration stuck at "…", and an unhandled rejection from
@@ -2226,23 +2236,6 @@ const zeroTime = () => fmt(0);
   render();
 });
 
-/* The menu bar, mounted here rather than by the page, because it reads the
-   shortcut table this file owns - so it is mounted once that table exists, and
-   after the state is restored, so nothing in it is greyed out for a frame
-   because the playlist had not been read yet. */
-function mountTheMenuBar() {
-  const mount = window.MountMenuBar;
-  if (typeof mount !== 'function') {
-    console.warn('[app] the menu bar module did not load; there will be no menu bar');
-    return;
-  }
-  try {
-    mount(document.body);
-  } catch (err) {
-    console.warn('[app] the menu bar could not be mounted:', err);
-  }
-}
-
 restore().catch((err) => {
   /* A failed restore must not leave the app deaf to every drop. */
   console.warn('[app] could not restore the saved state:', err);
@@ -2251,5 +2244,4 @@ restore().catch((err) => {
   queued = null;
   if (pending) for (const batch of pending) addItems(batch.items, batch.play);
   render();
-  mountTheMenuBar();
 });
