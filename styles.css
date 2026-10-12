@@ -7,8 +7,20 @@
      mismatch was the thing that read as unfinished. */
   --r: 7px;
   --r-lg: 14px;
+  /* The menu bar's height. A variable because the stage is measured against it,
+     and a stage measured against a number typed in a second place is a stage
+     that is wrong the moment one of the two is changed. */
+  --menubar-h: 30px;
 }
 
+/* The window is two rows: the menu bar, then everything else.
+
+   A column, rather than a bar positioned over the top of the stage. Fixed and
+   absolute both left `#stage` starting at the top of the viewport with the bar
+   laid over its first thirty pixels - so the playlist's own header row sat
+   behind the bar, which is the same complaint one level down: a component on top
+   of another component. In the flow, the bar takes its height and the stage
+   takes the rest, and neither can cover the other. */
 html, body {
   margin: 0;
   height: 100%;
@@ -18,14 +30,30 @@ html, body {
   overflow: hidden;
 }
 
+body {
+  /* the dynamic viewport, so a mobile browser's collapsing bar does not leave a
+     strip of black under the stage - the reason the stage used 100dvh */
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
 #stage {
   position: relative;
-  width: 100vw;
-  height: 100vh;
-  height: 100dvh;
+  width: 100%;
+  flex: 1 1 auto;
+  /* Without this a flex item refuses to shrink below its content, and a long
+     playlist would push the control bar off the bottom of the window. */
+  min-height: 0;
   background: #000;
   overflow: hidden;
 }
+
+/* Fullscreen is the window and nothing else, so the bar goes with it. Left in
+   place it is a row of chrome over the picture with no title bar to justify it,
+   and because the stage is sized by what is left over, hiding it hands the whole
+   height back in the same breath. */
+body.fs #menubar { display: none; }
 
 /* the player fills the stage; the <video> inside it carries the fit mode */
 #media, #still {
@@ -140,6 +168,14 @@ media-provider > video {
   width: 300px;
   max-width: 78vw;
   background: #0a0a0a;
+  /* A line down the edge that faces the window's own content.
+
+     The panel is #0a0a0a and the stage is #000: on an empty playlist, where both
+     are almost entirely black, pressing P appeared to do nothing at all. The
+     outer edge gets no border because that one is the window's edge - there is
+     nothing to draw a line against, and a line there would only make the panel
+     look narrower than it is. */
+  border-inline-end: 1px solid rgba(255, 255, 255, 0.16);
 }
 
 #stage.list #side { display: flex; }
@@ -150,6 +186,10 @@ media-provider > video {
   gap: 6px;
   padding: 9px 10px;
   background: #111;
+  /* The header sits on the same near-black as the rows under it, and the rows
+     are empty on a fresh install - so the top of the panel read as one flat
+     rectangle. This is the other line the panel needs: the one inside it. */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .side-title {
@@ -630,6 +670,22 @@ media-time { color: inherit; font: inherit; }
 
 /* an image has no timeline, seek or volume */
 #stage[data-kind="image"] :is(#play, #back, #fwd, .bar-track, .time, #mute, .vds-volume) { display: none; }
+
+/* Nothing loaded: the timeline is not a timeline yet.
+
+   It stays where it is rather than disappearing - a control bar that rearranges
+   itself as files arrive moves the buttons a person has already found - but it
+   cannot be dragged, and it says so with a plain cursor rather than a pointing
+   one. Dragging a playhead with no clip behind it is a gesture that means
+   nothing and appears to work.
+
+   The volume slider is deliberately not included. Turning the volume down
+   before choosing something to play is a reasonable thing to want, and it works:
+   it is app-held state, not a position in a file that does not exist yet. */
+#stage[data-kind=""] media-time-slider {
+  pointer-events: none;
+  cursor: default;
+}
 
 /* icon buttons: square, no text, one glyph at a time */
 .btn.ic {
@@ -1241,30 +1297,27 @@ tr:has(.key-cell.capturing) th { color: #8f8f8f; }
  * decoration on a heading is the underline the mnemonic puts under one letter,
  * because a heading is a button, and the hover background is all that says so.
  *
- * The shortcut is not part of the look. It is drawn the same grey the disabled
- * items use, and only while the item is hovered or focused - because a wall of
- * keys across every row was the thing that made it ugly, and a person finds a
- * shortcut the first time they reach for it, not the fifteenth. */
+ * The shortcut is not part of the look. Only on a HEADING, and only while it is
+ * pointed at. The items inside a dropdown always show theirs - that is where a
+ * person looks for "what key does this do", and hiding it there means reading
+ * every row one at a time to find out. */
 #menubar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 40;
+  /* In the flow: the first row of the body. `position: fixed` was tried and put
+     the bar over the stage rather than above it. */
+  flex: 0 0 var(--menubar-h);
+  /* Its own surface. Transparent was what made it read as an overlay rather
+     than as a bar: the video showed through it and the headings floated. */
+  background: #141416;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: stretch;
+  height: var(--menubar-h);
   padding: 0 6px;
-  background: rgba(0, 0, 0, 0);
-  transition: background 160ms ease;
+  box-sizing: border-box;
   font-family: inherit;
   font-size: 13px;
   color: rgb(225, 225, 225);
   user-select: none;
-}
-#menubar:hover,
-#menubar:focus-within {
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(6px);
 }
 
 .menu-wrap { position: relative; }
@@ -1275,15 +1328,36 @@ tr:has(.key-cell.capturing) th { color: #8f8f8f; }
   border: 0;
   color: inherit;
   font: inherit;
-  padding: 7px 10px;
-  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
   cursor: default;
 }
-#menubar:hover .menu-head:hover,
+.menu-head:hover,
 .menu-head.on {
   background: rgba(255, 255, 255, 0.12);
 }
 .menu-head u { text-decoration: underline; text-underline-offset: 3px; }
+
+/* The heading's own shortcut, which is the letter Alt reaches it by.
+
+   Hidden until the heading is pointed at, because that is the only time anybody
+   wants it: it tells you the bar can be driven from the keyboard at all, and a
+   row of them across the top is noise the rest of the time. */
+.mh-acc {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  opacity: 0;
+  transition: opacity 120ms ease;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.menu-head:hover .mh-acc,
+.menu-head.on .mh-acc,
+.menu-head:focus-visible .mh-acc {
+  opacity: 1;
+}
 
 /* The dropdown.
  *
@@ -1335,21 +1409,21 @@ tr:has(.key-cell.capturing) th { color: #8f8f8f; }
 .menu-tick { width: 18px; text-align: center; color: rgb(225, 190, 120); }
 
 /* The key.
- *
- * This is the whole change, and it is one rule: the key is drawn the same grey
- * the disabled items use, and it is invisible until the item is hovered or
- * focused. A person who is reading reaches for it and finds it; a person who
- * only wants "Open Files" is not asked to parse a column of keys on every row. */
+
+   Always drawn. It used to be invisible until the item was pointed at, on the
+   reasoning that a wall of keys was ugly - but this is not a bar of labels, it is
+   a list of actions, and the one question a menu exists to answer is "what does
+   this do and what key is it". Making a person sweep the pointer down every row
+   to find that out is a cost paid on every visit, to buy tidiness on the first. */
 .mi-acc {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.38);
-  opacity: 0;
-  transition: opacity 120ms ease;
+  color: rgba(255, 255, 255, 0.45);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .menu-item:hover .mi-acc,
 .menu-item:focus-visible .mi-acc {
-  opacity: 1;
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .menu-rule {

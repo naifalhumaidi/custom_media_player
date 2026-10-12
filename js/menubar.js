@@ -161,11 +161,18 @@ function mountMenuBar(host) {
     button.dataset.menu = heading.id;
     button.setAttribute("aria-haspopup", heading.items ? "menu" : "false");
     button.setAttribute("aria-expanded", "false");
-    button.textContent = heading.label;
-    button.innerHTML = heading.label.replace(
+    const name = document.createElement("span");
+    name.className = "mh-name";
+    name.innerHTML = heading.label.replace(
       new RegExp(`^(${heading.alt})`),
       '<u aria-hidden="true">$1</u>'
-    ) + "";
+    );
+    const accel = document.createElement("span");
+    accel.className = "mh-acc";
+    accel.textContent = `Alt+${heading.alt}`;
+    accel.setAttribute("aria-hidden", "true");
+    name.setAttribute("aria-label", heading.label);
+    button.append(name, accel);
     button.addEventListener("click", () => {
       if (openId === heading.id) {
         close();
@@ -250,7 +257,7 @@ function mountMenuBar(host) {
     attributes: true,
     attributeFilter: ["class"]
   });
-  host.appendChild(nav);
+  host.insertBefore(nav, host.firstChild);
   refresh();
 }
 __name(mountMenuBar, "mountMenuBar");

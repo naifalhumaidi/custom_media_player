@@ -448,6 +448,7 @@ function clearAll(keepUndo) {
   items = [];
   index = 0;
   stage.dataset.kind = '';
+  syncTimelineAvailability();
   drop.hidden = false;
   renderEmptyState();
   $('title').textContent = '';
@@ -456,12 +457,32 @@ function clearAll(keepUndo) {
   scheduleSave();
 }
 
+/* The timeline follows what is loaded.
+
+   With nothing loaded there is no position to move, and dragging a playhead that
+   cannot mean anything is worse than not having one: it answers the gesture and
+   changes nothing, so it reads as a control that works. `pointer-events: none`
+   in the stylesheet is what actually stops the drag - a custom element does not
+   honour `disabled` on its own - and this says the same thing to a screen
+   reader, which cannot see a pointer rule.
+
+   An image is the same case by another name: it has no timeline either, and the
+   stylesheet hides the row outright, so it is marked disabled here as well. */
+function syncTimelineAvailability() {
+  const slider = document.querySelector('media-time-slider');
+  if (!slider) return;
+  const seekable = !!stage.dataset.kind && stage.dataset.kind !== 'image';
+  slider.toggleAttribute('disabled', !seekable);
+  slider.setAttribute('aria-disabled', String(!seekable));
+}
+
 function load(i, play) {
   if (!items.length) return;
   index = mod(i, items.length);
   erroredIndex = -1;
   const it = items[index];
   stage.dataset.kind = String(it.kind);
+  syncTimelineAvailability();
 
   let url;
   try {
@@ -1380,6 +1401,11 @@ function syncIcons(playing?: boolean) {
   $('fs').classList.toggle('on', inFs);
   $('fs').title = inFs ? t('bar.fullscreenExitKey') : t('bar.fullscreenKey');
   $('fs').setAttribute('aria-label', inFs ? t('bar.fullscreenExit') : t('bar.fullscreen'));
+  /* The menu bar is a row of the window, so fullscreen takes it with the rest.
+     Its height is a variable the stage is measured against, so the two are
+     cleared together - hiding the bar alone would leave the picture starting
+     thirty pixels down with nothing above it. */
+  document.body.classList.toggle('fs', inFs);
   /* the toggles announce their ACTION, so the accessible name has to follow the
      state: "Mute" while muted would be a lie */
   $('mute').setAttribute('aria-label', muted ? t('bar.unmute') : t('bar.mute'));
@@ -1489,6 +1515,7 @@ media.on('play', syncIconsFromEvent);
 media.on('pause', syncIconsFromEvent);
 media.onFullscreenChange(syncIconsFromEvent);
 syncIcons();
+syncTimelineAvailability();
 
 /* ---------------- the shortcut table in Settings ---------------- */
 

@@ -256,6 +256,7 @@ function clearAll(keepUndo) {
   items = [];
   index = 0;
   stage.dataset.kind = "";
+  syncTimelineAvailability();
   drop.hidden = false;
   renderEmptyState();
   $("title").textContent = "";
@@ -264,12 +265,21 @@ function clearAll(keepUndo) {
   scheduleSave();
 }
 __name(clearAll, "clearAll");
+function syncTimelineAvailability() {
+  const slider = document.querySelector("media-time-slider");
+  if (!slider) return;
+  const seekable = !!stage.dataset.kind && stage.dataset.kind !== "image";
+  slider.toggleAttribute("disabled", !seekable);
+  slider.setAttribute("aria-disabled", String(!seekable));
+}
+__name(syncTimelineAvailability, "syncTimelineAvailability");
 function load(i, play) {
   if (!items.length) return;
   index = mod(i, items.length);
   erroredIndex = -1;
   const it = items[index];
   stage.dataset.kind = String(it.kind);
+  syncTimelineAvailability();
   let url;
   try {
     url = source.urlFor(it);
@@ -892,6 +902,7 @@ function syncIcons(playing) {
   $("fs").classList.toggle("on", inFs);
   $("fs").title = inFs ? t("bar.fullscreenExitKey") : t("bar.fullscreenKey");
   $("fs").setAttribute("aria-label", inFs ? t("bar.fullscreenExit") : t("bar.fullscreen"));
+  document.body.classList.toggle("fs", inFs);
   $("mute").setAttribute("aria-label", muted ? t("bar.unmute") : t("bar.mute"));
   paintStateTooltips();
   $("play").setAttribute("aria-label", isPlaying ? t("bar.pause") : t("bar.play"));
@@ -953,6 +964,7 @@ media.on("play", syncIconsFromEvent);
 media.on("pause", syncIconsFromEvent);
 media.onFullscreenChange(syncIconsFromEvent);
 syncIcons();
+syncTimelineAvailability();
 let capturing = null;
 function renderShortcutTable() {
   const body = document.getElementById("shortcut-rows");

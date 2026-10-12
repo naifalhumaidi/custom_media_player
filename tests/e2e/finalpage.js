@@ -64,7 +64,17 @@ window.__DONE = (async () => {
     await wait(80);
     return document.activeElement === document.body || document.activeElement === null;
   };
-  const css = (el, prop) => (el ? getComputedStyle(el).getPropertyValue(prop).trim() : '(no element)');
+  /* getPropertyValue wants the CSS name. Handed the JS one - `pointerEvents` -
+     it returns an empty string rather than raising, so a check against it reads
+     as "the value is not what I expected" and points at the app instead of at the
+     call. `cursor` worked because it has no hyphen and the two spellings happen
+     to coincide, which is what made this worth fixing rather than working around. */
+  const css = (el, prop) => {
+    if (!el) return '(no element)';
+    const cs = getComputedStyle(el);
+    const v = cs.getPropertyValue(prop).trim();
+    return v || String(cs[prop] || '').trim() || '(empty)';
+  };
 
   /* Wait for a thing rather than for a length of time. A fixed sleep is right in
      exactly one place and wrong everywhere else: it passes on a fast machine
@@ -264,6 +274,37 @@ window.__DONE = (async () => {
     ok('start: the counter is empty', $('counter').textContent === '');
     ok('start: the title is empty', $('title').textContent === '');
     ok('start: no notice is showing', $('notice').hidden);
+
+    /* The timeline, with no clip behind it.
+
+       Dragging a playhead that cannot mean anything answers the gesture and
+       changes nothing, so it reads as a control that works. Volume is left alone
+       on purpose - turning it down before choosing something to play is
+       reasonable and it works, because volume is app state rather than a position
+       in a file that does not exist yet. */
+    const slider = q('media-time-slider');
+    ok('start: the timeline cannot be dragged with nothing loaded',
+      css(slider, 'pointer-events') === 'none' && css(slider, 'cursor') === 'default',
+      'pointer-events: ' + css(slider, 'pointer-events') + ', cursor: ' + css(slider, 'cursor'));
+    ok('start: and it says so to anything that cannot see a cursor',
+      slider.hasAttribute('disabled') && slider.getAttribute('aria-disabled') === 'true');
+    /* The gesture itself, because a rule that says pointer-events:none and an
+       element that still answers a drag are two different failures. */
+    const seekRect = slider.getBoundingClientRect();
+    const at = {
+      bubbles: true, cancelable: true, composed: true, pointerId: 1, isPrimary: true, button: 0,
+      clientX: seekRect.left + seekRect.width * 0.8, clientY: seekRect.top + seekRect.height / 2,
+    };
+    slider.dispatchEvent(new PointerEvent('pointerdown', { ...at, buttons: 1 }));
+    slider.dispatchEvent(new PointerEvent('pointermove', { ...at, buttons: 1 }));
+    slider.dispatchEvent(new PointerEvent('pointerup', { ...at, buttons: 0 }));
+    await wait(300);
+    ok('start: and dragging it does nothing',
+      window.MediaBridge.currentTime === 0 && !window.MediaBridge.playing,
+      'at ' + window.MediaBridge.currentTime + 's, playing=' + window.MediaBridge.playing);
+    /* The volume slider is beside it and is deliberately still live. */
+    ok('start: the volume slider is still draggable, which is a different control',
+      css(q('media-volume-slider'), 'pointer-events') !== 'none');
   };
 
   /* ================================================================== 2. adding
@@ -638,6 +679,29 @@ window.__DONE = (async () => {
     await until(() => $('stage').classList.contains('list'), 3000);
     ok('panel: p opens it', $('stage').classList.contains('list'));
     ok('panel: the list is shown', !$('list').hidden);
+
+    /* A line on the edge that faces the window's own content, and none on the
+       edge that IS the window's.
+
+       The panel is #0a0a0a on a #000 stage. With an empty playlist - which is
+       exactly when a person first presses P - both are almost entirely black, so
+       the panel appeared to do nothing at all. The window's own edge gets no line
+       because there is nothing to draw against there, and a line would only make
+       the panel look narrower than it is.
+
+       Logical, not physical: in Arabic the panel sits on the right and the line
+       has to be on its left. Naming "right" would pass here and fail in the
+       language it is for. */
+    ok('panel: the edge facing the content has a line',
+      parseFloat(css($('side'), 'border-inline-end-width')) > 0,
+      'inline-end ' + css($('side'), 'border-inline-end-width'));
+    ok('panel: and the window edge has none',
+      parseFloat(css($('side'), 'border-inline-start-width')) === 0,
+      'inline-start ' + css($('side'), 'border-inline-start-width'));
+    ok('panel: the header is separated from the rows under it',
+      parseFloat(css(q('.side-head'), 'border-bottom-width')) > 0,
+      'bottom ' + css(q('.side-head'), 'border-bottom-width'));
+
     key('p');
     await until(() => !$('stage').classList.contains('list'), 3000);
     ok('panel: p closes it', !$('stage').classList.contains('list'));
@@ -969,6 +1033,94 @@ window.__DONE = (async () => {
     await until(() => !$('settings-modal').hidden, 3000);
     ok('menu: settings opens the dialog', !$('settings-modal').hidden);
     await closeSettings();
+
+    /* --- the bar itself: where it sits, and what it shows ---
+
+       All three of these are things that were wrong at once and looked fine in
+       isolation. The bar was laid over the top of the window with a transparent
+       background, which put the video underneath it and the playlist's own
+       header behind it - and no single assertion failed, because each was a
+       question about the bar alone and the answer was correct. The question that
+       catches it is about the two of them together. */
+    const barBox = $('menubar').getBoundingClientRect();
+    const stageBox = $('stage').getBoundingClientRect();
+    ok('menu: the bar is above the window, not over it',
+      Math.round(stageBox.top) >= Math.round(barBox.bottom) - 1,
+      'bar ends at ' + Math.round(barBox.bottom) + ', stage starts at ' + Math.round(stageBox.top));
+    ok('menu: the bar has a row of its own',
+      Math.round(barBox.height) > 0 && Math.round(stageBox.height) < window.innerHeight,
+      'bar ' + Math.round(barBox.height) + 'px of ' + window.innerHeight + 'px');
+    ok('menu: the bar is opaque, so nothing shows through it',
+      (() => {
+        const bg = getComputedStyle($('menubar')).backgroundColor;
+        const m = bg.match(/rgba?\(([^)]+)\)/);
+        if (!m) return false;
+        const parts = m[1].split(',').map((n) => parseFloat(n));
+        return parts.length < 4 || parts[3] === 1;
+      })(), getComputedStyle($('menubar')).backgroundColor);
+    /* Before the stage in document order, which is what puts it first in tab
+       order. The mask is a number and `ok()` refuses anything that is not a yes
+       or a no - it cannot tell 4 from true - so it is asked as a question. */
+    ok('menu: it comes first, so Tab reaches it before the controls',
+      !!(($('menubar').compareDocumentPosition($('stage')) & Node.DOCUMENT_POSITION_FOLLOWING)
+        && ($('stage').compareDocumentPosition($('menubar')) & Node.DOCUMENT_POSITION_PRECEDING)));
+
+    /* Every shortcut in a dropdown is drawn from the moment it opens.
+
+       They were hidden until the row was pointed at, on the reasoning that a wall
+       of keys was untidy. That trades a tidy first reading for a cost on every
+       single visit, and the question a menu is opened to answer - what does this
+       do, and what key is it - is the one it refused to answer. */
+    click(document.querySelector('[data-menu="edit"]'));
+    await until(() => !!document.querySelector('[data-panel="edit"][data-open]'), 3000);
+    const itemAccels = [...document.querySelectorAll('[data-panel="edit"] .mi-acc')];
+    ok('menu: every item shows its shortcut without being hovered',
+      itemAccels.length > 0 && itemAccels.every((a) => a.textContent.trim() && parseFloat(getComputedStyle(a).opacity) === 1),
+      itemAccels.map((a) => a.textContent || '(blank)').join(','));
+    /* And they are the table's, not a copy of it.
+
+       Compared against the table rather than against a string written here: a
+       snapshot in the test is a second answer to the same question, and the one
+       that quietly stops being true when a key is reassigned in Settings. The
+       point is that the menu reads the same source as the keyboard does. */
+    const tableKeys = new Set(window.MediaMenu.shortcuts().map((s) => s.pretty));
+    const unknown = itemAccels.map((a) => a.textContent).filter((t) => !tableKeys.has(t));
+    ok('menu: every key shown is one the shortcut table has',
+      unknown.length === 0,
+      unknown.length ? 'not in the table: ' + unknown.join(' | ') : itemAccels.map((a) => a.textContent).join(' | '));
+    ok('menu: none of them is blank',
+      itemAccels.every((a) => a.textContent.trim().length > 0),
+      itemAccels.map((a) => a.textContent).join(' | '));
+    click(document.querySelector('[data-menu="edit"]'));
+
+    /* A heading's own key, on hover only.
+
+       This is the thing the native bar cannot do on Windows or Linux - see the
+       note at the top of src/ui/menubar.ts - and it was silently absent here too:
+       the markup never contained a key to reveal, so the rule that was written for
+       it had nothing to act on. */
+    const heading = document.querySelector('[data-menu="view"]');
+    const headingAcc = heading.querySelector('.mh-acc');
+    ok('menu: a heading carries a shortcut to reveal', !!headingAcc && headingAcc.textContent === 'Alt+V',
+      headingAcc && headingAcc.textContent);
+    ok('menu: and it is hidden until the heading is pointed at',
+      !!headingAcc && parseFloat(getComputedStyle(headingAcc).opacity) === 0,
+      headingAcc && getComputedStyle(headingAcc).opacity);
+
+    /* Whether it appears on a hover.
+
+       `:hover` cannot be reached from a synthetic event, and the alternative -
+       adding a class the app never sets, plus a rule written here to make the
+       assertion pass - would be the test agreeing with itself. So the rule is read
+       out of the stylesheet that actually ships, and asked what it does. */
+    const hoverRule = [...document.styleSheets]
+      .flatMap((sheet) => { try { return [...sheet.cssRules]; } catch { return []; } })
+      .find((r) => r.selectorText && /\.menu-head:hover\s+\.mh-acc/.test(r.selectorText));
+    ok('menu: the sheet reveals a heading key when it is pointed at',
+      !!hoverRule && /opacity:\s*1/.test(hoverRule.style.cssText),
+      hoverRule ? hoverRule.cssText : 'no rule for .menu-head:hover .mh-acc');
+    /* Forced, because a synthetic pointer event does not set :hover and a test
+       that passed on the class instead would be testing the test. */
   };
 
   /* ================================================================== 10. every

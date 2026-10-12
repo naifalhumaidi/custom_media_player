@@ -31,22 +31,60 @@ async function main() {
 
   fs.writeFileSync(`${DIR}/plate.png`, (await win.webContents.capturePage()).toPNG());
 
-  // scan the captured pixels for a bright frame anywhere it should not be
+  /* Which edges are allowed to carry a line, and which must not.
+
+     Three, and no more:
+
+       - the playlist's trailing edge. It is #0a0a0a against a #000 stage, so on
+         an empty playlist - both almost entirely black - pressing P looked like
+         it had done nothing at all. The window's own edge is the one edge that
+         gets nothing: there is nothing to draw against there, and a line would
+         only make the panel look narrower than it is.
+       - the playlist header's bottom, for the same reason one level in: the rows
+         under it are empty on a fresh install.
+       - the menu bar's bottom, because a bar that meets the window with no line
+         between them is a band of a different colour, not a separate row.
+
+     Everything else must stay bare. The original rule here was "no styled edge
+     anywhere in the chrome", which was right while the panel was invisible and
+     is now wrong for these three; the failure mode it was watching for - a
+     stray outline around something that should be flat - is still what it should
+     catch, so the rule is narrowed rather than dropped. */
+  /* Logical, not physical: the panel's line is on its inline end, which is the
+     left-hand side once the app is in Arabic. Naming "Right" here would pass the
+     check in English and fail it in the language it is actually for. */
   const out = await win.webContents.executeJavaScript(`(() => {
-    const res = {};
-    const sels = ['#stage','media-player','media-provider','#side','.side-head','#bar','.row','.meta','#play','#loop','#still','#drop','.logo'];
-    res.styled = sels.map((s) => {
+    const ALLOWED = {
+      '#side': ['InlineEnd'],
+      '.side-head': ['Bottom'],
+      '#menubar': ['Bottom'],
+    };
+    const SIDES = ['Top','Right','Bottom','Left','InlineStart','InlineEnd'];
+    const sels = ['#stage','media-player','media-provider','#side','.side-head','#menubar','#bar','.row','.meta','#play','#loop','#still','#drop','.logo'];
+    const styled = sels.map((s) => {
       const e = document.querySelector(s);
       if (!e) return s + ':missing';
       const cs = getComputedStyle(e);
-      const bw = ['Top','Right','Bottom','Left'].map((k) => cs['border' + k + 'Width']).join(',');
-      const bc = ['Top','Right','Bottom','Left'].map((k) => cs['border' + k + 'Color']).join(',');
-      const hasB = bw !== '0px,0px,0px,0px';
+      /* Physical and logical both report the same painted pixels, so only the
+         logical pair is checked where they overlap - otherwise every deliberate
+         line counts twice. */
+      const allowed = ALLOWED[s] || [];
+      const useLogical = allowed.some((k) => k.startsWith('Inline'));
+      const names = useLogical ? SIDES.filter((k) => k.startsWith('Inline') || k === 'Top' || k === 'Bottom')
+                               : ['Top','Right','Bottom','Left'];
+      const painted = names
+        .filter((k) => parseFloat(cs['border' + k + 'Width']) > 0)
+        .map((k) => ({ k, w: cs['border' + k + 'Width'], c: cs['border' + k + 'Color'] }));
+      const stray = painted.filter(({ k }) => !allowed.includes(k));
       const hasO = cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0;
       const hasS = cs.boxShadow !== 'none';
-      return (hasB || hasO || hasS) ? s + ' border=' + bw + '/' + bc + ' outline=' + cs.outlineStyle + ':' + cs.outlineColor + ' shadow=' + cs.boxShadow : null;
+      const all = painted.map(({ k, w, c }) => k + '=' + w + '/' + c).join(' ');
+      return (stray.length || hasO || hasS)
+        ? s + ' unexpected=' + stray.map((x) => x.k).join('+') + ' painted[' + all + ']'
+          + ' outline=' + cs.outlineStyle + ':' + cs.outlineColor + ' shadow=' + cs.boxShadow
+        : null;
     }).filter(Boolean);
-    return res;
+    return { styled };
   })()`);
   console.log('  styled edges: ' + (out.styled.length ? out.styled.join(' | ') : 'none'));
 
@@ -58,8 +96,8 @@ async function main() {
     return { sideRight: Math.round(side.right), sideTop: Math.round(side.top), w: window.innerWidth, h: window.innerHeight };
   })()`);
   console.log('  geometry: ' + JSON.stringify(scan));
-  /* The brief forbids stray outlines, so a styled border or outline anywhere in
-     the chrome is a failure, not a note. */
+  /* Anything painted that is not one of the three deliberate lines is a failure,
+     not a note. */
   const bad = out.styled.length;
   console.log(bad ? `FAILED ${bad} styled edges` : 'PASSED no styled edges');
   if (bad) process.exitCode = 1;

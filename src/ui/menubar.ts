@@ -4,10 +4,21 @@
  * wanted on the menu bar itself: the shortcut for each heading, and the heading
  * left alone otherwise. A native menu can do the first only by writing the key
  * into the label - "Info (Alt+I)" - because a label is the only thing a native
- * menu item draws. It cannot do the second at all: `MenuItem.toolTip` is macOS
- * only, and no platform offers a menu bar that redraws a heading on hover. On
- * Linux and Windows the answer is no, so the bar is built here where a heading is
- * an element and hover is an ordinary event.
+ * menu item draws. It cannot do the second at all.
+ *
+ * The second was checked rather than assumed, against the Electron docs:
+ *
+ *   - `MenuItem.toolTip` - "Hover text for this menu item" - is marked _macOS_.
+ *     On Windows and Linux, the two platforms this ships to, it is accepted and
+ *     ignored.
+ *   - `MenuItem.sublabel` is marked _macOS_ too (and macOS 14.4 or newer).
+ *   - a native menu bar is frame chrome: it is drawn by the platform, outside the
+ *     page, with no styling hook and no way for the web contents to occupy the
+ *     window beneath it.
+ *
+ * So there is no hover on a native heading on the platforms that matter, which is
+ * the one thing the bar was wanted for. Drawn here, a heading is an element and a
+ * hover is an ordinary event.
  *
  * It reads the same shortcut table as everything else - the keyboard, the
  * settings table, the tooltips - so a reassignment reaches it without this
@@ -51,9 +62,10 @@ const FILE_SOURCE = () => (window as any).MediaFileSource;
 /* One definition, in the order a person reads it.
 
    The items that also exist on the control bar are here as well as there, because
-   a menu that cannot reach the transport is not a menu. They show no shortcut
-   until they are pointed at - see `.mi-acc` - so the bar does not turn into a wall
-   of letters, and the control bar's own tooltips already say what each one is. */
+   a menu that cannot reach the transport is not a menu. Each one shows its
+   shortcut from the moment the dropdown opens - see `.mi-acc` - so the two places
+   that offer the same action are read the same way. The control bar's tooltips
+   say the same thing on hover. */
 const MENUS: MenuHeading[] = [
   {
     id: 'file',
@@ -246,14 +258,30 @@ function mountMenuBar(host: HTMLElement): void {
     button.dataset.menu = heading.id;
     button.setAttribute('aria-haspopup', heading.items ? 'menu' : 'false');
     button.setAttribute('aria-expanded', 'false');
-    button.textContent = heading.label;
     /* Alt+letter, the way every menu bar on this desktop behaves. The letter is
        drawn underlined on its own, as the underline is the only decoration that
-       belongs to the heading - the shortcut itself waits for the hover. */
-    button.innerHTML = heading.label.replace(
+       belongs to the heading - and the key itself waits for the hover.
+
+       This is the whole reason the bar is drawn here rather than taken from the
+       system: a heading is an element, so a hover is an ordinary event and the
+       key can appear on it. The native bar has `MenuItem.toolTip`, which is
+       macOS-only and does nothing on the two platforms this actually ships to. */
+    const name = document.createElement('span');
+    name.className = 'mh-name';
+    name.innerHTML = heading.label.replace(
       new RegExp(`^(${heading.alt})`),
       '<u aria-hidden="true">$1</u>',
-    ) + '';
+    );
+
+    const accel = document.createElement('span');
+    accel.className = 'mh-acc';
+    accel.textContent = `Alt+${heading.alt}`;
+    /* The underline already says which letter Alt takes; repeating it to a
+       screen reader would read "F ile, Alt F" for one word. */
+    accel.setAttribute('aria-hidden', 'true');
+    name.setAttribute('aria-label', heading.label);
+
+    button.append(name, accel);
 
     button.addEventListener('click', () => {
       if (openId === heading.id) { close(); return; }
@@ -348,7 +376,16 @@ function mountMenuBar(host: HTMLElement): void {
     attributeFilter: ['class'],
   });
 
-  host.appendChild(nav);
+  /* First child of the body, not last.
+
+     The window is a column: the bar is the row above the stage, so it has to
+     come before it. Appending put it at the bottom - the body's children are in
+     document order, and the stage is built by the page - and a menu bar along
+     the bottom edge is not a menu bar.
+
+     First also means first in tab order, which is where a menu bar belongs: Tab
+     from a fresh window should reach File, not the play button. */
+  host.insertBefore(nav, host.firstChild);
   refresh();
 }
 
