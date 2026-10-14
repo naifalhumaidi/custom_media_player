@@ -137,6 +137,28 @@
   const channel = tauri;
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+  /* Answer the password pop-up, once, before any journey touches the app.
+   *
+   * The journeys below are the real app: they press keys, click controls, drop
+   * files. With the pop-up still up every one of them reports the thing that is
+   * actually wrong - which is the pop-up - as the thing that failed to move, and
+   * the page is covered while the player sits behind it doing nothing.
+   *
+   * The word is what the page was built with. It lives in the source; this is a
+   * test journey driving the real page, so it uses the real word rather than a
+   * stub a suite could pass against an app that never had a gate at all. */
+  try {
+    const gate = document.getElementById('gate-form');
+    const field = document.getElementById('gate-input');
+    if (gate && field) {
+      field.value = '4254251';
+      gate.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      say('walkthrough_gate', 'answered: ' + !document.getElementById('gate'));
+    }
+  } catch (err) {
+    say('walkthrough_gate', 'threw: ' + err.message);
+  }
+
   /* Wait for a condition rather than for a length of time.
 
      Fixed sleeps made this flaky in both directions: a cold start after a

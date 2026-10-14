@@ -1423,6 +1423,76 @@ function syncIcons(playing?: boolean) {
   publishMenuState();
 }
 
+/* ---------- the password gate ----------
+
+   A pop-up on open, covering the window, and the page underneath does not take
+   keyboard input until it is answered. Two separate things, and the second is the
+   one that gets forgotten: `inert` is what stops a shortcut - F, P, Ctrl+, the
+   whole table - driving the app with the pop-up still on screen, which would make
+   the gate something that merely covers the app rather than something that holds
+   it.
+
+   Kept in one place, and said plainly: this is a gate on the window, not on the
+   media. The files are ordinary files on disk and any player can open them, and
+   the word below is written in this repository in plain sight. It is here because
+   it was asked for and it does what it says; it should not be mistaken for
+   encryption, and if it ever needs to be one, it belongs in the shells. */
+const PASSWORD = '4254251';
+
+(function installPasswordGate() {
+  const gate = $('gate');
+  const form = $('gate-form') as HTMLFormElement | null;
+  const input = $('gate-input') as HTMLInputElement | null;
+  const error = $('gate-error');
+  const box = gate ? gate.querySelector<HTMLElement>('.gate-box') : null;
+  /* Nothing is opened if the pop-up is not there, rather than the app throwing on
+     the way past it - a gate that cannot be answered must not become a gate that
+     cannot be got past. */
+  if (!gate || !form || !input || !error || !box) return;
+
+  /* Everything behind the gate stops being focusable and stoppable, so the
+     keyboard belongs to the pop-up until it is answered. */
+  const behind = [...document.body.children].filter((el) => el !== gate);
+  const close = () => {
+    gate.remove();
+    for (const el of behind) {
+      el.removeAttribute('inert');
+      el.removeAttribute('aria-hidden');
+    }
+  };
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (input.value === PASSWORD) {
+      close();
+      return;
+    }
+    error.hidden = false;
+    box.classList.remove('wrong');
+    /* Re-added after a reflow, so the animation runs again rather than being
+       skipped because the class never left. */
+    void box.offsetWidth;
+    box.classList.add('wrong');
+    input.value = '';
+    input.focus();
+  });
+
+  /* Escape must not dismiss it, which is the default for some of the dialog
+     behaviour on this page and would otherwise be a key that opens the app. */
+  document.addEventListener('keydown', (e) => {
+    if (gate.isConnected && e.key === 'Escape') e.preventDefault();
+  }, true);
+
+  /* Escape never dismisses it; there is no other way out but the right word. */
+  gate.dataset.locked = 'yes';
+  for (const el of behind) {
+    el.setAttribute('inert', '');
+    el.setAttribute('aria-hidden', 'true');
+  }
+  input.focus();
+  input.select();
+})();
+
 /* Fullscreen is the F key, the button, and the menu item - and nothing else.
 
    Double-clicking the picture used to do it as well, and was removed. It was not
@@ -1587,6 +1657,13 @@ document.getElementById('shortcut-rows')?.addEventListener('click', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
+  /* Not while the password pop-up is up. `inert` stops the page being focused and
+     clicked through, but it does not stop a key that lands on `document` - and
+     with the focus inside an inert subtree the browser puts it on the body, which
+     is where it lands. So F went fullscreen with the pop-up still on screen,
+     which is a gate that holds the app except for the one thing that hides the
+     app. */
+  if (document.getElementById('gate')) return;
   if (!capturing) return;
   e.preventDefault();
   e.stopPropagation();
@@ -1998,6 +2075,13 @@ $('close-side').onclick = () => setList(false);
    stopPropagation() on keydown, so a bubbling listener never sees the key once
    a control has focus - which is why L and C stopped working. */
 document.addEventListener('keydown', (e) => {
+  /* Not while the password pop-up is up. `inert` stops the page being focused or
+     clicked through, but it does not stop a key that lands on `document` - and
+     with the focus inside an inert subtree the browser puts it on the body, which
+     is where it lands. So F went fullscreen with the pop-up still on screen, and
+     that is a gate which holds the app except for the one thing that hides the
+     app. This is the handler that owns every key in the table. */
+  if (document.getElementById('gate')) return;
   /* e.key is absent on some synthetic and IME key events */
   const k = typeof e.key === 'string' ? e.key : '';
 

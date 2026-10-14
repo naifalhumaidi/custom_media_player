@@ -910,6 +910,46 @@ function syncIcons(playing) {
   publishMenuState();
 }
 __name(syncIcons, "syncIcons");
+const PASSWORD = "4254251";
+(/* @__PURE__ */ __name((function installPasswordGate() {
+  const gate = $("gate");
+  const form = $("gate-form");
+  const input = $("gate-input");
+  const error = $("gate-error");
+  const box = gate ? gate.querySelector(".gate-box") : null;
+  if (!gate || !form || !input || !error || !box) return;
+  const behind = [...document.body.children].filter((el) => el !== gate);
+  const close = /* @__PURE__ */ __name(() => {
+    gate.remove();
+    for (const el of behind) {
+      el.removeAttribute("inert");
+      el.removeAttribute("aria-hidden");
+    }
+  }, "close");
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (input.value === PASSWORD) {
+      close();
+      return;
+    }
+    error.hidden = false;
+    box.classList.remove("wrong");
+    void box.offsetWidth;
+    box.classList.add("wrong");
+    input.value = "";
+    input.focus();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (gate.isConnected && e.key === "Escape") e.preventDefault();
+  }, true);
+  gate.dataset.locked = "yes";
+  for (const el of behind) {
+    el.setAttribute("inert", "");
+    el.setAttribute("aria-hidden", "true");
+  }
+  input.focus();
+  input.select();
+}), "installPasswordGate"))();
 const helpModal = $("help-modal");
 helpModal.hidden = true;
 $("settings-modal").hidden = true;
@@ -1007,6 +1047,7 @@ document.getElementById("shortcut-rows")?.addEventListener("click", (e) => {
   beginCapture(button.dataset.shortcutCell, button);
 });
 document.addEventListener("keydown", (e) => {
+  if (document.getElementById("gate")) return;
   if (!capturing) return;
   e.preventDefault();
   e.stopPropagation();
@@ -1299,6 +1340,7 @@ list.addEventListener("drop", (e) => {
 list.addEventListener("dragend", cancelDrag);
 $("close-side").onclick = () => setList(false);
 document.addEventListener("keydown", (e) => {
+  if (document.getElementById("gate")) return;
   const k = typeof e.key === "string" ? e.key : "";
   const binding = bindingFromEvent(e);
   if (!clearModal.hidden) {

@@ -1271,3 +1271,71 @@ tr:has(.key-cell.capturing) th { color: #8f8f8f; }
   transform: rotate(-38deg);
 }
 
+
+/* ---------- the password gate ----------
+
+   Covers the whole window, above everything, and takes the keyboard away from
+   the page underneath until it is answered: a gate the app can be driven through
+   with a shortcut while the pop-up is still up is a gate that is decoration. */
+.gate {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  background: #000;
+}
+
+.gate-box {
+  width: 320px;
+  max-width: calc(100vw - 40px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 22px;
+  background: #141416;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--r-lg);
+  text-align: center;
+}
+
+.gate-title {
+  font-size: 13px;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: rgb(170, 120, 39);
+}
+
+.gate-label { font-size: 13px; color: rgba(255, 255, 255, .75); }
+
+.gate-input {
+  font: inherit;
+  color: #eee;
+  background: #0b0b0d;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--r);
+  padding: 9px 11px;
+  text-align: center;
+}
+.gate-input:focus-visible { outline: 2px solid rgba(170, 120, 39, .7); outline-offset: 1px; }
+
+.gate-go {
+  font: inherit;
+  color: #111;
+  background: rgb(170, 120, 39);
+  border: 0;
+  border-radius: var(--r);
+  padding: 9px;
+  cursor: pointer;
+}
+
+.gate-error { margin: 0; font-size: 13px; color: #d98b7a; }
+
+/* A shake rather than a jump: enough to be seen, not enough to move the box the
+   pointer was already aimed at. */
+.gate-box.wrong { animation: gate-shake 260ms ease; }
+@keyframes gate-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-7px); }
+  75% { transform: translateX(7px); }
+}

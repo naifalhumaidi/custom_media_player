@@ -572,6 +572,26 @@ export async function createApp(options = {}) {
     }
   }
 
+  /* Answer the password gate, once the app has installed it.
+   *
+   * Before the scripts run, the gate is not there yet and the dismissal above was
+   * a no-op against an element that had not been created - which is what these
+   * tests are for, so it has to come after.
+   *
+   * Done here rather than in every test for the same reason the desktop harness
+   * does it: these suites are about the media player, and the word is the one
+   * thing that has to be spoken before any of it can be reached. A build with no
+   * gate is a no-op, and `gate: false` opts out - which is how the gate's own
+   * suite tests it. */
+  try {
+    const gateForm = window.document.getElementById('gate-form');
+    const gateInput = window.document.getElementById('gate-input');
+    if (gateForm && gateInput && options.gate !== false) {
+      gateInput.value = '4254251';
+      gateForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    }
+  } catch { /* no gate: nothing to dismiss */ }
+
   const document = window.document;
   const $ = (id) => document.getElementById(id);
   const player = $('media');

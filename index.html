@@ -9,6 +9,23 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <!-- The password gate.
+       First thing in the body and covering everything, so the app cannot be
+       used until it is answered. It is here rather than in a shell because the
+       web build has no shell, and a gate that the browser could skip by opening
+       index.html directly is worse than no gate at all - it would look like a
+       lock that does not lock. -->
+  <div id="gate" class="gate">
+    <form id="gate-form" class="gate-box" autocomplete="off">
+      <div class="gate-title">Custom Media Player</div>
+      <label class="gate-label" for="gate-input">Password</label>
+      <input id="gate-input" class="gate-input" type="password" name="password"
+             autocomplete="off" spellcheck="false" required>
+      <button id="gate-go" class="gate-go" type="submit">Enter</button>
+      <p id="gate-error" class="gate-error" role="alert" hidden>Wrong password.</p>
+    </form>
+  </div>
+
   <!-- icon sprite: every control uses one of these, no text labels -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <defs>

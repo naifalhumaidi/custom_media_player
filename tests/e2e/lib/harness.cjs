@@ -101,7 +101,39 @@ async function open(opts) {
   return win;
 }
 
+/* Answer the password gate the page puts in front of the app.
+ *
+ * Real pages, not a stubbed global: the suites under test are about the media
+ * player, and a gate that has to be answered once before any of it can be
+ * reached is answered once, here. Anything else would mean every suite in this
+ * directory starting with "dismiss the pop-up first" or, worse, testing with the
+ * gate still up and reporting a page that does nothing.
+ *
+ * If the gate is not there - a build without one, or a change that removes it -
+ * this does nothing and says so, rather than failing every suite at once. */
+async function passGate(win) {
+  try {
+    const open = await win.webContents.executeJavaScript('!!document.getElementById("gate")').catch(() => false);
+    if (!open) return false;
+    await win.webContents.executeJavaScript(`(() => {
+      const form = document.getElementById('gate-form');
+      const input = document.getElementById('gate-input');
+      if (!form || !input) return;
+      input.value = '4254251';
+      form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    })()`);
+    for (let i = 0; i < 40; i++) {
+      const still = await win.webContents.executeJavaScript('!!document.getElementById("gate")').catch(() => false);
+      if (!still) return true;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    console.warn('harness: the gate did not dismiss');
+    return false;
+  } catch { return false; }
+}
+
 async function waitForBoot(win) {
+  await passGate(win);
   for (let i = 0; i < 80; i++) {
     const ok = await win.webContents.executeJavaScript('!!window.MediaBridge && !!window.MediaSettings').catch(() => false);
     if (ok) {
